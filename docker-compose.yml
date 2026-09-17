@@ -1,0 +1,62 @@
+services:
+  # ── Temporal Local Dev Server (Server + Web UI) ────────────────
+  temporal:
+    image: temporalio/server:latest
+    container_name: uaos-temporal
+    command: ["server", "start-dev", "--ip", "0.0.0.0"]
+    ports:
+      - "7233:7233"  # gRPC API
+      - "8233:8233"  # Temporal Web UI
+    volumes:
+      - temporal-data:/tmp/temporal
+    environment:
+      - DB=sqlite
+    restart: unless-stopped
+
+  # ── SearXNG (Self-Hosted Private Search Backend) ───────────────
+  searxng:
+    image: searxng/searxng:latest
+    container_name: uaos-searxng
+    ports:
+      - "8080:8080"
+    environment:
+      - SEARXNG_BASE_URL=http://localhost:8080
+    restart: unless-stopped
+
+  # ── UAOS API Gateway ───────────────────────────────────────────
+  api:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: uaos-api
+    ports:
+      - "8000:8000"
+    environment:
+      - TEMPORAL_HOST=temporal:7233
+      - LLM_BASE_URL=http://host.docker.internal:11434/v1
+      - SEARXNG_URL=http://searxng:8080
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    depends_on:
+      - temporal
+    restart: unless-stopped
+
+  # ── UAOS Temporal Worker Runner ────────────────────────────────
+  worker:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: uaos-worker
+    command: ["python", "-m", "src.orchestrator.worker_runner"]
+    environment:
+      - TEMPORAL_HOST=temporal:7233
+      - LLM_BASE_URL=http://host.docker.internal:11434/v1
+      - SEARXNG_URL=http://searxng:8080
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    depends_on:
+      - temporal
+    restart: unless-stopped
+
+volumes:
+  temporal-data:

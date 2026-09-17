@@ -1,0 +1,307 @@
+"""
+Unit and integration tests for Pillar 4:
+1. Real-time LLM chat streaming (SSE chunk delta parsing)
+2. EventBus pub/sub, circular ring buffer replay, and subscriber cleanup
+3. UniversalWorkerAgent streaming callbacks (on_token, on_event)
+4. Temporal Workflow interactive HITL signal handling (guidance + parameter overrides)
+5. FastAPI /approve endpoint and EventBus notification
+"""
+
+import asyncio
+from unittest.mock import AsyncMock, MagicMock, patch
+
+import pytest
+
+from src.core.llm_client import LocalLLMClient
+from src.core.models import RiskLevel, Task, TaskStatus
+from src.orchestrator.event_bus import EventBus
+from src.orchestrator.workflow import UAOSWorkflow
+from src.registry.tool_registry import ToolSpec
+from src.workers.universal_worker import UniversalWorkerAgent
+
+
+# ── 1. LLM Chat Stream Tests ──────────────────────────────────────────
+
+
+@pytest.mark.asyncio
+async def test_llm_chat_stream():
+    """Verify LocalLLMClient.chat_stream parses SSE chunk deltas correctly."""
+    client = LocalLLMClient(base_url="http://localhost:1234/v1", model="test-model")
+
+    mock_lines = [
+        "data: {\"choices\": [{\"delta\": {\"content\": \"Hello\"}}]}\n",
+        "\n",
+        "data: {\"choices\": [{\"delta\": {\"content\": \" World!\"}}]}\n",
+        "\n",
+        "data: [DONE]\n",
+        "\n",
+    ]
+
+    class FakeResponse:
+        status_code = 200
+
+        def raise_for_status(self):
+            pass
+
+        async def aiter_lines(self):
+            for line in mock_lines:
+                yield line
+
+    class FakeStreamContext:
+        async def __aenter__(self):
+            return FakeResponse()
+
+        async def __aexit__(self, exc_type, exc_val, exc_tb):
+            pass
+
+    with patch("httpx.AsyncClient.stream", return_value=FakeStreamContext()):
+        tokens = []
+        async for token in client.chat_stream([{"role": "user", "content": "Hi"}]):
+            tokens.append(token)
+
+        assert tokens == ["Hello", " World!"]
+
+
+# ── 2. EventBus Pub/Sub & Circular Buffer Tests ─────────────────────────
+
+
+@pytest.mark.asyncio
+async def test_event_bus_pub_sub_and_replay():
+    """Verify EventBus broadcasting and ring-buffer replay to new subscribers."""
+    bus = EventBus(max_history=10)
+    wf_id = "wf-test-123"
+
+    # 1. Publish 2 events prior to subscription
+    bus.publish(wf_id, {"type": "token", "content": "Token 1"})
+    bus.publish(wf_id, {"type": "token", "content": "Token 2"})
+
+    # 2. Subscribe after publishing - should receive past events via replay
+    received = []
+
+    async def reader():
+        async for ev in bus.subscribe(wf_id):
+            received.append(ev)
+            if len(received) == 3:
+                break
+
+    task = asyncio.create_task(reader())
+    await asyncio.sleep(0.01)
+
+    # 3. Publish third event live
+    bus.publish(wf_id, {"type": "token", "content": "Token 3"})
+
+    await asyncio.wait_for(task, timeout=2.0)
+
+    assert len(received) == 3
+    assert received[0]["content"] == "Token 1"
+    assert received[1]["content"] == "Token 2"
+    assert received[2]["content"] == "Token 3"
+
+    # 4. Cleanup
+    bus.clear(wf_id)
+    assert wf_id not in bus._history
+
+
+# ── 3. UniversalWorkerAgent Streaming Callbacks Tests ─────────────────
+
+
+@pytest.mark.asyncio
+async def test_universal_worker_streaming():
+    """Verify UniversalWorkerAgent fires on_token and on_event callbacks during ReAct loop."""
+    mock_llm = AsyncMock(spec=LocalLLMClient)
+
+    # Simulate streaming LLM chunks for tool call then final answer
+    llm_stream_chunks_step1 = [
+        "THOUGHT: I need to calculate.\n",
+        "ACTION: add\n",
+        '{"a": 2, "b": 3}',
+    ]
+    llm_stream_chunks_step2 = [
+        "THOUGHT: Calculation finished.\n",
+        "FINAL_ANSWER: 5",
+    ]
+
+    async def fake_stream_1(messages):
+        for chunk in llm_stream_chunks_step1:
+            yield chunk
+
+    async def fake_stream_2(messages):
+        for chunk in llm_stream_chunks_step2:
+            yield chunk
+
+    mock_llm.chat_stream.side_effect = [fake_stream_1([]), fake_stream_2([])]
+
+    async def fake_add(a: int, b: int) -> int:
+        return a + b
+
+    tool = ToolSpec(
+        tool_id="math_add",
+        name="add",
+        description="Add two numbers",
+        skills_provided=["math"],
+        parameters={"a": {"type": "integer"}, "b": {"type": "integer"}},
+        risk_level=RiskLevel.LOW,
+        function=fake_add,
+    )
+
+    task = Task(
+        id="t-stream",
+        name="Stream Task",
+        description="Add 2 and 3",
+        required_skills=["math"],
+        timeout_seconds=10,
+    )
+
+    received_tokens = []
+    received_events = []
+
+    def on_token(token: str):
+        received_tokens.append(token)
+
+    def on_event(event_dict: dict):
+        received_events.append(event_dict)
+
+    worker = UniversalWorkerAgent(llm=mock_llm)
+    result = await worker.execute(
+        task=task,
+        persona="You are a helpful math solver.",
+        tools=[tool],
+        on_token=on_token,
+        on_event=on_event,
+    )
+
+    assert result.status == TaskStatus.COMPLETED
+    assert result.output.strip() == "5"
+
+    # Verify tokens were streamed
+    assert len(received_tokens) > 0
+    full_text = "".join(received_tokens)
+    assert "FINAL_ANSWER: 5" in full_text
+
+    # Verify tool events were triggered
+    event_types = [ev["type"] for ev in received_events]
+    assert "tool_start" in event_types
+    assert "tool_end" in event_types
+    assert "final_answer" in event_types
+
+
+# ── 4. Workflow Interactive HITL Signal & Guidance Tests ──────────────
+
+
+@pytest.mark.asyncio
+async def test_workflow_interactive_hitl_signals():
+    """Verify UAOSWorkflow correctly parses structured approval signal with guidance and params."""
+    wf = UAOSWorkflow()
+
+    # Initial state
+    status = wf.get_status()
+    assert status["awaiting_approval"] is False
+    assert status["pending_task"] == ""
+    assert status["pending_task_desc"] == ""
+    assert status["pending_task_risk"] == ""
+    assert status["pending_task_params"] == {}
+
+    # Simulate pending high-risk task
+    wf._pending_task_name = "Deploy Database Migration"
+    wf._pending_task_id = "t-mig"
+    wf._pending_task_desc = "Apply schema update to production db"
+    wf._pending_task_risk = "critical"
+    wf._pending_task_params = {"dry_run": False, "target": "prod"}
+
+    status_pending = wf.get_status()
+    assert status_pending["awaiting_approval"] is True
+    assert status_pending["pending_task"] == "Deploy Database Migration"
+    assert status_pending["pending_task_desc"] == "Apply schema update to production db"
+    assert status_pending["pending_task_risk"] == "critical"
+    assert status_pending["pending_task_params"] == {"dry_run": False, "target": "prod"}
+
+    # Send structured approval signal with operator guidance and modified params
+    signal_payload = {
+        "approved": True,
+        "guidance": "Please run in dry-run mode first, do not drop tables.",
+        "modified_params": {"dry_run": True, "target": "staging"},
+    }
+    await wf.approve_task(signal_payload)
+
+    assert wf._approval_result is True
+    assert wf._approval_guidance == "Please run in dry-run mode first, do not drop tables."
+    assert wf._approval_modified_params == {"dry_run": True, "target": "staging"}
+
+
+@pytest.mark.asyncio
+async def test_workflow_legacy_boolean_approval_signal():
+    """Verify UAOSWorkflow maintains backwards compatibility with raw boolean approval signals."""
+    wf = UAOSWorkflow()
+    wf._pending_task_name = "Task 1"
+
+    await wf.approve_task(True)
+    assert wf._approval_result is True
+    assert wf._approval_guidance == ""
+    assert wf._approval_modified_params == {}
+
+    await wf.approve_task(False)
+    assert wf._approval_result is False
+
+
+# ── 5. FastAPI /approve Endpoint Integration Test ──────────────────────
+
+
+@pytest.mark.asyncio
+async def test_api_approve_endpoint_with_guidance():
+    """Verify POST /approve/{workflow_id} passes structured payload to Temporal and broadcasts to EventBus."""
+    from httpx import ASGITransport, AsyncClient
+
+    from src.api.main import app
+    from src.orchestrator.event_bus import get_event_bus
+
+    mock_temporal = MagicMock()
+    mock_handle = AsyncMock()
+    mock_temporal.get_workflow_handle.return_value = mock_handle
+    app.state.temporal = mock_temporal
+
+    wf_id = "wf-approval-test"
+    bus = get_event_bus()
+
+    # Pre-subscribe to verify EventBus receives approval_resolved
+    received_bus_events = []
+
+    async def bus_listener():
+        async for ev in bus.subscribe(wf_id):
+            received_bus_events.append(ev)
+            if ev.get("type") == "approval_resolved":
+                break
+
+    listener_task = asyncio.create_task(bus_listener())
+    await asyncio.sleep(0.01)
+
+    async with AsyncClient(
+        transport=ASGITransport(app=app),
+        base_url="http://test",
+    ) as ac:
+        res = await ac.post(
+            f"/approve/{wf_id}",
+            json={
+                "approved": True,
+                "guidance": "Approved with strict sandbox constraints",
+                "modified_params": {"max_retries": 1},
+            },
+        )
+        assert res.status_code == 200
+        assert res.json()["action"] == "APPROVED"
+        assert res.json()["guidance_provided"] is True
+
+    # Check temporal signal call
+    mock_handle.signal.assert_called_once_with(
+        UAOSWorkflow.approve_task,
+        {
+            "approved": True,
+            "guidance": "Approved with strict sandbox constraints",
+            "modified_params": {"max_retries": 1},
+        },
+    )
+
+    await asyncio.wait_for(listener_task, timeout=2.0)
+    assert len(received_bus_events) > 0
+    resolved_ev = next(e for e in received_bus_events if e.get("type") == "approval_resolved")
+    assert resolved_ev["approved"] is True
+    assert resolved_ev["guidance"] == "Approved with strict sandbox constraints"

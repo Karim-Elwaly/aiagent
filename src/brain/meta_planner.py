@@ -1,0 +1,286 @@
+"""
+UAOS Meta-Planner
+
+The brain of the system. Takes raw user input and produces a structured
+TaskDAG via a single LLM call. Includes:
+  - Retry-with-error-feedback for local LLM JSON reliability
+  - JSON extraction from various LLM output formats
+  - DAG integrity validation (missing deps, cycles)
+  - Graceful fallback to single-task mode
+"""
+
+from __future__ import annotations
+
+import json
+import logging
+import re
+
+from pydantic import ValidationError
+
+from src.brain.prompts import (
+    PLANNER_SYSTEM_PROMPT,
+    REPLAN_SYSTEM_PROMPT,
+)
+from src.core.exceptions import JSONParseError
+from src.core.llm_client import LocalLLMClient
+from src.core.models import Task, TaskDAG
+
+logger = logging.getLogger(__name__)
+
+
+class MetaPlanner:
+    """Decomposes any user query into a TaskDAG.
+
+    Uses a local LLM to analyze the problem, identify sub-tasks,
+    determine dependencies, and assign abstract skill requirements.
+    The planner never sees concrete tools — only skill names from
+    the ToolRegistry.
+    """
+
+    def __init__(
+        self,
+        llm: LocalLLMClient,
+        available_skills: list[str],
+        max_retries: int = 3,
+    ):
+        self.llm = llm
+        self.available_skills = available_skills
+        self.max_retries = max_retries
+
+    async def plan(self, user_query: str) -> TaskDAG:
+        """Generate a TaskDAG from a user query.
+
+        Includes retry-with-error-feedback: if the LLM produces
+        invalid JSON, the error is fed back so the model can
+        self-correct. Falls back to single-task mode after all
+        retries are exhausted.
+
+        Args:
+            user_query: The raw user request.
+
+        Returns:
+            A validated TaskDAG ready for execution.
+        """
+        last_error: str | None = None
+
+        for attempt in range(self.max_retries):
+            logger.info(
+                "Planning attempt %d/%d for query: %s",
+                attempt + 1,
+                self.max_retries,
+                user_query[:100],
+            )
+
+            messages = [
+                {
+                    "role": "system",
+                    "content": PLANNER_SYSTEM_PROMPT.format(
+                        available_skills=json.dumps(
+                            self.available_skills, indent=2
+                        )
+                    ),
+                },
+                {"role": "user", "content": user_query},
+            ]
+
+            # On retry, feed the parse error back so LLM can self-correct
+            if last_error:
+                messages.append(
+                    {
+                        "role": "user",
+                        "content": (
+                            f"Your previous output had this error:\n"
+                            f"{last_error}\n\n"
+                            f"Fix the JSON and try again. Return ONLY "
+                            f"valid JSON, nothing else."
+                        ),
+                    }
+                )
+
+            try:
+                response = await self.llm.chat(messages)
+                json_str = self._extract_json(response)
+                dag = TaskDAG.model_validate(json.loads(json_str))
+                dag.validate_integrity()
+
+                logger.info(
+                    "Planning succeeded: %d tasks, goal='%s'",
+                    len(dag.tasks),
+                    dag.goal[:80],
+                )
+                return dag
+
+            except json.JSONDecodeError as e:
+                last_error = f"Invalid JSON: {e}"
+                logger.warning(
+                    "Plan attempt %d: JSON parse error: %s",
+                    attempt + 1,
+                    e,
+                )
+
+            except ValidationError as e:
+                last_error = f"Schema validation error: {e}"
+                logger.warning(
+                    "Plan attempt %d: Pydantic validation error: %s",
+                    attempt + 1,
+                    e,
+                )
+
+            except ValueError as e:
+                # DAG integrity error (cycles, missing deps)
+                last_error = f"DAG integrity error: {e}"
+                logger.warning(
+                    "Plan attempt %d: DAG validation error: %s",
+                    attempt + 1,
+                    e,
+                )
+
+            except Exception as e:
+                last_error = f"Unexpected error: {e}"
+                logger.exception(
+                    "Plan attempt %d: Unexpected error",
+                    attempt + 1,
+                )
+
+        # All retries exhausted — fall back to single task
+        logger.warning(
+            "All %d planning attempts failed. Falling back to single-task mode.",
+            self.max_retries,
+        )
+        return self._fallback(user_query)
+
+    async def replan(
+        self,
+        original_query: str,
+        completed: dict[str, str],
+        failed: dict[str, str],
+    ) -> TaskDAG:
+        """Create a new plan after partial failure.
+
+        Incorporates what succeeded and what failed so the new plan
+        can build on completed work and avoid repeating failures.
+
+        Args:
+            original_query: The user's original request.
+            completed: {task_id: output} of successfully completed tasks.
+            failed: {task_id: error_message} of failed tasks.
+
+        Returns:
+            A new TaskDAG that addresses the remaining work.
+        """
+        completed_summary = json.dumps(
+            {tid: output[:200] for tid, output in completed.items()},
+            indent=2,
+        )
+        failed_summary = json.dumps(failed, indent=2)
+
+        messages = [
+            {
+                "role": "system",
+                "content": REPLAN_SYSTEM_PROMPT.format(
+                    original_query=original_query,
+                    completed_summary=completed_summary,
+                    failed_summary=failed_summary,
+                    available_skills=json.dumps(self.available_skills),
+                ),
+            },
+            {
+                "role": "user",
+                "content": (
+                    f"Create a new execution plan to complete the "
+                    f"remaining work for: {original_query}"
+                ),
+            },
+        ]
+
+        try:
+            response = await self.llm.chat(messages)
+            json_str = self._extract_json(response)
+            dag = TaskDAG.model_validate(json.loads(json_str))
+            dag.validate_integrity()
+
+            logger.info(
+                "Re-plan succeeded: %d new tasks", len(dag.tasks)
+            )
+            return dag
+
+        except Exception as e:
+            logger.error("Re-plan failed: %s. Falling back.", e)
+            return self._fallback(original_query)
+
+    def _extract_json(self, text: str) -> str:
+        """Extract JSON from LLM response.
+
+        Handles common local LLM output quirks:
+        - Raw JSON (ideal)
+        - JSON wrapped in ```json ... ``` code blocks
+        - JSON with leading/trailing text
+        - Multiple JSON objects (takes the first complete one)
+
+        Raises:
+            JSONParseError: If no valid JSON can be extracted.
+        """
+        text = text.strip()
+
+        # Try 1: Direct parse (ideal case)
+        if text.startswith("{"):
+            # Find the matching closing brace
+            brace_count = 0
+            for i, char in enumerate(text):
+                if char == "{":
+                    brace_count += 1
+                elif char == "}":
+                    brace_count -= 1
+                    if brace_count == 0:
+                        return text[: i + 1]
+
+        # Try 2: Extract from markdown code blocks
+        code_block_match = re.search(
+            r"```(?:json)?\s*(\{.*?\})\s*```", text, re.DOTALL
+        )
+        if code_block_match:
+            return code_block_match.group(1)
+
+        # Try 3: Find first { to its matching }
+        start = text.find("{")
+        if start != -1:
+            brace_count = 0
+            for i in range(start, len(text)):
+                if text[i] == "{":
+                    brace_count += 1
+                elif text[i] == "}":
+                    brace_count -= 1
+                    if brace_count == 0:
+                        return text[start : i + 1]
+
+        raise JSONParseError(
+            raw_output=text[:500],
+            parse_error="No valid JSON object found in LLM response",
+        )
+
+    def _fallback(self, query: str) -> TaskDAG:
+        """Create a single catch-all task when decomposition fails.
+
+        This ensures the system NEVER deadlocks. Worst case, it
+        behaves as a single-agent chatbot.
+        """
+        return TaskDAG(
+            goal=query,
+            reasoning=(
+                "Automatic fallback: task decomposition failed after "
+                "maximum retries. Executing as a single direct task."
+            ),
+            tasks=[
+                Task(
+                    id="t1",
+                    name="Direct Execution",
+                    description=(
+                        f"Respond to the following user request directly, "
+                        f"using any available tools as needed:\n\n{query}"
+                    ),
+                    required_skills=["general_reasoning"],
+                    expected_output="A complete response to the user's request",
+                    dependencies=[],
+                )
+            ],
+        )
