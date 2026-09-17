@@ -22,6 +22,8 @@ document.addEventListener("DOMContentLoaded", () => {
   const temporalStatusEl = document.getElementById("temporal-status");
   const llmStatusEl = document.getElementById("llm-status");
   const toolsCountEl = document.getElementById("tools-count");
+  const agentsCountEl = document.getElementById("agents-count");
+  const activeSchedulesBadge = document.getElementById("schedules-count") || document.getElementById("active-schedules-badge");
   const toolListEl = document.getElementById("tool-list");
   const promptInput = document.getElementById("problem-prompt");
   const solveBtn = document.getElementById("solve-btn");
@@ -776,6 +778,7 @@ document.addEventListener("DOMContentLoaded", () => {
       name: "5-Phase SOC Autonomous Investigation Pipeline",
       description: "Enterprise security triage, forensic evidence gathering, blast radius discovery, timeline compression, and containment response.",
       tasks: [
+        {
           id: "t1",
           name: "Forensic Evidence Gathering & Log Ingestion",
           description: "Inspect and parse all security logs in target directory or file (CloudTrail, WAF ModSecurity, Nginx, MySQL, Sysmon, Windows events, firewall). Ingest content, extract line counts, anomalous events, and external network indicators.",
@@ -1078,19 +1081,6 @@ document.addEventListener("DOMContentLoaded", () => {
       showToast(`Custom workflow pipeline active (${compiledTasks.length} phases)!`);
     });
   }
-
-  // Pre-fetch workflow templates from API if available
-  async function fetchWorkflowTemplates() {
-    try {
-      const res = await fetch("/api/workflows/templates");
-      if (res.ok) {
-        workflowTemplates = await res.json();
-      }
-    } catch (e) {
-      workflowTemplates = BUILTIN_WORKFLOW_TEMPLATES;
-    }
-  }
-  fetchWorkflowTemplates();
 
   function escapeHtml(str) {
     if (!str) return "";
@@ -1861,7 +1851,6 @@ document.addEventListener("DOMContentLoaded", () => {
   const agentsModal = document.getElementById("agents-modal");
   const closeAgentsModalX = document.getElementById("close-agents-modal-x");
   const closeAgentsModalBtn = document.getElementById("close-agents-modal-btn");
-  const agentsCountEl = document.getElementById("agents-count");
   const agentSelector = document.getElementById("agent-selector");
   const agentsList = document.getElementById("agents-list");
   const btnCreateNewAgent = document.getElementById("btn-create-new-agent");
@@ -3267,7 +3256,6 @@ Integrates with smart home sensors, switches, lighting, and scenes.`
   const openSchedulesBtn = document.getElementById("open-schedules-btn");
   const closeSchedulesModalX = document.getElementById("close-schedules-modal-x");
   const closeSchedulesModalBtn = document.getElementById("close-schedules-modal-btn");
-  const activeSchedulesBadge = document.getElementById("schedules-count") || document.getElementById("active-schedules-badge");
   const schedulesList = document.getElementById("schedules-list");
   const schedulesListCount = document.getElementById("schedules-list-count");
   const scheduleForm = document.getElementById("schedule-form");
@@ -3277,7 +3265,8 @@ Integrates with smart home sensors, switches, lighting, and scenes.`
   const schedEnabled = document.getElementById("sched-enabled");
 
   async function updateSchedulesBadge() {
-    if (!activeSchedulesBadge) return;
+    const badge = activeSchedulesBadge || document.getElementById("schedules-count") || document.getElementById("active-schedules-badge");
+    if (!badge) return;
     try {
       const res = await fetch("/api/schedules");
       if (res.ok) {
