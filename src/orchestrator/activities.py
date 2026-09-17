@@ -265,6 +265,12 @@ async def execute_task(
     def handle_event(ev: dict) -> None:
         bus.publish(wf_id, ev)
 
+    def handle_heartbeat() -> None:
+        try:
+            activity.heartbeat("react_step", task.id)
+        except Exception:
+            pass
+
     user_query = task_dict.get("_user_query", "")
 
     result = await worker.execute(
@@ -275,6 +281,7 @@ async def execute_task(
         user_query=user_query,
         on_token=handle_token,
         on_event=handle_event,
+        on_heartbeat=handle_heartbeat,
     )
 
     logger.info(
@@ -571,6 +578,8 @@ async def evaluate_task_output(
         raw_decision = str(data.get("decision", "pass")).lower().strip()
         if raw_decision in ("pass", "accurate", "success", "completed", "approved"):
             decision = "pass"
+        elif raw_decision in ("abort", "fatal_abort", "halt", "cancel"):
+            decision = "abort"
         else:
             decision = "needs_retry"
         confidence = float(data.get("confidence", 0.9))
@@ -585,6 +594,31 @@ async def evaluate_task_output(
         feedback = ""
         missing_info = []
 
+    # Domain-agnostic circuit breaker: evaluate if critical discovery yielded 0 target artifacts
+    is_initial_discovery = task_id in ("t1", "T1", "task-1") or any(
+        s in task_dict.get("required_skills", [])
+        for s in ("file_tree", "filesystem_inspection", "file_enumeration", "directory_listing", "evidence_collection")
+    )
+    low_output = worker_output.lower()
+    has_missing_target = any(
+        marker in low_output
+        for marker in (
+            "0 items enumerated",
+            "0 files enumerated",
+            "0 total log records",
+            "total: 0 items",
+            "does not exist on disk",
+            "directory not found",
+            "path not a file / 0 files found",
+        )
+    )
+    if is_initial_discovery and has_missing_target:
+        decision = "abort"
+        feedback = (
+            "Target log directory yielded 0 files or could not be accessed. "
+            "Downstream analysis tasks aborted to prevent ungrounded hallucinations."
+        )
+
     # Heuristic safety net: flag genuine agent refusals without misclassifying legitimate data reports
     refusal_cues = [
         "i'm sorry, but i cannot",
@@ -596,7 +630,7 @@ async def evaluate_task_output(
     ]
     # If the output already contains tool results or disk/directory details, do not override
     has_concrete_data = any(marker in worker_output.lower() for marker in ["total_bytes", "free_bytes", "total_gigabytes", "directory tree", "files and directories", "items found"])
-    if not has_concrete_data and any(cue in worker_output.lower() for cue in refusal_cues):
+    if decision != "abort" and not has_concrete_data and any(cue in worker_output.lower() for cue in refusal_cues):
         decision = "needs_retry"
         if not feedback:
             feedback = "The worker reported inability to complete the task. Please execute the available tools to inspect the environment and fulfill the requirements."

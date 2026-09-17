@@ -203,3 +203,75 @@ def test_react_flexible_tool_call_parsing(mock_llm):
     call4 = worker._extract_tool_call('get_disk_usage("D:\\\\ai_gpu")')
     assert call4["tool"] == "get_disk_usage"
     assert call4["args"]["path"] == "D:\\ai_gpu"
+
+
+def test_context_history_compression(mock_llm):
+    """Test that older intermediate tool outputs are compressed to preserve token bounds."""
+    worker = UniversalWorkerAgent(llm=mock_llm)
+
+    messages = [
+        {"role": "system", "content": "You are a specialized SOC agent."},
+        {"role": "user", "content": "Investigate security logs in /var/log"},
+        {"role": "assistant", "content": "I will execute the first discovery tool."},
+        {
+            "role": "user",
+            "content": (
+                "Tool `gather_log_evidence` returned:\n\n"
+                + "Log record 1: connection from 198.51.100.44\n" * 50
+                + "\n\nAnalyze this result. Either call another tool or provide your FINAL_ANSWER."
+            ),
+        },
+        {"role": "assistant", "content": "I see multiple connections. I will now lookup the threat indicator."},
+        {
+            "role": "user",
+            "content": (
+                "Tool `lookup_threat_indicators` returned:\n\n"
+                + "Indicator 198.51.100.44 is a known C2 server.\n"
+                + "\n\nAnalyze this result. Either call another tool or provide your FINAL_ANSWER."
+            ),
+        },
+        {"role": "assistant", "content": "The C2 is confirmed. Executing mitigation."},
+        {
+            "role": "user",
+            "content": (
+                "Tool `propose_containment` returned:\n\n"
+                + "Firewall rule created.\n"
+                + "\n\nAnalyze this result. Either call another tool or provide your FINAL_ANSWER."
+            ),
+        },
+    ]
+
+    compressed = worker._compress_context_history(messages)
+
+    # Immutable anchors preserved
+    assert compressed[0] == messages[0]
+    assert compressed[1] == messages[1]
+
+    # Working horizon preserved (last 2 messages)
+    assert compressed[-1] == messages[-1]
+    assert compressed[-2] == messages[-2]
+
+    # Historical turn 3 (tool 1) was compressed
+    hist_tool_msg = compressed[3]
+    assert "[Historical output compressed]" in hist_tool_msg["content"]
+    assert len(hist_tool_msg["content"]) < len(messages[3]["content"])
+
+
+@pytest.mark.asyncio
+async def test_heartbeat_callback_invoked(mock_llm, simple_task):
+    mock_llm.chat.return_value = "FINAL_ANSWER: 4"
+    worker = UniversalWorkerAgent(llm=mock_llm)
+    heartbeat_calls = []
+
+    def on_heartbeat():
+        heartbeat_calls.append(True)
+
+    result = await worker.execute(
+        simple_task,
+        persona="You are a math helper",
+        tools=[],
+        on_heartbeat=on_heartbeat,
+    )
+    assert result.status == TaskStatus.COMPLETED
+    assert len(heartbeat_calls) >= 1
+

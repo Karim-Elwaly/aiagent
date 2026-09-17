@@ -341,20 +341,20 @@ async def get_disk_usage(
         pct_used = (used / total) * 100 if total > 0 else 0
         pct_free = (free / total) * 100 if total > 0 else 0
 
+        drive_name = target.drive or str(target.anchor) or "Host Drive Partition"
         lines = [
-            f"# Host Disk Usage Summary for '{clean_path}':",
+            f"# Host Disk Partition & Directory Storage Breakdown:",
+            f"- **Host Drive / Volume ({drive_name})**: Total Capacity: {total / (1024**3):.2f} GB | Free: {free / (1024**3):.2f} GB ({pct_free:.1f}% free)",
+            f"- **Target Directory Inspected**: '{target}'",
         ]
         if drive_fallback_msg:
             lines.extend([drive_fallback_msg, ""])
 
         lines.extend([
-            f"- **Total Storage Capacity**: {total / (1024**3):.2f} GB ({total / (1024**2):.1f} MB, {total:,} bytes)",
-            f"- **Used Space**:             {used / (1024**3):.2f} GB ({pct_used:.1f}% of total drive, {used:,} bytes)",
-            f"- **Free Space Available**:   {free / (1024**3):.2f} GB ({pct_free:.1f}% of total drive, {free:,} bytes)",
             "",
-            f"## Top-Level Entries and Storage Breakdown for '{target}':",
+            f"## Files & Sub-Directories inside '{target}':",
             "",
-            "| Name | Type | Size (Human) | Size (Bytes) | File Count | % of Used Space |",
+            "| Name | Type | Size (Human) | Size (Bytes) | File Count | % of Drive Used |",
             "| :--- | :--- | :--- | :--- | :--- | :--- |",
         ])
 
@@ -520,11 +520,8 @@ DISK_USAGE_SPEC = ToolSpec(
     skills_provided=[
         "disk_usage",
         "disk_space",
-        "filesystem_analysis",
         "storage_report",
-        "directory_listing",
-        "file_enumeration",
-        "data_processing",
+        "filesystem_capacity",
     ],
     parameters={
         "path": {

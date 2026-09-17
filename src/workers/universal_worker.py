@@ -23,6 +23,7 @@ import ast
 import asyncio
 import json
 import logging
+import os
 import re
 import time
 from collections.abc import Callable
@@ -76,6 +77,7 @@ class UniversalWorkerAgent:
         user_query: str = "",
         on_token: Callable[[str], None] | None = None,
         on_event: Callable[[dict[str, Any]], None] | None = None,
+        on_heartbeat: Callable[[], None] | None = None,
     ) -> TaskResult:
         """Execute a single task via the guarded ReAct loop.
 
@@ -87,6 +89,7 @@ class UniversalWorkerAgent:
             user_query: Optional overall user request containing target paths and goals.
             on_token: Optional callback for streaming tokens.
             on_event: Optional callback for tool/task lifecycle events.
+            on_heartbeat: Optional callback to pulse liveness/heartbeat to orchestrator.
 
         Returns:
             TaskResult with status, output, and metadata.
@@ -138,17 +141,24 @@ class UniversalWorkerAgent:
                 self.max_iterations,
             )
 
+            if on_heartbeat:
+                try:
+                    on_heartbeat()
+                except Exception:
+                    pass
+
             # ── Step 1: LLM thinks ──────────────────────────
+            active_messages = self._compress_context_history(messages)
             try:
                 if on_token:
                     tokens_list: list[str] = []
-                    async for token in self.llm.chat_stream(messages):
+                    async for token in self.llm.chat_stream(active_messages):
                         tokens_list.append(token)
                         on_token(token)
                     response = "".join(tokens_list)
                 else:
                     response = await asyncio.wait_for(
-                        self.llm.chat(messages),
+                        self.llm.chat(active_messages),
                         timeout=task.timeout_seconds,
                     )
             except TimeoutError:
@@ -375,6 +385,12 @@ class UniversalWorkerAgent:
                     e,
                 )
 
+            if on_heartbeat:
+                try:
+                    on_heartbeat()
+                except Exception:
+                    pass
+
             # ── Step 5: Append to conversation and loop ─────
             messages.append(
                 {"role": "assistant", "content": response}
@@ -460,8 +476,53 @@ class UniversalWorkerAgent:
                     return ans
         return None
 
+    def _compress_context_history(self, messages: list[dict[str, str]]) -> list[dict[str, str]]:
+        """Sliding-window context compression for local LLM reliability.
+
+        Preserves:
+          - Immutable Anchors: System persona (messages[0]) and initial task spec (messages[1])
+          - Working Horizon: The last assistant turn and last tool result in full fidelity
+
+        Compresses:
+          - Historical intermediate tool results (steps older than 1 turn) down to high-density summary stamps.
+        """
+        if len(messages) <= 6:
+            return messages
+
+        compressed = [messages[0], messages[1]]
+        # Middle turns: from index 2 up to len(messages) - 2
+        for i in range(2, len(messages) - 2):
+            msg = messages[i]
+            if msg.get("role") == "user" and " returned:\n\n" in msg.get("content", ""):
+                m_tool = re.match(r"Tool `([^`]+)` returned:\n\n(.*)", msg["content"], re.DOTALL)
+                if m_tool:
+                    tool_name = m_tool.group(1)
+                    body = m_tool.group(2)
+                    if "\n\nAnalyze this result" in body:
+                        body = body.split("\n\nAnalyze this result")[0].strip()
+                    lines = [line.strip() for line in body.splitlines() if line.strip()]
+                    summary_snippet = " | ".join(lines[:3])
+                    if len(summary_snippet) > 160:
+                        summary_snippet = summary_snippet[:160] + "..."
+                    compact_content = (
+                        f"Tool `{tool_name}` [Historical output compressed]: {summary_snippet}\n\n"
+                        f"[Detailed evidence preserved in execution log]"
+                    )
+                    compressed.append({"role": "user", "content": compact_content})
+                    continue
+            elif msg.get("role") == "assistant" and len(msg.get("content", "")) > 400:
+                content = msg["content"]
+                compact_content = content[:300].strip() + "\n[...prior thought summarized]"
+                compressed.append({"role": "assistant", "content": compact_content})
+                continue
+            compressed.append(msg)
+
+        # Append working horizon (last 2 messages) unmodified
+        compressed.extend(messages[-2:])
+        return compressed
+
     def _extract_task_path_or_default(self, task: Task, user_query: str = "") -> str:
-        """Extract a filesystem path mentioned in the task or user_query, defaulting to D:\\."""
+        """Extract a filesystem path mentioned in the task or user_query, defaulting to current working directory."""
         combined_text = f"{task.name} {task.description} {user_query}"
         # Match Windows drive path e.g. "D:\Security-logs-test\...", "D:\ai_gpu", D:\
         m = re.search(r'([a-zA-Z]:\\[^"\'\s<>*?|]*)', combined_text)
@@ -478,7 +539,8 @@ class UniversalWorkerAgent:
         m_drive = re.search(r'([a-zA-Z]:)', combined_text)
         if m_drive:
             return f"{m_drive.group(1)}\\"
-        return "D:\\"
+        # Fallback to current working directory (cross-platform) instead of hardcoding D:\
+        return os.getcwd()
 
     def _build_tool_steering_message(self, task: Task, tools: list[ToolSpec], user_query: str = "") -> str:
         """Build an imperative steering message forcing the LLM to output a valid tool call."""
@@ -492,7 +554,8 @@ class UniversalWorkerAgent:
                 if "path" in pname_lower or "dir" in pname_lower or "folder" in pname_lower or "target" in pname_lower:
                     args_example[pname] = detected_path
                 elif "drive" in pname_lower:
-                    args_example[pname] = detected_path[:2] + "\\" if len(detected_path) >= 2 and detected_path[1] == ":" else "D:\\"
+                    drive = os.path.splitdrive(detected_path)[0]
+                    args_example[pname] = f"{drive}\\" if drive else os.path.abspath(os.sep)
                 elif "command" in pname_lower or "cmd" in pname_lower:
                     args_example[pname] = f"dir \"{detected_path}\""
                 elif "recursive" in pname_lower:

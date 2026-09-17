@@ -54,11 +54,12 @@ document.addEventListener("DOMContentLoaded", () => {
     showToast(`Task ${task.id}: ${task.name} (${status.toUpperCase()})`);
   });
 
-  // 1. Initial Health, Tools, Agents, and Schedules Fetch
+  // 1. Initial Health, Tools, Agents, Schedules, and Workflow Templates Fetch
   fetchHealth();
   fetchTools();
   fetchAgents();
   updateSchedulesBadge();
+  fetchWorkflowTemplates();
   setInterval(fetchHealth, 10000);
 
   // 2. Preset Queries
@@ -775,26 +776,25 @@ document.addEventListener("DOMContentLoaded", () => {
       name: "5-Phase SOC Autonomous Investigation Pipeline",
       description: "Enterprise security triage, forensic evidence gathering, blast radius discovery, timeline compression, and containment response.",
       tasks: [
-        {
           id: "t1",
-          name: "Incident Triage & False-Positive Assessment",
-          description: "Parse alert logs, extract anomalous events, and evaluate false-positive probability.",
-          required_skills: ["alert_triage", "log_forensics", "directory_listing"],
+          name: "Forensic Evidence Gathering & Log Ingestion",
+          description: "Inspect and parse all security logs in target directory or file (CloudTrail, WAF ModSecurity, Nginx, MySQL, Sysmon, Windows events, firewall). Ingest content, extract line counts, anomalous events, and external network indicators.",
+          required_skills: ["evidence_gathering", "log_forensics"],
           dependencies: [],
           risk_level: "low",
         },
         {
           id: "t2",
-          name: "Forensic Evidence Gathering & Threat Intel",
-          description: "Inspect local logs in target path, extract network indicators (IPs, hashes), and check threat intelligence reputation.",
-          required_skills: ["threat_intel", "log_forensics", "evidence_gathering"],
+          name: "Alert Triage & Threat Intelligence",
+          description: "Analyze the log evidence gathered in Phase 1. Extract IoCs (IPs, hashes, domains), score incident severity, evaluate false-positive probability, and cross-reference external IPs/hashes against threat intelligence.",
+          required_skills: ["alert_triage", "threat_intel", "ioc_extraction"],
           dependencies: ["t1"],
           risk_level: "low",
         },
         {
           id: "t3",
           name: "Environment Discovery & Blast Radius Mapping",
-          description: "Analyze filesystem impact, identify affected services, and map attack scope across local system.",
+          description: "Analyze filesystem impact, identify affected services, detect credential dumping attempts (Mimikatz, LSASS), and map attack blast radius across the system.",
           required_skills: ["directory_listing", "file_reading", "code_execution"],
           dependencies: ["t2"],
           risk_level: "medium",
@@ -874,6 +874,24 @@ document.addEventListener("DOMContentLoaded", () => {
       toggleWorkflowModeBtn.classList.remove("active");
       workflowModeIndicator.textContent = `🤖 Mode: Autonomous Auto-Plan`;
       toggleWorkflowModeBtn.title = "Click to configure custom workflow pipeline";
+    }
+  }
+
+  async function fetchWorkflowTemplates() {
+    try {
+      const res = await fetch("/api/workflows/templates");
+      if (res.ok) {
+        const list = await res.json();
+        if (Array.isArray(list)) {
+          list.forEach((item) => {
+            if (item && item.id) {
+              workflowTemplates[item.id] = item;
+            }
+          });
+        }
+      }
+    } catch (e) {
+      console.warn("Could not fetch remote workflow templates, using builtin fallback:", e);
     }
   }
 
@@ -2853,7 +2871,7 @@ Integrates with smart home sensors, switches, lighting, and scenes.`
     if (el && hermesSkillContent) {
       el.addEventListener("click", () => {
         hermesSkillContent.value = hermesPresets[key];
-        showToast(`Loaded ${label} specification from Hermes Catalog`);
+        showToast(`Loaded ${label} specification from Skills Catalog`);
       });
     }
   });

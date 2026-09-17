@@ -55,11 +55,16 @@ async def triage_security_alert(alert_text: str) -> str:
 
     # Heuristic threat scoring
     score = 20
-    suspicious_indicators = []
     keywords = {
         "mimikatz": 50, "cobalt": 50, "powershell -enc": 40, "base64": 30,
         "beacon": 40, "c2": 45, "ransomware": 50, "exfiltration": 45,
-        "privilege escalation": 35, "unauthorized": 25, "brute force": 20
+        "privilege escalation": 35, "unauthorized": 25, "brute force": 20,
+        # WebApp, Database, & Cloud Pivot detection (Case 2: SSRF, SQLi, CloudTrail, IAM)
+        "169.254.169.254": 50, "ssrf": 50, "meta-data": 45, "security-credentials": 45,
+        "union select": 45, "sqlmap": 45, "modsecurity": 40, "anomaly score": 40,
+        "attachuserpolicy": 45, "createloginprofile": 45, "createaccesskey": 45,
+        "assumerole": 40, "cloudtrail": 30, "accessdenied": 30, "unauthorizedoperation": 40,
+        "mysql": 25, "information_schema": 40, "dump": 35, "sqli": 45
     }
     lower_text = alert_text.lower()
     for kw, weight in keywords.items():
@@ -103,43 +108,48 @@ TRIAGE_ALERT_SPEC = ToolSpec(
 # ─── 2. EVIDENCE GATHERING SKILL ──────────────────────────────────────────────
 
 def _parse_evtx_records(evtx_path: Path, max_records: int = 50) -> tuple[int, list[str]]:
-    """Parse Windows EVTX binary logs using PowerShell Get-WinEvent or fallback string extraction."""
+    """Parse Windows EVTX binary logs using python-evtx or fallback binary string extraction."""
     records: list[str] = []
-    if platform.system() == "Windows":
-        try:
-            # Safely query top events via PowerShell
-            escaped_path = str(evtx_path).replace("'", "''")
-            ps_script = (
-                f"$events = Get-WinEvent -Path '{escaped_path}' -MaxEvents {max_records} -ErrorAction SilentlyContinue | "
-                f"Select-Object TimeCreated, Id, LevelDisplayName, Message; "
-                f"if ($events) {{ ConvertTo-Json -InputObject @($events) -Compress }} else {{ '[]' }}"
-            )
-            proc = subprocess.run(
-                ["powershell", "-NoProfile", "-NonInteractive", "-Command", ps_script],
-                capture_output=True,
-                text=True,
-                timeout=12,
-            )
-            stdout = proc.stdout.strip()
-            if stdout and stdout != "[]":
-                try:
-                    data = json.loads(stdout)
-                    items = data if isinstance(data, list) else [data]
-                    for item in items:
-                        t = str(item.get("TimeCreated", ""))
-                        eid = str(item.get("Id", ""))
-                        lvl = str(item.get("LevelDisplayName", "Info"))
-                        msg = str(item.get("Message", "")).replace("\r\n", " ").replace("\n", " ").strip()
-                        if len(msg) > 160:
-                            msg = msg[:160] + "..."
-                        records.append(f"[{t}] [EventID {eid}] [{lvl}] {msg}")
-                    return len(records), records
-                except Exception:
-                    pass
-        except Exception as ps_err:
-            logger.debug("PowerShell EVTX read failed for %s: %s", evtx_path.name, ps_err)
 
-    # Cross-platform / fallback binary string scraping
+    # 1. Native Python EVTX Parser (cross-platform, memory-efficient, no subprocesses)
+    try:
+        import Evtx.Evtx as evtx_mod
+        with evtx_mod.Evtx(str(evtx_path)) as log:
+            for record in log.records():
+                xml_str = record.xml()
+                # Fast regex field extraction without full XML DOM overhead
+                m_eid = re.search(r"<EventID[^>]*>(\d+)</EventID>", xml_str)
+                eid = m_eid.group(1) if m_eid else "Unknown"
+
+                m_time = re.search(r'SystemTime="([^"]+)"', xml_str)
+                time_str = m_time.group(1) if m_time else ""
+
+                m_level = re.search(r"<Level>(\d+)</Level>", xml_str)
+                lvl_val = m_level.group(1) if m_level else ""
+                lvl = "Error" if lvl_val in ("1", "2") else "Warning" if lvl_val == "3" else "Info"
+
+                # Extract salient EventData / Data values
+                data_items = re.findall(r'<Data(?:\s+Name="([^"]*)")?>([^<]*)</Data>', xml_str)
+                data_summary = ", ".join(
+                    f"{name}={val}" if name else val
+                    for name, val in data_items[:5]
+                    if val.strip()
+                )
+                if len(data_summary) > 160:
+                    data_summary = data_summary[:160] + "..."
+
+                record_line = f"[{time_str}] [EventID {eid}] [{lvl}] {data_summary or 'Windows Event Log Record'}"
+                records.append(record_line)
+                if len(records) >= max_records:
+                    break
+        if records:
+            return len(records), records
+    except ImportError:
+        logger.debug("python-evtx not installed; falling back to binary inspection.")
+    except Exception as evtx_err:
+        logger.debug("python-evtx parser error on %s: %s", evtx_path.name, evtx_err)
+
+    # 2. Cross-platform / fallback binary string scraping
     try:
         raw = evtx_path.read_bytes()
         # Find printable ASCII and UTF-16 sequences
@@ -216,13 +226,17 @@ async def gather_log_evidence(
     extracted_ips: set[str] = set()
     extracted_hashes: set[str] = set()
 
-    # High-signal APT and intrusion detection patterns
+    # High-signal APT, WebApp, and Cloud pivot intrusion detection patterns
     suspicious_keywords = [
         "mimikatz", "sekurlsa", "lsass", "procdump", "comsvcs.dll",
         "powershell -enc", "powershell.exe -e", "certutil -urlcache", "certutil -decode",
         "rundll32.exe", "wmic process call", "bitsadmin", "vssadmin delete shadows",
         "schtasks /create", "psexec", "whoami", "nltest", "net user", "net group",
         "beacon", "reverse shell", "downloadstring", "invoke-expression", "invoke-webrequest",
+        # WebApp, Database & Cloud Pivot indicators (SSRF, IAM, SQLi, CloudTrail)
+        "169.254.169.254", "meta-data", "security-credentials", "assumerole", "getcalleridentity",
+        "createloginprofile", "attachuserpolicy", "createaccesskey", "listbuckets", "getobject",
+        "union select", "information_schema", "sqlmap", "modsecurity", "anomaly score",
         "failed", "unauthorized", "error", "exec", "powershell", "denied", "malware", "drop", "alert"
     ]
 

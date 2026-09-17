@@ -174,6 +174,9 @@ class UAOSWorkflow:
 
         # ── Phase 2: Execute DAG ─────────────────────────
         while True:
+            # Fast-fail any downstream tasks whose dependencies have failed
+            self._cascade_failed_dependencies(dag_dict, completed, failed)
+
             # Route: find tasks with all dependencies satisfied
             ready_tasks = self._get_ready_tasks(dag_dict, completed, failed)
 
@@ -323,11 +326,18 @@ class UAOSWorkflow:
                     execute_task,
                     args=[task_dict, completed, agent_id],
                     start_to_close_timeout=timedelta(seconds=timeout + 60),
+                    heartbeat_timeout=timedelta(seconds=90),
                     retry_policy=RetryPolicy(
                         maximum_attempts=max_retries + 1,
                         initial_interval=timedelta(seconds=5),
+                        maximum_interval=timedelta(seconds=30),
                         backoff_coefficient=2.0,
-                        non_retryable_error_types=["ApprovalRejectedError"],
+                        non_retryable_error_types=[
+                            "ApprovalRejectedError",
+                            "ValueError",
+                            "KeyError",
+                            "FileNotFoundError",
+                        ],
                     ),
                 )
 
@@ -377,7 +387,19 @@ class UAOSWorkflow:
                             execute_task,
                             args=[task_dict, completed, agent_id],
                             start_to_close_timeout=timedelta(seconds=timeout + 60),
-                            retry_policy=RetryPolicy(maximum_attempts=2),
+                            heartbeat_timeout=timedelta(seconds=90),
+                            retry_policy=RetryPolicy(
+                                maximum_attempts=2,
+                                initial_interval=timedelta(seconds=5),
+                                maximum_interval=timedelta(seconds=30),
+                                backoff_coefficient=2.0,
+                                non_retryable_error_types=[
+                                    "ApprovalRejectedError",
+                                    "ValueError",
+                                    "KeyError",
+                                    "FileNotFoundError",
+                                ],
+                            ),
                         )
                         if retry_result["status"] == "completed":
                             task_output = retry_result["output"]
@@ -406,33 +428,18 @@ class UAOSWorkflow:
                                     eval_err,
                                 )
 
-                    # Halt cascading failures ONLY if initial file discovery (t1) produced 0 files
-                    is_initial_discovery = task_id in ("t1", "T1") and any(
-                        s in task_dict.get("required_skills", [])
-                        for s in ("file_tree", "filesystem_inspection", "file_enumeration", "directory_listing")
-                    )
-                    low_output = task_output.lower()
-                    has_zero_files = is_initial_discovery and any(
-                        marker in low_output
-                        for marker in (
-                            "0 items enumerated",
-                            "0 files enumerated",
-                            "0 total log records",
-                            "total: 0 items",
-                            "does not exist on disk",
-                            "directory not found",
-                        )
-                    )
-
-                    if has_zero_files:
+                    # Domain-agnostic circuit breaker: Supervisor signalled fatal pipeline abort
+                    if decision == "abort":
+                        abort_reason = feedback or "Prerequisite artifacts missing or inaccessible on disk."
                         workflow.logger.warning(
-                            "Initial discovery task '%s' (%s) found 0 files. Halting downstream cascade.",
+                            "Supervisor issued fatal abort on task '%s' (%s): %s. Halting downstream cascade.",
                             task_name,
                             task_id,
+                            abort_reason,
                         )
                         task_output = (
                             f"{task_output}\n\n"
-                            f"⚠️ **Investigation Halted**: Target log directory yielded 0 files or could not be accessed. "
+                            f"⚠️ **Investigation Aborted**: {abort_reason}\n"
                             f"Downstream analysis tasks aborted to prevent ungrounded hallucinations."
                         )
                         completed[task_id] = task_output
@@ -441,7 +448,7 @@ class UAOSWorkflow:
                         for rem_task in dag_dict.get("tasks", []):
                             rem_id = rem_task["id"]
                             if rem_id != task_id and rem_id not in completed:
-                                failed[rem_id] = f"Skipped: Upstream discovery task '{task_name}' found 0 artifacts on disk."
+                                failed[rem_id] = f"Skipped: Upstream prerequisite task '{task_name}' aborted pipeline ({abort_reason})."
                                 self._task_statuses[rem_id] = "skipped"
                         break
 
@@ -520,3 +527,36 @@ class UAOSWorkflow:
                 ready.append(task)
 
         return ready
+
+    def _cascade_failed_dependencies(
+        self,
+        dag_dict: dict,
+        completed: dict[str, str],
+        failed: dict[str, str],
+    ) -> bool:
+        """Fast-fail downstream tasks whose required dependencies have failed.
+
+        Traverses the DAG and marks any task with failed dependencies as skipped.
+        Returns True if any new task status was cascaded.
+        """
+        changed = False
+        resolved = set(completed.keys()) | set(failed.keys())
+        for task in dag_dict.get("tasks", []):
+            task_id = task["id"]
+            if task_id in resolved:
+                continue
+            deps = task.get("dependencies", [])
+            failed_deps = [d for d in deps if d in failed]
+            if failed_deps:
+                dep_names = ", ".join(failed_deps)
+                failed[task_id] = f"Skipped: Required upstream dependency ({dep_names}) failed or was skipped."
+                self._task_statuses[task_id] = "skipped"
+                resolved.add(task_id)
+                changed = True
+                workflow.logger.info(
+                    "Fast-failing task '%s' (%s) due to failed upstream dependencies: %s",
+                    task.get("name", task_id),
+                    task_id,
+                    dep_names,
+                )
+        return changed

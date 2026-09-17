@@ -130,3 +130,30 @@ async def test_custom_dag_validation():
     assert len(dag.tasks) == 2
     assert dag.tasks[0].id == "t1"
     assert dag.tasks[1].dependencies == ["t1"]
+
+
+@pytest.mark.asyncio
+async def test_evaluate_task_output_circuit_breaker_abort():
+    task_dict = {
+        "id": "t1",
+        "name": "Target Discovery & Evidence Enumeration",
+        "description": "Inspect log directory",
+        "required_skills": ["file_tree", "filesystem_inspection"],
+        "expected_output": "List of discovered files",
+    }
+    worker_output = "Directory enumeration complete: 0 files enumerated. Target path does not exist on disk."
+    user_query = "Forensic audit on D:\\missing\\logs"
+    prior_completed = {}
+
+    with patch("src.orchestrator.activities._get_planner_llm") as mock_get_llm:
+        mock_llm = mock_get_llm.return_value
+        mock_llm.chat = AsyncMock(return_value=json.dumps({
+            "decision": "pass",
+            "confidence": 0.9,
+            "feedback": "",
+        }))
+
+        evaluation = await evaluate_task_output(task_dict, worker_output, user_query, prior_completed)
+        assert evaluation["decision"] == "abort"
+        assert "Target log directory yielded 0 files" in evaluation["feedback"]
+
