@@ -73,6 +73,7 @@ class UniversalWorkerAgent:
         persona: str,
         tools: list[ToolSpec],
         upstream_context: dict[str, str] | None = None,
+        user_query: str = "",
         on_token: Callable[[str], None] | None = None,
         on_event: Callable[[dict[str, Any]], None] | None = None,
     ) -> TaskResult:
@@ -83,6 +84,7 @@ class UniversalWorkerAgent:
             persona: System prompt from PersonaSynthesizer.
             tools: Resolved concrete tools from ToolRegistry.
             upstream_context: Optional {task_id: output} from prior tasks.
+            user_query: Optional overall user request containing target paths and goals.
             on_token: Optional callback for streaming tokens.
             on_event: Optional callback for tool/task lifecycle events.
 
@@ -93,10 +95,12 @@ class UniversalWorkerAgent:
         tool_map = {t.name: t for t in tools}
         tool_calls_made: list[str] = []
 
-        # Construct clear user message containing task instructions and upstream context
-        user_parts = [
-            f"# Task to Execute\n**{task.name}**\n\n{task.description}",
-        ]
+        # Construct clear user message containing task instructions, target context, and upstream context
+        user_parts = []
+        if user_query and user_query.strip():
+            user_parts.append(f"# Overall User Request / Target Context:\n{user_query.strip()}")
+        user_parts.append(f"# Task to Execute\n**{task.name}**\n\n{task.description}")
+
         if task.expected_output and task.expected_output.strip():
             user_parts.append(f"**Expected Output:**\n{task.expected_output}")
 
@@ -192,22 +196,34 @@ class UniversalWorkerAgent:
             tool_call = self._extract_tool_call(response)
 
             # If tools are available for this task and no tool has been executed yet,
-            # we MUST NOT exit prematurely on iteration 1 or 2 (neither explicit final answer nor implicit).
+            # we MUST NOT exit prematurely on early iterations.
             # Instead, steer the model directly to call a tool with concrete task arguments.
-            if tool_call is None and tools and not tool_calls_made and iteration < 3:
+            if tool_call is None and tools and not tool_calls_made and iteration < (self.max_iterations - 1):
                 logger.info(
                     "Task '%s' iteration %d produced no tool call; steering model to execute available tools",
                     task.id,
                     iteration,
                 )
                 messages.append({"role": "assistant", "content": response})
-                steering_msg = self._build_tool_steering_message(task, tools)
+                steering_msg = self._build_tool_steering_message(task, tools, user_query)
                 messages.append({"role": "user", "content": steering_msg})
                 continue
 
             # ── Step 3: Check for explicit completion ───────
             final = self._extract_final_answer(response)
             if final is not None and final.strip():
+                # Guardrail: If tools are provided and none have been executed yet,
+                # reject premature conclusions and force the agent to use its tools first
+                if tools and not tool_calls_made and iteration < (self.max_iterations - 1):
+                    logger.info(
+                        "Task '%s' attempted final answer without executing tools; steering to execute tools",
+                        task.id,
+                    )
+                    messages.append({"role": "assistant", "content": response})
+                    steering_msg = self._build_tool_steering_message(task, tools, user_query)
+                    messages.append({"role": "user", "content": steering_msg})
+                    continue
+
                 elapsed = int((time.monotonic() - start_time) * 1000)
                 logger.info(
                     "Task '%s' completed at iteration %d (%dms)",
@@ -236,8 +252,14 @@ class UniversalWorkerAgent:
 
             # ── Step 4: Handle implicit final answer ────────
             if tool_call is None:
+                # If tools are required and not yet run, don't accept implicit answer early
+                if tools and not tool_calls_made and iteration < (self.max_iterations - 1):
+                    messages.append({"role": "assistant", "content": response})
+                    steering_msg = self._build_tool_steering_message(task, tools, user_query)
+                    messages.append({"role": "user", "content": steering_msg})
+                    continue
+
                 # Guardrail 4: IMPLICIT FINAL ANSWER
-                # LLM produced text that isn't a tool call or explicit final answer.
                 elapsed = int((time.monotonic() - start_time) * 1000)
                 logger.info(
                     "Task '%s' implicit final answer at iteration %d",
@@ -438,37 +460,45 @@ class UniversalWorkerAgent:
                     return ans
         return None
 
-    def _extract_task_path_or_default(self, task: Task) -> str:
-        """Extract a path mentioned in the task description or title, defaulting to D:\\."""
-        text = f"{task.name} {task.description}"
-        # Match Windows drive path e.g. "D:\ai_gpu", 'D:\ai_gpu', D:\ai_gpu, D:\
-        m = re.search(r'([a-zA-Z]:\\[^"\'\s<>*?|]*)', text)
+    def _extract_task_path_or_default(self, task: Task, user_query: str = "") -> str:
+        """Extract a filesystem path mentioned in the task or user_query, defaulting to D:\\."""
+        combined_text = f"{task.name} {task.description} {user_query}"
+        # Match Windows drive path e.g. "D:\Security-logs-test\...", "D:\ai_gpu", D:\
+        m = re.search(r'([a-zA-Z]:\\[^"\'\s<>*?|]*)', combined_text)
         if m:
-            clean = m.group(1).rstrip(",;.").strip('"').strip("'")
+            clean = m.group(1).rstrip(",;.:)").strip('"').strip("'")
             if clean:
                 return clean
-        m_drive = re.search(r'([a-zA-Z]:)', text)
+        # Match Unix style path /path/to/logs
+        m_unix = re.search(r'(/(?:[a-zA-Z0-9._-]+/)+[a-zA-Z0-9._-]+)', combined_text)
+        if m_unix:
+            clean_u = m_unix.group(1).rstrip(",;.:)").strip('"').strip("'")
+            if clean_u:
+                return clean_u
+        m_drive = re.search(r'([a-zA-Z]:)', combined_text)
         if m_drive:
             return f"{m_drive.group(1)}\\"
         return "D:\\"
 
-    def _build_tool_steering_message(self, task: Task, tools: list[ToolSpec]) -> str:
+    def _build_tool_steering_message(self, task: Task, tools: list[ToolSpec], user_query: str = "") -> str:
         """Build an imperative steering message forcing the LLM to output a valid tool call."""
-        detected_path = self._extract_task_path_or_default(task)
+        detected_path = self._extract_task_path_or_default(task, user_query)
         tool_names = [t.name for t in tools]
         examples = []
         for t in tools:
             args_example: dict[str, Any] = {}
             for pname in t.parameters:
                 pname_lower = pname.lower()
-                if "path" in pname_lower or "dir" in pname_lower or "folder" in pname_lower:
+                if "path" in pname_lower or "dir" in pname_lower or "folder" in pname_lower or "target" in pname_lower:
                     args_example[pname] = detected_path
                 elif "drive" in pname_lower:
                     args_example[pname] = detected_path[:2] + "\\" if len(detected_path) >= 2 and detected_path[1] == ":" else "D:\\"
                 elif "command" in pname_lower or "cmd" in pname_lower:
-                    args_example[pname] = f"dir {detected_path}"
+                    args_example[pname] = f"dir \"{detected_path}\""
                 elif "recursive" in pname_lower:
                     args_example[pname] = True
+                elif "alert_text" in pname_lower or "raw_evidence" in pname_lower:
+                    args_example[pname] = f"Investigating logs at {detected_path}"
             examples.append(json.dumps({"tool": t.name, "args": args_example}))
 
         examples_text = "\n".join(f"- `{ex}`" for ex in examples)

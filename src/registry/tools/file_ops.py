@@ -54,6 +54,9 @@ async def read_file(
         return f"Error: File not found: {clean_path}"
 
     if not target.is_file():
+        if target.is_dir():
+            logger.info("read_file called on directory '%s'; delegating to list_directory", clean_path)
+            return await list_directory(directory_path=clean_path)
         return f"Error: Path is not a file: {clean_path}"
 
     try:

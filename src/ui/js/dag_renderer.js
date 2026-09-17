@@ -1,5 +1,5 @@
 /**
- * UAOS SVG DAG Renderer
+ * AgentHub SVG DAG Renderer
  * Renders dynamic TaskDAG graphs with topological auto-layout,
  * smooth cubic bezier connectors, and animated status particles.
  */

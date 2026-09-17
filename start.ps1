@@ -1,4 +1,4 @@
-# UAOS One-Command Starter for Windows PowerShell
+# AgentHub One-Command Starter for Windows PowerShell
 
 $ErrorActionPreference = "Stop"
 

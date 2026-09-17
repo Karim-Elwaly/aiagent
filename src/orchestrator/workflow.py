@@ -314,6 +314,7 @@ class UAOSWorkflow:
                     "Executing task '%s' (%s)", task_name, task_id
                 )
                 self._task_statuses[task_id] = "running"
+                task_dict["_user_query"] = user_query
 
                 timeout = task_dict.get("timeout_seconds", 300)
                 max_retries = task_dict.get("max_retries", 2)
@@ -381,6 +382,68 @@ class UAOSWorkflow:
                         if retry_result["status"] == "completed":
                             task_output = retry_result["output"]
                             result_dict = retry_result
+
+                            # Re-evaluate retry with supervisor
+                            try:
+                                re_eval = await workflow.execute_activity(
+                                    evaluate_task_output,
+                                    args=[task_dict, task_output, user_query, completed],
+                                    start_to_close_timeout=timedelta(seconds=90),
+                                    retry_policy=RetryPolicy(maximum_attempts=2),
+                                )
+                                if re_eval:
+                                    self._supervisor_evaluations.append(re_eval)
+                                    decision = re_eval.get("decision", "pass")
+                                    workflow.logger.info(
+                                        "Supervisor re-evaluation on '%s' retry: %s",
+                                        task_name,
+                                        decision.upper(),
+                                    )
+                            except Exception as eval_err:
+                                workflow.logger.warning(
+                                    "Supervisor retry re-evaluation error on '%s': %s",
+                                    task_name,
+                                    eval_err,
+                                )
+
+                    # Halt cascading failures ONLY if initial file discovery (t1) produced 0 files
+                    is_initial_discovery = task_id in ("t1", "T1") and any(
+                        s in task_dict.get("required_skills", [])
+                        for s in ("file_tree", "filesystem_inspection", "file_enumeration", "directory_listing")
+                    )
+                    low_output = task_output.lower()
+                    has_zero_files = is_initial_discovery and any(
+                        marker in low_output
+                        for marker in (
+                            "0 items enumerated",
+                            "0 files enumerated",
+                            "0 total log records",
+                            "total: 0 items",
+                            "does not exist on disk",
+                            "directory not found",
+                        )
+                    )
+
+                    if has_zero_files:
+                        workflow.logger.warning(
+                            "Initial discovery task '%s' (%s) found 0 files. Halting downstream cascade.",
+                            task_name,
+                            task_id,
+                        )
+                        task_output = (
+                            f"{task_output}\n\n"
+                            f"⚠️ **Investigation Halted**: Target log directory yielded 0 files or could not be accessed. "
+                            f"Downstream analysis tasks aborted to prevent ungrounded hallucinations."
+                        )
+                        completed[task_id] = task_output
+                        self._task_statuses[task_id] = "completed"
+
+                        for rem_task in dag_dict.get("tasks", []):
+                            rem_id = rem_task["id"]
+                            if rem_id != task_id and rem_id not in completed:
+                                failed[rem_id] = f"Skipped: Upstream discovery task '{task_name}' found 0 artifacts on disk."
+                                self._task_statuses[rem_id] = "skipped"
+                        break
 
                     completed[task_id] = task_output
                     self._task_statuses[task_id] = "completed"

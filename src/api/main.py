@@ -373,6 +373,7 @@ async def run_direct_workflow(
             task_id = task.id
             task_dict = task.model_dump()
             task_dict["_workflow_id"] = workflow_id
+            task_dict["_user_query"] = user_query
 
             risk_level = task.risk_level.value if hasattr(task.risk_level, "value") else str(task.risk_level)
             if risk_level in ("high", "critical"):

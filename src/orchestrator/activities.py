@@ -265,11 +265,14 @@ async def execute_task(
     def handle_event(ev: dict) -> None:
         bus.publish(wf_id, ev)
 
+    user_query = task_dict.get("_user_query", "")
+
     result = await worker.execute(
         task=task,
         persona=persona,
         tools=tools,
         upstream_context=upstream_outputs if upstream_outputs else None,
+        user_query=user_query,
         on_token=handle_token,
         on_event=handle_event,
     )

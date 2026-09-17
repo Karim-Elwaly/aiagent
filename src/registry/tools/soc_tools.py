@@ -10,7 +10,10 @@ from __future__ import annotations
 
 import json
 import logging
+import os
+import platform
 import re
+import subprocess
 from pathlib import Path
 from typing import Any
 
@@ -99,52 +102,191 @@ TRIAGE_ALERT_SPEC = ToolSpec(
 
 # ─── 2. EVIDENCE GATHERING SKILL ──────────────────────────────────────────────
 
-async def gather_log_evidence(target_path: str, max_files: int = 15, pattern: str = "*") -> str:
-    """Scan and inspect log directories or forensic artifact files.
+def _parse_evtx_records(evtx_path: Path, max_records: int = 50) -> tuple[int, list[str]]:
+    """Parse Windows EVTX binary logs using PowerShell Get-WinEvent or fallback string extraction."""
+    records: list[str] = []
+    if platform.system() == "Windows":
+        try:
+            # Safely query top events via PowerShell
+            escaped_path = str(evtx_path).replace("'", "''")
+            ps_script = (
+                f"$events = Get-WinEvent -Path '{escaped_path}' -MaxEvents {max_records} -ErrorAction SilentlyContinue | "
+                f"Select-Object TimeCreated, Id, LevelDisplayName, Message; "
+                f"if ($events) {{ ConvertTo-Json -InputObject @($events) -Compress }} else {{ '[]' }}"
+            )
+            proc = subprocess.run(
+                ["powershell", "-NoProfile", "-NonInteractive", "-Command", ps_script],
+                capture_output=True,
+                text=True,
+                timeout=12,
+            )
+            stdout = proc.stdout.strip()
+            if stdout and stdout != "[]":
+                try:
+                    data = json.loads(stdout)
+                    items = data if isinstance(data, list) else [data]
+                    for item in items:
+                        t = str(item.get("TimeCreated", ""))
+                        eid = str(item.get("Id", ""))
+                        lvl = str(item.get("LevelDisplayName", "Info"))
+                        msg = str(item.get("Message", "")).replace("\r\n", " ").replace("\n", " ").strip()
+                        if len(msg) > 160:
+                            msg = msg[:160] + "..."
+                        records.append(f"[{t}] [EventID {eid}] [{lvl}] {msg}")
+                    return len(records), records
+                except Exception:
+                    pass
+        except Exception as ps_err:
+            logger.debug("PowerShell EVTX read failed for %s: %s", evtx_path.name, ps_err)
+
+    # Cross-platform / fallback binary string scraping
+    try:
+        raw = evtx_path.read_bytes()
+        # Find printable ASCII and UTF-16 sequences
+        ascii_strings = re.findall(rb"[\x20-\x7E]{6,}", raw)
+        extracted = []
+        for s in ascii_strings[:100]:
+            try:
+                dec = s.decode("ascii", errors="ignore").strip()
+                if any(k in dec.lower() for k in ["event", "powershell", "cmd", "user", "logon", "fail", "error"]):
+                    extracted.append(dec[:140])
+                    if len(extracted) >= max_records:
+                        break
+            except Exception:
+                continue
+        return len(extracted), [f"[Scraped Binary Event] {e}" for e in extracted]
+    except Exception as e:
+        return 0, [f"[EVTX Read Error: {e}]"]
+
+
+async def gather_log_evidence(
+    target_path: str,
+    max_files: int = 30,
+    pattern: str = "*",
+    recursive: bool = True,
+) -> str:
+    """Scan and inspect log directories or forensic artifact files recursively.
+    
+    Supports .log, .txt, .json, .csv, .xml, and Windows .evtx event log parsing.
     
     Args:
         target_path: Path to file or directory containing security logs.
         max_files: Maximum number of log files to inspect.
-        pattern: File glob pattern (e.g. '*.log', '*.json', '*').
+        pattern: File glob pattern (e.g. '*.log', '*.evtx', '*').
+        recursive: Whether to search subdirectories recursively.
         
     Returns:
-        Summary of log files found, line counts, and notable security events detected.
+        Structured forensic collection summary with artifact metadata and suspicious indicators.
     """
-    p = Path(target_path)
+    clean_path = str(target_path).strip().strip('"').strip("'")
+    p = Path(clean_path)
     if not p.exists():
-        return f"Error: Path '{target_path}' does not exist on disk."
+        return f"Error: Path '{clean_path}' does not exist on disk."
 
-    output_lines = [f"=== [EVIDENCE COLLECTION: {target_path}] ==="]
+    output_lines = [f"=== [EVIDENCE COLLECTION: {clean_path}] ==="]
     
-    files_to_check = []
+    files_to_check: list[Path] = []
     if p.is_file():
         files_to_check = [p]
     else:
-        files_to_check = sorted(list(p.glob(pattern)))[:max_files]
+        if recursive:
+            for root, _, f_names in os.walk(p):
+                # Don't recurse excessively deep
+                rel_parts = len(Path(root).relative_to(p).parts)
+                if rel_parts > 4:
+                    continue
+                for fname in sorted(f_names):
+                    fp = Path(root) / fname
+                    if pattern != "*" and not fp.match(pattern):
+                        continue
+                    files_to_check.append(fp)
+                    if len(files_to_check) >= max_files:
+                        break
+                if len(files_to_check) >= max_files:
+                    break
+        else:
+            for f in sorted(list(p.glob(pattern))):
+                if f.is_file():
+                    files_to_check.append(f)
+                    if len(files_to_check) >= max_files:
+                        break
 
     total_events = 0
-    suspicious_findings = []
+    suspicious_findings: list[str] = []
+    extracted_ips: set[str] = set()
+    extracted_hashes: set[str] = set()
+
+    # High-signal APT and intrusion detection patterns
+    suspicious_keywords = [
+        "mimikatz", "sekurlsa", "lsass", "procdump", "comsvcs.dll",
+        "powershell -enc", "powershell.exe -e", "certutil -urlcache", "certutil -decode",
+        "rundll32.exe", "wmic process call", "bitsadmin", "vssadmin delete shadows",
+        "schtasks /create", "psexec", "whoami", "nltest", "net user", "net group",
+        "beacon", "reverse shell", "downloadstring", "invoke-expression", "invoke-webrequest",
+        "failed", "unauthorized", "error", "exec", "powershell", "denied", "malware", "drop", "alert"
+    ]
 
     for f in files_to_check:
         if f.is_dir():
             continue
+
+        f_size = f.stat().st_size
+        f_ext = f.suffix.lower()
+
+        # Dedicated Windows EVTX handler
+        if f_ext == ".evtx":
+            rec_count, evtx_events = _parse_evtx_records(f, max_records=40)
+            total_events += rec_count
+            for ev in evtx_events:
+                if any(k in ev.lower() for k in suspicious_keywords) or "eventid" in ev.lower():
+                    if len(suspicious_findings) < 25:
+                        suspicious_findings.append(f"[{f.name}] {ev[:160]}")
+                for ip in re.findall(IPV4_REGEX, ev):
+                    extracted_ips.add(ip)
+            output_lines.append(f"File: {f.name} ({rec_count} lines, {f_size} bytes) [Windows EVTX Log]")
+            continue
+
+        # Text, JSON, CSV, XML logs handler
         try:
-            content = f.read_text(encoding="utf-8", errors="ignore")
+            content = ""
+            for enc in ("utf-8", "latin-1", "cp1252"):
+                try:
+                    content = f.read_text(encoding=enc, errors="replace")
+                    break
+                except Exception:
+                    pass
+
             lines = content.splitlines()
             total_events += len(lines)
-            
-            # Detect notable events in log file
-            for idx, line in enumerate(lines[:500]):
+
+            # Scan lines across the file (sample first 1000 lines and regex scan the rest)
+            for idx, line in enumerate(lines[:1000]):
                 line_lower = line.lower()
-                if any(x in line_lower for x in ["failed", "unauthorized", "error", "exec", "powershell", "denied", "malware", "drop", "alert"]):
-                    if len(suspicious_findings) < 15:
+                if any(k in line_lower for k in suspicious_keywords):
+                    if len(suspicious_findings) < 25:
                         suspicious_findings.append(f"[{f.name}:L{idx+1}] {line.strip()[:160]}")
-                        
-            output_lines.append(f"File: {f.name} ({len(lines)} lines, {f.stat().st_size} bytes)")
+
+            # Collect IoCs from file
+            for ip in re.findall(IPV4_REGEX, content[:100000]):
+                extracted_ips.add(ip)
+            for h in re.findall(MD5_REGEX, content[:100000]):
+                extracted_hashes.add(h)
+            for h in re.findall(SHA256_REGEX, content[:100000]):
+                extracted_hashes.add(h)
+
+            output_lines.append(f"File: {f.name} ({len(lines)} lines, {f_size} bytes)")
         except Exception as e:
             output_lines.append(f"File: {f.name} (Error reading: {e})")
 
     output_lines.append(f"\nTotal Artifacts Analyzed: {len(files_to_check)} files, {total_events} total log records.")
+    
+    if extracted_ips:
+        ext_ips = [ip for ip in extracted_ips if not (ip.startswith("10.") or ip.startswith("192.168.") or ip.startswith("172.16.") or ip.startswith("127."))]
+        if ext_ips:
+            output_lines.append(f"Extracted External Egress IPs: {', '.join(sorted(ext_ips)[:10])}")
+    if extracted_hashes:
+        output_lines.append(f"Extracted Artifact Hashes: {', '.join(sorted(extracted_hashes)[:5])}")
+
     if suspicious_findings:
         output_lines.append("\nKey Anomalous Events Detected:")
         for sf in suspicious_findings:
@@ -158,7 +300,7 @@ async def gather_log_evidence(target_path: str, max_files: int = 15, pattern: st
 GATHER_EVIDENCE_SPEC = ToolSpec(
     tool_id="soc_gather_evidence",
     name="gather_log_evidence",
-    description="Inspect security log directories and extract anomalous forensic records.",
+    description="Inspect security log directories (including .evtx, .log, .json, .csv) recursively and extract forensic records.",
     skills_provided=["evidence_gathering", "log_forensics", "artifact_inspection", "file_reading"],
     parameters={
         "target_path": {
@@ -168,12 +310,17 @@ GATHER_EVIDENCE_SPEC = ToolSpec(
         },
         "max_files": {
             "type": "integer",
-            "description": "Maximum files to inspect (default 15)",
+            "description": "Maximum files to inspect (default 30)",
             "required": False,
         },
         "pattern": {
             "type": "string",
-            "description": "File glob pattern, e.g. '*.log' or '*'",
+            "description": "File glob pattern, e.g. '*.log', '*.evtx', or '*'",
+            "required": False,
+        },
+        "recursive": {
+            "type": "boolean",
+            "description": "Whether to search subdirectories recursively (default True)",
             "required": False,
         }
     },
@@ -294,7 +441,15 @@ COMPRESS_TIMELINE_SPEC = ToolSpec(
     tool_id="soc_compress_timeline",
     name="compress_security_timeline",
     description="Compress and deduplicate voluminous security logs into a chronological milestone timeline.",
-    skills_provided=["log_compression", "timeline_synthesis", "context_compression", "summarization"],
+    skills_provided=[
+        "log_compression",
+        "timeline_synthesis",
+        "context_compression",
+        "summarization",
+        "incident_compression",
+        "mitre_mapping",
+        "mitre_rca",
+    ],
     parameters={
         "raw_evidence_text": {
             "type": "string",
@@ -359,7 +514,15 @@ PROPOSE_CONTAINMENT_SPEC = ToolSpec(
     tool_id="soc_propose_containment",
     name="propose_containment_response",
     description="Propose and generate containment playbooks (IP blocking, endpoint isolation) for security response.",
-    skills_provided=["incident_response", "containment_playbook", "remediation", "firewall_rule"],
+    skills_provided=[
+        "incident_response",
+        "containment_playbook",
+        "remediation",
+        "firewall_rule",
+        "containment_actions",
+        "containment_rules",
+        "response_action",
+    ],
     parameters={
         "target_entity": {
             "type": "string",

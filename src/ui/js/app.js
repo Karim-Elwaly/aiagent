@@ -1,5 +1,5 @@
 /**
- * UAOS Mission Control — Main Application Logic
+ * AgentHub Mission Control — Main Application Logic
  * Integrates with FastAPI gateway, polls Temporal status,
  * triggers approval gates, and animates DAG transitions.
  */
@@ -155,7 +155,7 @@ document.addEventListener("DOMContentLoaded", () => {
       showToast(`Execution Error: ${err.message}`, "error");
       renderFinalSolution(
         `### ❌ Execution Failed\n\n**Error:** \`${err.message}\`\n\n` +
-        `Please ensure the UAOS backend server is running at \`${API_BASE || 'http://localhost:8001'}\`.\n\n` +
+        `Please ensure the AgentHub backend server is running at \`${API_BASE || 'http://localhost:8001'}\`.\n\n` +
         `**Troubleshooting Steps:**\n` +
         `- Run \`.\\start.bat\` or \`uvicorn src.api.main:app --port 8001\` in the project directory\n` +
         `- Verify health at [http://localhost:8001/health](http://localhost:8001/health)\n` +
@@ -779,7 +779,7 @@ document.addEventListener("DOMContentLoaded", () => {
           id: "t1",
           name: "Incident Triage & False-Positive Assessment",
           description: "Parse alert logs, extract anomalous events, and evaluate false-positive probability.",
-          required_skills: ["alert_triage", "file_reading"],
+          required_skills: ["alert_triage", "log_forensics", "directory_listing"],
           dependencies: [],
           risk_level: "low",
         },
@@ -787,7 +787,7 @@ document.addEventListener("DOMContentLoaded", () => {
           id: "t2",
           name: "Forensic Evidence Gathering & Threat Intel",
           description: "Inspect local logs in target path, extract network indicators (IPs, hashes), and check threat intelligence reputation.",
-          required_skills: ["threat_intel", "log_forensics", "file_reading"],
+          required_skills: ["threat_intel", "log_forensics", "evidence_gathering"],
           dependencies: ["t1"],
           risk_level: "low",
         },
@@ -795,7 +795,7 @@ document.addEventListener("DOMContentLoaded", () => {
           id: "t3",
           name: "Environment Discovery & Blast Radius Mapping",
           description: "Analyze filesystem impact, identify affected services, and map attack scope across local system.",
-          required_skills: ["file_reading", "code_execution", "directory_listing"],
+          required_skills: ["directory_listing", "file_reading", "code_execution"],
           dependencies: ["t2"],
           risk_level: "medium",
         },
@@ -803,7 +803,7 @@ document.addEventListener("DOMContentLoaded", () => {
           id: "t4",
           name: "Timeline Compression & MITRE ATT&CK RCA",
           description: "Synthesize gathered forensic events into a chronological timeline and correlate with MITRE ATT&CK tactics.",
-          required_skills: ["incident_compression", "mitre_mapping"],
+          required_skills: ["timeline_synthesis", "log_compression", "incident_compression"],
           dependencies: ["t3"],
           risk_level: "low",
         },
@@ -811,7 +811,7 @@ document.addEventListener("DOMContentLoaded", () => {
           id: "t5",
           name: "Response Action & Containment Rules",
           description: "Generate firewall isolation rules, IP blocklists, and immediate remediation steps for administrator approval.",
-          required_skills: ["containment_actions", "file_writing"],
+          required_skills: ["containment_playbook", "firewall_rule", "containment_actions"],
           dependencies: ["t4"],
           risk_level: "high",
         },
@@ -1472,10 +1472,8 @@ document.addEventListener("DOMContentLoaded", () => {
   if (openIntegrationsBtn && integrationsModal) {
     openIntegrationsBtn.addEventListener("click", () => {
       integrationsModal.classList.add("active");
+      switchIntegrationsTab(tabBtnTools);
       fetchTools();
-      fetchHermesStats();
-      fetchHermesCapabilities();
-      fetchHermesHubSkills(1);
       fetchMcpServers();
     });
   }
@@ -2243,7 +2241,7 @@ document.addEventListener("DOMContentLoaded", () => {
         }
       } catch (err) {
         console.error("AI Auto-Design network error:", err);
-        showToast(`AI Auto-Design network error: ${err.message}. Check if UAOS server is online.`, "error");
+        showToast(`AI Auto-Design network error: ${err.message}. Check if AgentHub server is online.`, "error");
       } finally {
         aiGenerateAgentBtn.disabled = false;
         aiGenerateAgentBtn.textContent = "✨ Auto-Design";
@@ -2394,7 +2392,7 @@ document.addEventListener("DOMContentLoaded", () => {
         }
       } catch (err) {
         console.error("Skill generation network error:", err);
-        showToast(`Skill generation network error: ${err.message}. Check if UAOS server is online.`, "error");
+        showToast(`Skill generation network error: ${err.message}. Check if AgentHub server is online.`, "error");
       } finally {
         skillBuilderGenerateBtn.disabled = false;
         skillBuilderGenerateBtn.textContent = "⚡ Generate Tool with LLM";

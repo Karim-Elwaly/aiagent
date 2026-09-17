@@ -23,12 +23,13 @@ if hasattr(sys.stderr, "reconfigure"):
     sys.stderr.reconfigure(encoding="utf-8", errors="replace")
 
 BANNER = r"""
-  _   _    _    ___  ____  
- | | | |  / \  / _ \/ ___| 
- | | | | / _ \| | | \___ \ 
- | |_| |/ ___ \ |_| |___) |
-  \___//_/   \_\___/|____/ 
- Universal Agent Orchestration System
+    _                    _   _   _       _     
+   / \   __ _  ___ _ __ | |_| | | |_   _| |__  
+  / _ \ / _` |/ _ \ '_ \| __| |_| | | | | '_ \ 
+ / ___ \ (_| |  __/ | | | |_|  _  | |_| | |_) |
+/_/   \_\__, |\___|_| |_|\__|_| |_|\__,_|_.__/ 
+        |___/                                   
+ Intelligent Agent Workspace
 """
 
 
@@ -44,7 +45,7 @@ def check_port(host: str, port: int, timeout: float = 2.0) -> bool:
 def main():
     print(BANNER)
     print("=" * 60)
-    print(">> Starting UAOS (Universal Agent Orchestration System)...")
+    print(">> Starting AgentHub (Intelligent Agent Workspace)...")
     print("=" * 60)
 
     # 1. Check Python version
@@ -113,7 +114,7 @@ def main():
     t_web_status = "http://localhost:8234 (Online)" if temporal_online else "Offline (run 'docker compose up -d temporal' to enable)"
 
     print("\n" + "=" * 60)
-    print(f"  🚀 UAOS Mission Control UI: http://localhost:{api_port}")
+    print(f"  🚀 AgentHub Mission Control UI: http://localhost:{api_port}")
     print(f"  📚 Swagger API Docs:        http://localhost:{api_port}/docs")
     print(f"  ⏱️  Temporal Web UI:         {t_web_status}")
     print("=" * 60)
@@ -182,7 +183,7 @@ def main():
             time.sleep(1.0)
 
     except KeyboardInterrupt:
-        print("\n[*] Shutting down UAOS services gracefully...")
+        print("\n[*] Shutting down AgentHub services gracefully...")
     finally:
         for p in processes:
             if p.poll() is None:

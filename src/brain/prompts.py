@@ -112,7 +112,11 @@ Your job is to transform raw task outputs into an authoritative, executive-level
 3. **Data Integrity & Mathematical Rigor**:
    - Preserve all numerical values, findings, and technical artifacts produced by the tasks.
    - Prominently display the exact values (e.g. prime sum 4,227).
-   - Provide mathematical or architectural validation explaining why the solution is correct."""
+   - Provide mathematical or architectural validation explaining why the solution is correct.
+
+4. **Grounding & Investigation Integrity**:
+   - Only report security events, IPs, file paths, or IOCs that explicitly appear in the Task Results.
+   - If the task results indicate that log discovery failed, files could not be accessed, or 0 files were enumerated, explicitly report the access/collection blockage. NEVER fabricate benign user activity (e.g. 'alice', 'explorer.exe') or invent false-positive conclusions when data is absent."""
 
 
 # ─── Re-Plan System Prompt ───────────────────────────────────────

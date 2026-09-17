@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>UAOS — Universal Agent Orchestration System</title>
+  <title>AgentHub — Intelligent Workspace</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600;700&family=Outfit:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
@@ -17,12 +17,12 @@
       <div class="brand">
         <div class="brand-icon">
           <svg viewBox="0 0 24 24">
-            <path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5"/>
+            <rect x="2" y="3" width="20" height="14" rx="2" ry="2"/><line x1="8" y1="21" x2="16" y2="21"/><line x1="12" y1="17" x2="12" y2="21"/>
           </svg>
         </div>
         <div>
-          <div class="brand-title">UAOS</div>
-          <div class="brand-subtitle">Universal Agent Orchestration</div>
+          <div class="brand-title">AgentHub</div>
+          <div class="brand-subtitle">Intelligent Workspace</div>
         </div>
       </div>
 
@@ -99,7 +99,7 @@
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
               <circle cx="12" cy="12" r="10"/><path d="M12 16v-4M12 8h.01"/>
             </svg>
-            <span>What task should UAOS execute?</span>
+            <span>What task should AgentHub execute?</span>
           </div>
           <div style="display: flex; align-items: center; gap: 10px;">
             <button type="button" id="toggle-workflow-mode-btn" class="mode-toggle-btn" title="Click to customize workflow phases">
@@ -376,7 +376,7 @@
         <button type="button" id="tab-btn-tools" class="tab-btn active">
           🧩 Installed Tools
         </button>
-        <button type="button" id="tab-btn-hermes" class="tab-btn">
+        <button type="button" id="tab-btn-hermes" class="tab-btn" style="display: none;">
           ⚡ Skills Hub (97,986)
         </button>
         <button type="button" id="tab-btn-mcp" class="tab-btn">
@@ -579,7 +579,7 @@
             <label class="field-label">Custom SKILL.md Specification (YAML Frontmatter + Instructions)</label>
             <textarea id="hermes-skill-content" class="prompt-box modal-input font-mono" style="min-height: 110px; line-height: 1.4;" placeholder="Paste custom SKILL.md manifest..."></textarea>
             <div style="display: flex; justify-content: flex-end; margin-top: 8px;">
-              <button type="button" id="hermes-import-btn" class="btn-approve" style="background: linear-gradient(135deg, #0ea5e9, #0284c7);">
+              <button type="button" id="hermes-import-btn" class="btn-approve">
                 ⚡ Register Skill into Engine
               </button>
             </div>
@@ -639,7 +639,7 @@
         <div id="mcp-status" class="test-status-box" style="display: none;"></div>
 
         <div style="display: flex; justify-content: flex-end;">
-          <button type="button" id="mcp-connect-btn" class="btn-approve" style="background: linear-gradient(135deg, #8b5cf6, #3b82f6);">
+          <button type="button" id="mcp-connect-btn" class="btn-approve">
             ⚡ Connect MCP Server
           </button>
         </div>
