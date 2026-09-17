@@ -45,6 +45,12 @@ from src.core.agent_models import (
     SkillGenerateRequest,
     SkillGenerateResponse,
     SkillRegisterRequest,
+    HermesSkillImportPayload,
+)
+from src.core.scheduler_models import (
+    ScheduledJob,
+    ScheduleCreateRequest,
+    ScheduleUpdateRequest,
 )
 from src.core.agent_store import AgentStore
 from src.orchestrator.workflow import UAOSWorkflow
@@ -211,11 +217,45 @@ async def lifespan(app: FastAPI):
 
     app.state.settings = settings
 
+    # Dispatch workflow helper for scheduler and webhooks
+    async def dispatch_workflow_helper(query: str, agent_id: str | None = None) -> str:
+        w_id = f"uaos-{uuid4().hex[:12]}"
+        if not app.state.temporal:
+            asyncio.create_task(run_direct_workflow(w_id, query, agent_id or ""))
+            return w_id
+        try:
+            workflow_args = [query, agent_id or ""]
+            await app.state.temporal.start_workflow(
+                UAOSWorkflow.run,
+                args=workflow_args,
+                id=w_id,
+                task_queue=app.state.settings.temporal_task_queue,
+            )
+            return w_id
+        except Exception as e:
+            logger.warning("Temporal dispatch failed (%s), fallback to in-process", e)
+            asyncio.create_task(run_direct_workflow(w_id, query, agent_id or ""))
+            return w_id
+
+    app.state.dispatch_workflow = dispatch_workflow_helper
+
+    # Start CronScheduler
+    from src.orchestrator.cron_scheduler import CronScheduler
+
+    cron_scheduler = CronScheduler(dispatch_fn=dispatch_workflow_helper)
+    app.state.scheduler = cron_scheduler
+    await cron_scheduler.start()
+
     logger.info("UAOS API ready at http://%s:%d", settings.api_host, settings.api_port)
 
     yield
 
-    # Shutdown: gracefully close any open MCP clients
+    # Shutdown: stop scheduler and close MCP clients
+    try:
+        await app.state.scheduler.stop()
+    except Exception as e:
+        logger.warning("Error stopping scheduler: %s", e)
+
     for s_id, mcp_client in list(app.state.mcp_clients.items()):
         try:
             await mcp_client.close()
@@ -1263,12 +1303,19 @@ async def delete_agent(agent_id: str):
 @app.post("/api/agents/generate", response_model=AgentGenerateResponse)
 async def generate_agent(payload: AgentGenerateRequest):
     """Use LLM to generate an optimized agent configuration from natural language."""
-    registry: ToolRegistry = app.state.registry
-    skills = registry.list_skills()
-    builder = SkillBuilder(llm=app.state.llm)
-    return await builder.generate_agent_profile(
-        payload.description, available_skills=skills
-    )
+    try:
+        registry: ToolRegistry = app.state.registry
+        skills = registry.list_skills()
+        builder = SkillBuilder(llm=app.state.llm)
+        return await builder.generate_agent_profile(
+            payload.description, available_skills=skills
+        )
+    except Exception as e:
+        logger.exception("Failed to auto-design agent profile via LLM: %s", e)
+        raise HTTPException(
+            status_code=502,
+            detail=f"AI Agent generation failed: {e}. Check your LLM server connection in Settings.",
+        )
 
 
 # ── AI Skill Builder Endpoints ───────────────────────────────────
@@ -1277,14 +1324,21 @@ async def generate_agent(payload: AgentGenerateRequest):
 @app.post("/api/skills/generate", response_model=SkillGenerateResponse)
 async def generate_skill(payload: SkillGenerateRequest):
     """Use LLM to generate Python tool code from natural language description."""
-    registry: ToolRegistry = app.state.registry
-    skills = registry.list_skills()
-    builder = SkillBuilder(llm=app.state.llm)
-    return await builder.generate_tool(
-        description=payload.description,
-        suggested_name=payload.suggested_name,
-        available_skills=skills,
-    )
+    try:
+        registry: ToolRegistry = app.state.registry
+        skills = registry.list_skills()
+        builder = SkillBuilder(llm=app.state.llm)
+        return await builder.generate_tool(
+            description=payload.description,
+            suggested_name=payload.suggested_name,
+            available_skills=skills,
+        )
+    except Exception as e:
+        logger.exception("Failed to generate Python tool code via LLM: %s", e)
+        raise HTTPException(
+            status_code=502,
+            detail=f"AI Skill generation failed: {e}. Check your LLM server connection in Settings.",
+        )
 
 
 @app.post("/api/skills/register")
@@ -1310,6 +1364,190 @@ async def register_skill(payload: SkillRegisterRequest):
     except Exception as e:
         logger.exception("Failed to register generated skill")
         raise HTTPException(400, f"Failed to register skill: {e}")
+
+
+# ── Hermes Skills Endpoints ──────────────────────────────────────
+
+
+@app.post("/api/skills/import/hermes")
+async def import_hermes_skill_endpoint(payload: HermesSkillImportPayload):
+    """Import and register a Hermes SKILL.md or JSON skill specification."""
+    from src.registry.hermes.hermes_loader import import_and_persist_hermes_skill
+
+    registry: ToolRegistry = app.state.registry
+    try:
+        spec = import_and_persist_hermes_skill(
+            content=payload.content,
+            name_override=payload.name_override or "",
+            registry=registry,
+            persist=payload.persist,
+        )
+        return {
+            "status": "imported",
+            "tool_id": spec.tool_id,
+            "name": spec.name,
+            "description": spec.description,
+            "skills": spec.skills_provided,
+            "risk_level": spec.risk_level.value,
+            "source_type": spec.source_type,
+        }
+    except Exception as e:
+        logger.exception("Failed to import Hermes skill: %s", e)
+        raise HTTPException(400, f"Failed to import Hermes skill: {e}")
+
+
+@app.get("/api/skills/hermes/catalog")
+@app.get("/api/skills/catalog")
+async def list_hermes_catalog_endpoint():
+    """List all imported skills currently registered in the catalog."""
+    from src.registry.hermes.hermes_loader import list_hermes_skills_catalog
+
+    return list_hermes_skills_catalog()
+
+
+@app.get("/api/skills/ecosystem/stats")
+async def get_ecosystem_stats_endpoint():
+    """Return high-level stats for the 97,986 skills ecosystem across 12 registries."""
+    from src.registry.ecosystem_registry import get_ecosystem_stats
+
+    return get_ecosystem_stats()
+
+
+@app.get("/api/skills/capabilities")
+async def get_installed_capabilities_endpoint():
+    """Return all active capabilities installed in the agent workspace with toggle state."""
+    from src.registry.ecosystem_registry import get_installed_capabilities
+
+    return get_installed_capabilities()
+
+
+@app.get("/api/skills/ecosystem/search")
+async def search_ecosystem_skills_endpoint(
+    q: str = "",
+    category: str = "all",
+    registry: str = "all",
+    page: int = 1,
+    limit: int = 24,
+):
+    """Search the 97,986 open agent skills ecosystem index with registry and category filters."""
+    from src.registry.ecosystem_registry import search_ecosystem_skills
+
+    return search_ecosystem_skills(query=q, category=category, registry=registry, page=page, limit=limit)
+
+
+@app.post("/api/skills/ecosystem/install")
+async def install_ecosystem_skill_endpoint(payload: dict[str, Any]):
+    """Install and activate a skill from the 97k+ open ecosystem into the registry."""
+    from src.registry.ecosystem_registry import install_ecosystem_skill
+
+    try:
+        result, file_path = install_ecosystem_skill(payload)
+        # Also register into app.state.tool_registry if present
+        reg = getattr(app.state, "tool_registry", None)
+        if reg:
+            from src.registry.hermes.hermes_loader import import_and_persist_hermes_skill
+            content = file_path.read_text(encoding="utf-8")
+            import_and_persist_hermes_skill(content, name_override=result["name"], registry=reg, persist=False)
+        return result
+    except Exception as e:
+        logger.exception("Failed to install ecosystem skill: %s", e)
+        raise HTTPException(400, f"Failed to install ecosystem skill: {e}")
+
+
+
+# ── Closed-Loop Skill Synthesis Endpoint (Hermes Pattern) ─────────
+
+
+@app.post("/api/workflows/{workflow_id}/distill-skill", response_model=SkillGenerateResponse)
+async def distill_workflow_skill(workflow_id: str):
+    """Abstract a completed workflow's solution into a reusable Python tool (Hermes Self-Learning loop)."""
+    status_resp = await get_status(workflow_id)
+    if not status_resp.result:
+        raise HTTPException(400, "Workflow has not completed or has no result to distill")
+
+    res = status_resp.result
+    response_text = res.get("response", "")
+    query = res.get("query", "")
+    if not query and status_resp.dag and "tasks" in status_resp.dag:
+        tasks = status_resp.dag.get("tasks", [])
+        if tasks:
+            query = tasks[0].get("description", "Automated Task")
+    if not query:
+        query = "Automated Workflow Solution"
+
+    task_name = "Workflow Solution"
+    task_desc = query
+    tools_used: list[str] = []
+    if status_resp.dag and "tasks" in status_resp.dag:
+        tasks = status_resp.dag["tasks"]
+        if tasks:
+            task_name = tasks[0].get("name", "Automated Task")
+            task_desc = tasks[0].get("description", query)
+            for t in tasks:
+                tools_used.extend(t.get("required_skills", []))
+
+    builder = SkillBuilder(llm=app.state.llm)
+    try:
+        return await builder.distill_skill_from_task_solution(
+            user_query=query,
+            task_name=task_name,
+            task_description=task_desc,
+            solution_output=response_text,
+            tools_used=list(set(tools_used)),
+        )
+    except Exception as e:
+        logger.exception("Failed to distill skill from workflow: %s", e)
+        raise HTTPException(502, f"Failed to distill skill: {e}")
+
+
+# ── Scheduled Jobs Endpoints (Cron Automation) ───────────────────
+
+
+@app.get("/api/schedules", response_model=list[ScheduledJob])
+async def list_schedules():
+    """List all configured recurring cron schedules."""
+    return app.state.scheduler.list_jobs()
+
+
+@app.post("/api/schedules", response_model=ScheduledJob)
+async def create_schedule(payload: ScheduleCreateRequest):
+    """Create a new recurring cron schedule."""
+    return app.state.scheduler.add_job(payload)
+
+
+@app.put("/api/schedules/{schedule_id}", response_model=ScheduledJob)
+async def update_schedule(schedule_id: str, payload: ScheduleUpdateRequest):
+    """Update an existing cron schedule."""
+    job = app.state.scheduler.update_job(schedule_id, payload)
+    if not job:
+        raise HTTPException(404, f"Schedule '{schedule_id}' not found")
+    return job
+
+
+@app.delete("/api/schedules/{schedule_id}")
+async def delete_schedule(schedule_id: str):
+    """Delete a cron schedule."""
+    if not app.state.scheduler.delete_job(schedule_id):
+        raise HTTPException(404, f"Schedule '{schedule_id}' not found")
+    return {"status": "deleted", "schedule_id": schedule_id}
+
+
+@app.post("/api/schedules/{schedule_id}/toggle", response_model=ScheduledJob)
+async def toggle_schedule(schedule_id: str):
+    """Toggle a cron schedule's active state."""
+    job = app.state.scheduler.get_job(schedule_id)
+    if not job:
+        raise HTTPException(404, f"Schedule '{schedule_id}' not found")
+    return app.state.scheduler.update_job(schedule_id, ScheduleUpdateRequest(enabled=not job.enabled))
+
+
+# ── Mount Messaging Gateways ─────────────────────────────────────
+
+from src.api.gateways import router as gateways_router
+
+app.include_router(gateways_router)
+
+
 
 
 # ── Entry Point ──────────────────────────────────────────────────

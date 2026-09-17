@@ -113,6 +113,18 @@ def register_all_tools(registry: ToolRegistry) -> int:
                 logger.error("Failed to load custom tool file '%s': %s", py_file.name, e)
                 errors += 1
 
+    # Auto-discover Hermes skills from data/hermes_skills/
+    try:
+        from src.registry.hermes.hermes_loader import load_all_hermes_skills
+
+        hermes_count = load_all_hermes_skills(registry)
+        registered += hermes_count
+        if hermes_count:
+            logger.info("Discovered %d Hermes skills", hermes_count)
+    except Exception as e:
+        logger.error("Failed to auto-discover Hermes skills: %s", e)
+        errors += 1
+
     logger.info(
         "Total auto-discovery complete: %d tools registered, %d errors",
         registered,

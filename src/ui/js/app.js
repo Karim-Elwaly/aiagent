@@ -8,7 +8,7 @@ document.addEventListener("DOMContentLoaded", () => {
   // Support file:// and HTTP origins transparently
   const API_BASE = window.location.protocol.startsWith("http")
     ? ""
-    : "http://127.0.0.1:8001";
+    : "http://127.0.0.1:8000";
 
   const originalFetch = window.fetch;
   window.fetch = function (resource, init) {
@@ -54,10 +54,11 @@ document.addEventListener("DOMContentLoaded", () => {
     showToast(`Task ${task.id}: ${task.name} (${status.toUpperCase()})`);
   });
 
-  // 1. Initial Health, Tools, and Agents Fetch
+  // 1. Initial Health, Tools, Agents, and Schedules Fetch
   fetchHealth();
   fetchTools();
   fetchAgents();
+  updateSchedulesBadge();
   setInterval(fetchHealth, 10000);
 
   // 2. Preset Queries
@@ -628,6 +629,8 @@ document.addEventListener("DOMContentLoaded", () => {
       if (intModal) intModal.classList.remove("active");
       const agModal = document.getElementById("agents-modal");
       if (agModal) agModal.classList.remove("active");
+      const schedModal = document.getElementById("schedules-modal");
+      if (schedModal) schedModal.classList.remove("active");
       closeWorkflowBuilderModal();
     }
   });
@@ -666,6 +669,7 @@ document.addEventListener("DOMContentLoaded", () => {
       if (data.tools_registered !== undefined && toolsCountEl) {
         toolsCountEl.textContent = data.tools_registered;
       }
+      updateSchedulesBadge();
     } catch (e) {
       if (temporalStatusEl) {
         temporalStatusEl.className = "status-pill degraded";
@@ -691,7 +695,9 @@ document.addEventListener("DOMContentLoaded", () => {
 
         // Badge styling based on source_type
         let sourceBadge = `<span style="background: rgba(139, 92, 246, 0.2); color: #c4b5fd; border: 1px solid rgba(139, 92, 246, 0.4); font-size: 10px; padding: 2px 6px; border-radius: 4px; font-weight: 700; margin-left: 6px;">NATIVE</span>`;
-        if (t.source_type === "mcp") {
+        if (t.source_type === "hermes" || t.source_type === "skill") {
+          sourceBadge = `<span style="background: rgba(14, 165, 233, 0.2); color: #38bdf8; border: 1px solid rgba(56, 189, 248, 0.4); font-size: 10px; padding: 2px 6px; border-radius: 4px; font-weight: 700; margin-left: 6px;">SKILL</span>`;
+        } else if (t.source_type === "mcp") {
           sourceBadge = `<span style="background: rgba(6, 182, 212, 0.2); color: #38bdf8; border: 1px solid rgba(6, 182, 212, 0.4); font-size: 10px; padding: 2px 6px; border-radius: 4px; font-weight: 700; margin-left: 6px;">MCP</span>`;
         } else if (t.source_type === "openapi") {
           sourceBadge = `<span style="background: rgba(16, 185, 129, 0.2); color: #34d399; border: 1px solid rgba(16, 185, 129, 0.4); font-size: 10px; padding: 2px 6px; border-radius: 4px; font-weight: 700; margin-left: 6px;">OPENAPI</span>`;
@@ -699,7 +705,7 @@ document.addEventListener("DOMContentLoaded", () => {
 
         // Delete button for dynamic tools
         let deleteBtn = "";
-        if (t.source_type !== "native") {
+        if (t.source_type !== "native" && t.source_type !== "hermes" && t.source_type !== "skill") {
           deleteBtn = `<button class="delete-tool-btn" data-id="${t.tool_id}" title="Unregister tool" style="background: none; border: none; cursor: pointer; color: #ef4444; font-size: 13px; margin-left: auto; padding: 0 4px;">✕</button>`;
         }
 
@@ -746,6 +752,8 @@ document.addEventListener("DOMContentLoaded", () => {
       console.warn("Could not load tools:", e);
     }
   }
+
+  const loadTools = fetchTools;
 
   // 8. Workflow Studio & Pipeline Builder Implementation
   const openWorkflowBuilderBtn = document.getElementById("open-workflow-builder-btn");
@@ -1080,6 +1088,10 @@ document.addEventListener("DOMContentLoaded", () => {
   function renderFinalSolution(markdownText, completedCount, failedCount) {
     solutionBody.innerHTML = formatMarkdown(markdownText);
     showToast(`Execution finished! ${completedCount} completed, ${failedCount} failed.`);
+    const distillBtn = document.getElementById("distill-solution-btn");
+    if (distillBtn && completedCount > 0 && !markdownText.includes("Execution Failed")) {
+      distillBtn.style.display = "inline-flex";
+    }
   }
 
   function renderSupervisorEvaluationsList(evalList) {
@@ -1165,6 +1177,8 @@ document.addEventListener("DOMContentLoaded", () => {
     }
     timelineList.innerHTML = '<div class="empty-timeline-notice">No tasks executed yet.</div>';
     solutionBody.innerHTML = '<div class="empty-solution-notice">Execution in progress...</div>';
+    const distillBtn = document.getElementById("distill-solution-btn");
+    if (distillBtn) distillBtn.style.display = "none";
   }
 
   function setRunningState(isRunning) {
@@ -1458,6 +1472,10 @@ document.addEventListener("DOMContentLoaded", () => {
   if (openIntegrationsBtn && integrationsModal) {
     openIntegrationsBtn.addEventListener("click", () => {
       integrationsModal.classList.add("active");
+      fetchTools();
+      fetchHermesStats();
+      fetchHermesCapabilities();
+      fetchHermesHubSkills(1);
       fetchMcpServers();
     });
   }
@@ -1483,19 +1501,22 @@ document.addEventListener("DOMContentLoaded", () => {
     });
   }
 
-  // Tab switching: Installed Tools, MCP, OpenAPI
+  // Tab switching: Installed Tools, MCP, OpenAPI, Hermes
   const tabBtnTools = document.getElementById("tab-btn-tools");
   const tabBtnMcp = document.getElementById("tab-btn-mcp");
   const tabBtnOpenapi = document.getElementById("tab-btn-openapi");
+  const tabBtnHermes = document.getElementById("tab-btn-hermes");
   const tabContentTools = document.getElementById("tab-content-tools");
   const tabContentMcp = document.getElementById("tab-content-mcp");
   const tabContentOpenapi = document.getElementById("tab-content-openapi");
+  const tabContentHermes = document.getElementById("tab-content-hermes");
 
   function switchIntegrationsTab(activeTab) {
     const tabs = [
       { btn: tabBtnTools, content: tabContentTools },
       { btn: tabBtnMcp, content: tabContentMcp },
-      { btn: tabBtnOpenapi, content: tabContentOpenapi }
+      { btn: tabBtnOpenapi, content: tabContentOpenapi },
+      { btn: tabBtnHermes, content: tabContentHermes }
     ];
 
     tabs.forEach(tab => {
@@ -1508,11 +1529,18 @@ document.addEventListener("DOMContentLoaded", () => {
         tab.content.style.display = "none";
       }
     });
+
+    if (activeTab === tabBtnHermes) {
+      fetchHermesStats();
+      fetchHermesCapabilities();
+      fetchHermesHubSkills(hermesCurrentPage || 1);
+    }
   }
 
   if (tabBtnTools) tabBtnTools.addEventListener("click", () => switchIntegrationsTab(tabBtnTools));
   if (tabBtnMcp) tabBtnMcp.addEventListener("click", () => switchIntegrationsTab(tabBtnMcp));
   if (tabBtnOpenapi) tabBtnOpenapi.addEventListener("click", () => switchIntegrationsTab(tabBtnOpenapi));
+  if (tabBtnHermes) tabBtnHermes.addEventListener("click", () => switchIntegrationsTab(tabBtnHermes));
 
   // Copy Solution button
   const copySolutionBtn = document.getElementById("copy-solution-btn");
@@ -1880,12 +1908,33 @@ document.addEventListener("DOMContentLoaded", () => {
 
     try {
       const res = await fetch("/tools");
+      const skillSet = new Set();
       if (res.ok) {
         const tools = await res.json();
-        const skillSet = new Set();
-        tools.forEach((t) => (t.skills_provided || []).forEach((s) => skillSet.add(s)));
-        cachedSkillsList = Array.from(skillSet).sort();
+        tools.forEach((t) => {
+          (t.skills_provided || []).forEach((s) => {
+            if (s && s.length >= 3 && !["and", "the", "for", "with", "this", "that"].includes(s.toLowerCase())) {
+              skillSet.add(s.trim());
+            }
+          });
+        });
       }
+
+      // Also ensure all cataloged skills are included
+      try {
+        const catRes = await fetch("/api/skills/catalog");
+        if (catRes.ok) {
+          const cat = await catRes.json();
+          (cat || []).forEach((c) => {
+            if (c.name) skillSet.add(c.name.trim());
+            (c.skills || []).forEach((s) => {
+              if (s && s.length >= 3) skillSet.add(s.trim());
+            });
+          });
+        }
+      } catch (_) {}
+
+      cachedSkillsList = Array.from(skillSet).sort((a, b) => a.localeCompare(b));
     } catch (e) {
       console.warn("Could not fetch tools for skills picker:", e);
     }
@@ -2161,68 +2210,40 @@ document.addEventListener("DOMContentLoaded", () => {
       }
 
       aiGenerateAgentBtn.disabled = true;
-      aiGenerateAgentBtn.textContent = "✨ Designing...";
+      aiGenerateAgentBtn.textContent = "✨ Designing with AI...";
 
       try {
-        let generated = false;
-        try {
-          const res = await fetch("/api/agents/generate", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ description: desc }),
-          });
+        const res = await fetch("/api/agents/generate", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ description: desc }),
+        });
 
-          if (res.ok) {
-            const data = await res.json();
-            document.getElementById("agent-form-name").value =
-              data.suggested_name || "";
-            document.getElementById("agent-form-icon").value =
-              data.suggested_icon || "🤖";
-            document.getElementById("agent-form-desc").value =
-              data.suggested_description || desc;
-            document.getElementById("agent-form-template").value =
-              data.suggested_system_prompt_template || "";
-            document.getElementById("agent-form-tags").value = (
-              data.suggested_tags || []
-            ).join(", ");
-
-            await populateSkillsPicker(data.suggested_skills || []);
-            showToast("Agent profile synthesized by AI! Review and save below.");
-            generated = true;
-          }
-        } catch (_) {}
-
-        if (!generated) {
-          // Resilient local synthesis if API is unavailable
-          const words = desc.split(" ");
-          const title =
-            words
-              .slice(0, 3)
-              .map((w) => w.charAt(0).toUpperCase() + w.slice(1))
-              .join(" ") + " Agent";
-          const icon = desc.toLowerCase().includes("security")
-            ? "🛡️"
-            : desc.toLowerCase().includes("data")
-              ? "⚡"
-              : desc.toLowerCase().includes("file")
-                ? "📁"
-                : "🤖";
-          document.getElementById("agent-form-name").value = title;
-          document.getElementById("agent-form-icon").value = icon;
-          document.getElementById("agent-form-desc").value = desc;
+        if (res.ok) {
+          const data = await res.json();
+          document.getElementById("agent-form-name").value =
+            data.suggested_name || "";
+          document.getElementById("agent-form-icon").value =
+            data.suggested_icon || "🤖";
+          document.getElementById("agent-form-desc").value =
+            data.suggested_description || desc;
           document.getElementById("agent-form-template").value =
-            `You are a dedicated specialist focusing on: ${desc}.\n` +
-            "Execute tasks with high precision and provide structured analysis.\n\n" +
-            "# Your Task\n{task_name}\n\n{task_description}\n\n# Expected Output\n{expected_output}\n\n# Available Tools\n{tools}";
-          document.getElementById("agent-form-tags").value = words
-            .filter((w) => w.length > 4)
-            .slice(0, 3)
-            .join(", ");
-          await populateSkillsPicker(["web_search", "code_execution"]);
-          showToast("Agent template auto-designed! Review and save below.");
+            data.suggested_system_prompt_template || "";
+          document.getElementById("agent-form-tags").value = (
+            data.suggested_tags || []
+          ).join(", ");
+
+          await populateSkillsPicker(data.suggested_skills || []);
+          showToast("Agent profile synthesized by AI! Review and save below.", "success");
+        } else {
+          const errData = await res.json().catch(() => null);
+          const errMsg = (errData && errData.detail) || `Server returned error (${res.status})`;
+          console.error("AI Auto-Design failed:", errMsg);
+          showToast(`AI Auto-Design failed: ${errMsg}`, "error");
         }
       } catch (err) {
-        showToast(`AI generation failed: ${err.message}`, "error");
+        console.error("AI Auto-Design network error:", err);
+        showToast(`AI Auto-Design network error: ${err.message}. Check if UAOS server is online.`, "error");
       } finally {
         aiGenerateAgentBtn.disabled = false;
         aiGenerateAgentBtn.textContent = "✨ Auto-Design";
@@ -2335,98 +2356,45 @@ document.addEventListener("DOMContentLoaded", () => {
       if (skillPreviewSection) skillPreviewSection.style.display = "none";
 
       try {
-        let generated = false;
-        try {
-          const res = await fetch("/api/skills/generate", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ description: desc, suggested_name: name }),
-          });
+        const res = await fetch("/api/skills/generate", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ description: desc, suggested_name: name }),
+        });
 
-          if (res.ok) {
-            const data = await res.json();
-            currentGeneratedSkill = data;
-
-            if (skillPreviewSection) skillPreviewSection.style.display = "block";
-            if (skillPreviewTitle)
-              skillPreviewTitle.textContent = `Tool: ${data.tool_name}`;
-            if (skillPreviewRisk) {
-              skillPreviewRisk.textContent = (
-                data.risk_level || "medium"
-              ).toUpperCase();
-              skillPreviewRisk.className = `risk-badge risk-${(data.risk_level || "medium").toLowerCase()}`;
-            }
-            if (skillPreviewSkills) {
-              skillPreviewSkills.innerHTML = (data.skill_names || [])
-                .map((s) => `<span class="skill-tag">${s}</span>`)
-                .join("");
-            }
-            if (skillPreviewExplanation)
-              skillPreviewExplanation.textContent = data.explanation || "";
-            if (skillPreviewCode) skillPreviewCode.value = data.tool_code || "";
-
-            if (skillRegisterStatus) skillRegisterStatus.style.display = "none";
-            showToast("Python tool code generated! Review & click Register.");
-            generated = true;
-          }
-        } catch (_) {}
-
-        if (!generated) {
-          // Resilient fallback template generator
-          const cleanName = (
-            name ||
-            desc
-              .toLowerCase()
-              .replace(/[^a-z0-9]/g, "_")
-              .slice(0, 20)
-          )
-            .replace(/_+/g, "_")
-            .replace(/^_|_$/g, "");
-          const funcName = cleanName || "custom_tool";
-          const fallbackCode =
-            `from src.core.models import RiskLevel\n` +
-            `from src.registry.tool_registry import ToolSpec\n\n` +
-            `async def ${funcName}() -> str:\n` +
-            `    """${desc}"""\n` +
-            `    # Generated execution logic\n` +
-            `    return "Executed ${funcName} successfully."\n\n` +
-            `${funcName.toUpperCase()}_SPEC = ToolSpec(\n` +
-            `    tool_id="${funcName}_v1",\n` +
-            `    name="${funcName}",\n` +
-            `    description="${desc}",\n` +
-            `    skills_provided=["${funcName}"],\n` +
-            `    parameters={},\n` +
-            `    function=${funcName},\n` +
-            `    risk_level=RiskLevel.LOW,\n` +
-            `)\n`;
-
-          currentGeneratedSkill = {
-            tool_name: funcName,
-            tool_code: fallbackCode,
-            skill_names: [funcName],
-            risk_level: "low",
-            explanation: `Custom tool implementing: ${desc}`,
-          };
+        if (res.ok) {
+          const data = await res.json();
+          currentGeneratedSkill = data;
 
           if (skillPreviewSection) skillPreviewSection.style.display = "block";
           if (skillPreviewTitle)
-            skillPreviewTitle.textContent = `Tool: ${funcName}`;
+            skillPreviewTitle.textContent = `Tool: ${data.tool_name}`;
           if (skillPreviewRisk) {
-            skillPreviewRisk.textContent = "LOW";
-            skillPreviewRisk.className = "risk-badge risk-low";
+            skillPreviewRisk.textContent = (
+              data.risk_level || "medium"
+            ).toUpperCase();
+            skillPreviewRisk.className = `risk-badge risk-${(data.risk_level || "medium").toLowerCase()}`;
           }
           if (skillPreviewSkills) {
-            skillPreviewSkills.innerHTML = `<span class="skill-tag">${funcName}</span>`;
+            skillPreviewSkills.innerHTML = (data.skill_names || [])
+              .map((s) => `<span class="skill-tag">${s}</span>`)
+              .join("");
           }
           if (skillPreviewExplanation)
-            skillPreviewExplanation.textContent = `Custom tool implementing: ${desc}`;
-          if (skillPreviewCode) skillPreviewCode.value = fallbackCode;
+            skillPreviewExplanation.textContent = data.explanation || "";
+          if (skillPreviewCode) skillPreviewCode.value = data.tool_code || "";
 
           if (skillRegisterStatus) skillRegisterStatus.style.display = "none";
-          showToast("Tool template generated! Review & click Register.");
+          showToast("Python tool code generated by AI! Review & click Register.", "success");
+        } else {
+          const errData = await res.json().catch(() => null);
+          const errMsg = (errData && errData.detail) || `Server returned error (${res.status})`;
+          console.error("AI Skill generation failed:", errMsg);
+          showToast(`Tool code generation failed: ${errMsg}`, "error");
         }
       } catch (err) {
-        showToast(`Skill generation failed: ${err.message}`, "error");
+        console.error("Skill generation network error:", err);
+        showToast(`Skill generation network error: ${err.message}. Check if UAOS server is online.`, "error");
       } finally {
         skillBuilderGenerateBtn.disabled = false;
         skillBuilderGenerateBtn.textContent = "⚡ Generate Tool with LLM";
@@ -2502,6 +2470,1074 @@ document.addEventListener("DOMContentLoaded", () => {
       } finally {
         skillBuilderRegisterBtn.disabled = false;
         skillBuilderRegisterBtn.textContent = "✅ Register & Persist Skill";
+      }
+    });
+  }
+
+  // ── Hermes Skills Catalog & Importer ───────────────────────────
+  const hermesSkillContent = document.getElementById("hermes-skill-content") || document.getElementById("hermes-skill-input");
+  const hermesImportBtn = document.getElementById("hermes-import-btn");
+  const hermesImportStatus = document.getElementById("hermes-import-status") || document.getElementById("hermes-status");
+  const hermesCatalogList = document.getElementById("hermes-catalog-list");
+  const hermesCatalogCount = document.getElementById("hermes-catalog-count");
+
+  const hermesPresets = {
+    forensics: `---
+name: oss_forensics
+description: Forensically analyze open source packages for supply chain malware, obfuscated code, and tampering.
+author: Nous Research / Hermes Security
+version: 1.2.0
+metadata:
+  category: security
+  skills: [oss_forensics, malware_analysis, supply_chain_security]
+  risk_level: high
+parameters:
+  package_name: { type: string, description: Package name or repo URL, required: true }
+  ecosystem: { type: string, description: pypi / npm / cargo, default: pypi }
+---
+# OSS Forensics Skill 🛡️
+Inspects setup hooks, obfuscated eval patterns, and network exfiltration vectors.`,
+
+    gitnexus: `---
+name: gitnexus_explorer
+description: Deep codebase architecture reconstruction, call graph topology extraction, and dependency tracing.
+author: Nous Research / Hermes Research
+version: 1.1.0
+metadata:
+  category: research
+  skills: [gitnexus_explorer, code_analysis, architecture_recovery]
+  risk_level: low
+parameters:
+  repo_path: { type: string, description: Path to repository, required: true }
+  focus_module: { type: string, description: Primary module to trace }
+---
+# GitNexus Explorer Skill 🔍
+Reconstructs architectural topology and generates Mermaid dependency graphs.`,
+
+    instructor: `---
+name: instructor_mlops
+description: Extract structured JSON data with strict Pydantic schemas, validation rules, and self-correcting retries.
+author: Nous Research / Hermes MLOps
+version: 1.3.0
+metadata:
+  category: mlops
+  skills: [instructor_mlops, structured_output, pydantic, json_extraction]
+  risk_level: low
+parameters:
+  unstructured_text: { type: string, description: Raw text to extract from, required: true }
+  schema_definition: { type: string, description: Pydantic schema specification, required: true }
+---
+# Instructor MLOps Skill 🤖
+Enforces strict types and feeds validation tracebacks back to the LLM for self-correction.`,
+
+    drug: `---
+name: drug_discovery
+description: Computational cheminformatics: parse chemical SMILES representations, compute descriptors, and bioactivity.
+author: Nous Research / Hermes Science
+version: 1.0.0
+metadata:
+  category: research
+  skills: [drug_discovery, cheminformatics, smiles, bioactivity]
+  risk_level: low
+parameters:
+  smiles_string: { type: string, description: SMILES chemical structure, required: true }
+  calculate_lipinski: { type: boolean, description: Calculate Rule of Five metrics, default: true }
+---
+# Drug Discovery Skill 🧬
+Analyzes chemical candidates and pharmacokinetic drug-likeness.`,
+
+    design: `---
+name: impeccable_design
+description: Audit web applications, design systems, and components for visual hierarchy, typography, and WCAG accessibility.
+author: Nous Research / Hermes Creative
+version: 1.2.0
+metadata:
+  category: creative
+  skills: [impeccable_design, ui_ux, design_audit, accessibility]
+  risk_level: low
+parameters:
+  component_html: { type: string, description: HTML/CSS markup to critique, required: true }
+  target_aesthetic: { type: string, description: Target aesthetic, default: sleek dark mode }
+---
+# Impeccable Design Skill 🎨
+Audits visual hierarchy, glassmorphism, spatial rhythm, and contrast ratios.`,
+
+    airtable: `---
+name: airtable_crm
+description: Query, filter, and mutate records across Airtable bases and CRM tables via Airtable REST API.
+author: Nous Research / Hermes Productivity
+version: 1.0.0
+metadata:
+  category: productivity
+  skills: [airtable_crm, database_query, crm_management]
+  risk_level: medium
+parameters:
+  base_id: { type: string, description: Airtable Base ID, required: true }
+  table_name: { type: string, description: Table name, required: true }
+  action: { type: string, description: list / create / update, default: list }
+---
+# Airtable CRM Skill 📋
+Enables Universal Workers to query and update CRM records.`,
+
+    diagram: `---
+name: architecture_diagram
+description: Generate visual Mermaid architecture and cloud infrastructure diagrams from system descriptions.
+author: Nous Research / Hermes Engineering
+version: 1.1.0
+metadata:
+  category: creative
+  skills: [architecture_diagram, diagram_generation, architecture_design]
+  risk_level: low
+parameters:
+  system_description: { type: string, description: Description of components and data flow, required: true }
+  diagram_type: { type: string, description: graph TD or sequenceDiagram, default: graph TD }
+---
+# Architecture Diagram Skill 📊
+Transforms component interactions into structured Mermaid diagrams.`,
+
+    herenow: `---
+name: here_now
+description: Real-time contextual briefing: compute local sunrise/sunset, timezone offsets, and weather forecasts.
+author: Nous Research / Hermes Productivity
+version: 1.1.0
+metadata:
+  category: productivity
+  skills: [here_now, weather, timezone, local_intelligence]
+  risk_level: low
+parameters:
+  location: { type: string, description: Target city or coordinates, required: true }
+---
+# Here Now Skill 🌐
+Provides real-time local intelligence and operational context.`,
+
+    fitness: `---
+name: fitness_nutrition
+description: Quantitative nutritional science: calculate basal metabolic rate (BMR), TDEE, and macronutrient partitioning.
+author: Nous Research / Hermes Health
+version: 1.0.0
+metadata:
+  category: health
+  skills: [fitness_nutrition, metabolic_calculation, macronutrient_planning]
+  risk_level: low
+parameters:
+  body_weight_kg: { type: number, description: Weight in kg, required: true }
+  height_cm: { type: number, description: Height in cm, required: true }
+---
+# Fitness & Nutrition Skill 🥗
+Calculates metabolic expenditure and macronutrient gram distributions.`,
+
+    delegation: `---
+name: subagent_delegation
+description: Decompose massive multi-phase objectives and spawn isolated Universal Worker subagents with dedicated scopes.
+author: Nous Research / Hermes Orchestration
+version: 1.5.0
+metadata:
+  category: orchestration
+  skills: [subagent_delegation, multi_agent_orchestration, task_decomposition]
+  risk_level: medium
+parameters:
+  subtask_goal: { type: string, description: Subagent objective, required: true }
+---
+# Subagent Delegation Skill 👥
+Spawns independent worker processes to collapse complex multi-turn problems.`,
+
+    arxiv: `---
+name: arxiv_research
+description: Search ArXiv preprints, download abstracts, parse LaTeX math equations, and summarize frontier machine learning research.
+author: Nous Research / Research Hub
+version: 1.0.0
+metadata:
+  category: research
+  skills: [arxiv_research, paper_search, literature_review, ml_research]
+  risk_level: low
+parameters:
+  query: { type: string, description: ArXiv search query or topic, required: true }
+---
+# ArXiv Research & Synthesis Skill 📚
+Extracts state-of-the-art machine learning preprints and mathematical formulations.`,
+
+    simplify: `---
+name: simplify_code
+description: Refactor convoluted functions, eliminate redundant abstractions, reduce cyclomatic complexity, and improve readability.
+author: Nous Research / Engineering
+version: 1.0.0
+metadata:
+  category: software-development
+  skills: [simplify_code, code_refactoring, clean_code, complexity_reduction]
+  risk_level: low
+parameters:
+  code_snippet: { type: string, description: Source code to refactor, required: true }
+---
+# Code Simplification & Refactoring Skill ✂️
+Enforces idiomatic structure, guard clauses, and verified equivalence.`,
+
+    computer: `---
+name: computer_use
+description: Autonomous desktop and browser coordinate automation, screenshot vision grounding, and keystroke dispatch.
+author: Nous Research / Autonomous Agent Core
+version: 1.0.0
+metadata:
+  category: autonomous-ai-agents
+  skills: [computer_use, gui_automation, screenshot_grounding, desktop_control]
+  risk_level: medium
+parameters:
+  target_action: { type: string, description: click / type / scroll / capture, required: true }
+---
+# Computer Use & Desktop Control Skill 🖥️
+Performs vision-grounded coordinate interactions and desktop navigation.`,
+
+    claude: `---
+name: claude_code
+description: Deep pair programming with automated test-driven iteration, file navigation, and rigorous code verification.
+author: Nous Research / Developer Tools
+version: 1.0.0
+metadata:
+  category: autonomous-ai-agents
+  skills: [claude_code, pair_programming, test_driven_dev, codebase_search]
+  risk_level: medium
+parameters:
+  feature_spec: { type: string, description: Specification of feature or bug to fix, required: true }
+---
+# Claude-Code Style Autonomous Coding Skill 💻
+Enforces test-first reproduction and surgical diff application.`,
+
+    docker: `---
+name: docker_ops
+description: Inspect running containers, debug failing builds, optimize Dockerfile layers, and orchestrate Docker Compose stacks.
+author: Nous Research / DevOps
+version: 1.0.0
+metadata:
+  category: devops
+  skills: [docker_ops, container_management, docker_compose, devops_troubleshooting]
+  risk_level: high
+parameters:
+  command_target: { type: string, description: Container name or compose service, required: true }
+---
+# Docker Operations & Containerization Skill 🐳
+Streamlines multi-stage builds, layer caching, and container health audits.`,
+
+    github: `---
+name: github_workflow
+description: Automate GitHub PR creation, analyze CI/CD GitHub Actions workflow runs, and generate release changelogs.
+author: Nous Research / Developer Tools
+version: 1.0.0
+metadata:
+  category: developer-tools
+  skills: [github_workflow, pull_requests, ci_cd_debug, release_notes]
+  risk_level: medium
+parameters:
+  repo: { type: string, description: GitHub owner/repo format, required: true }
+---
+# GitHub Workflow & CI/CD Automation Skill 🐙
+Automates PR metadata, CI log analysis, and release notes.`,
+
+    database: `---
+name: database_optimizer
+description: Analyze PostgreSQL and SQLite query plans, diagnose slow sequential scans, identify missing indexes, and resolve N+1 queries.
+author: Nous Research / Database Engineering
+version: 1.0.0
+metadata:
+  category: database
+  skills: [database_optimizer, sql_tuning, explain_analyze, index_optimization]
+  risk_level: medium
+parameters:
+  sql_query: { type: string, description: Slow SQL query or schema to optimize, required: true }
+---
+# Database Performance & SQL Optimization Skill ⚡
+Detects unindexed table scans, joins, and ORM query overhead.`,
+
+    notes: `---
+name: apple_notes
+description: Create, search, update, and format rich notes, markdown journals, and knowledge bases with Apple Notes & local folders.
+author: Nous Research / Productivity
+version: 1.0.0
+metadata:
+  category: productivity
+  skills: [apple_notes, note_taking, knowledge_base, markdown_notes]
+  risk_level: low
+parameters:
+  title: { type: string, description: Note title, required: true }
+  content: { type: string, description: Note markdown body, required: true }
+---
+# Apple Notes & Knowledge Base Synchronization Skill 📝
+Drafts structured meeting minutes and long-term project knowledge.`,
+
+    reminders: `---
+name: apple_reminders
+description: Parse natural language tasks into scheduled reminders with deadlines, priority tags, and recurring alarm triggers.
+author: Nous Research / Productivity
+version: 1.0.0
+metadata:
+  category: productivity
+  skills: [apple_reminders, task_scheduling, deadline_tracking, reminder_alerts]
+  risk_level: low
+parameters:
+  task: { type: string, description: Natural language task description, required: true }
+---
+# Apple Reminders & Task Dispatch Skill ⏰
+Parses natural language times and dispatches alarms and due dates.`,
+
+    discord: `---
+name: discord_notifier
+description: Format rich Discord webhook embeds, broadcast agent status updates, error alerts, and workflow execution summaries.
+author: Nous Research / Communications
+version: 1.0.0
+metadata:
+  category: communication
+  skills: [discord_notifier, webhook_alerts, chat_notifications, embed_builder]
+  risk_level: low
+parameters:
+  message: { type: string, description: Summary message, required: true }
+---
+# Discord Webhook & Agent Notification Skill 💬
+Dispatches rich color-coded status embeds to team channels.`,
+
+    ascii: `---
+name: ascii_art
+description: Render stylish terminal ASCII banners, ANSI color diagrams, retro typography, and CLI status dashboards.
+author: Nous Research / Creative
+version: 1.0.0
+metadata:
+  category: creative
+  skills: [ascii_art, terminal_graphics, ansi_banners, cli_typography]
+  risk_level: low
+parameters:
+  text: { type: string, description: Text banner or diagram label, required: true }
+---
+# ASCII Art & Terminal Graphics Skill 👾
+Renders clean 80-column Unicode box-drawing banners and CLI status badges.`,
+
+    homeassistant: `---
+name: home_assistant
+description: Inspect IoT entity states, trigger scenes, adjust climate/lights, and automate smart home devices via Home Assistant REST API.
+author: Nous Research / IoT Integrations
+version: 1.0.0
+metadata:
+  category: integrations
+  skills: [home_assistant, iot_automation, smart_home, rest_api]
+  risk_level: medium
+parameters:
+  domain: { type: string, description: Domain (e.g. light, switch, climate), required: true }
+  action: { type: string, description: turn_on / turn_off / get_state, required: true }
+---
+# Home Assistant IoT Automation Skill 🏠
+Integrates with smart home sensors, switches, lighting, and scenes.`
+  };
+
+  // Wire all preset chip buttons
+  const presetMap = [
+    { id: "preset-hermes-forensics", key: "forensics", label: "OSS Forensics" },
+    { id: "preset-hermes-gitnexus", key: "gitnexus", label: "GitNexus Explorer" },
+    { id: "preset-hermes-instructor", key: "instructor", label: "Instructor MLOps" },
+    { id: "preset-hermes-drug", key: "drug", label: "Drug Discovery" },
+    { id: "preset-hermes-design", key: "design", label: "Impeccable Design" },
+    { id: "preset-hermes-airtable", key: "airtable", label: "Airtable CRM" },
+    { id: "preset-hermes-diagram", key: "diagram", label: "Architecture Diagram" },
+    { id: "preset-hermes-herenow", key: "herenow", label: "Here Now" },
+    { id: "preset-hermes-fitness", key: "fitness", label: "Fitness & Nutrition" },
+    { id: "preset-hermes-delegation", key: "delegation", label: "Subagent Delegation" },
+    { id: "preset-hermes-arxiv", key: "arxiv", label: "ArXiv Research" },
+    { id: "preset-hermes-simplify", key: "simplify", label: "Simplify Code" },
+    { id: "preset-hermes-computer", key: "computer", label: "Computer Use" },
+    { id: "preset-hermes-claude", key: "claude", label: "Claude-Code CLI" },
+    { id: "preset-hermes-docker", key: "docker", label: "Docker Ops" },
+    { id: "preset-hermes-github", key: "github", label: "GitHub Workflow" },
+    { id: "preset-hermes-database", key: "database", label: "Database Optimizer" },
+    { id: "preset-hermes-notes", key: "notes", label: "Apple Notes" },
+    { id: "preset-hermes-reminders", key: "reminders", label: "Apple Reminders" },
+    { id: "preset-hermes-discord", key: "discord", label: "Discord Notifier" },
+    { id: "preset-hermes-ascii", key: "ascii", label: "ASCII Art" },
+    { id: "preset-hermes-homeassistant", key: "homeassistant", label: "Home Assistant" },
+  ];
+
+  presetMap.forEach(({ id, key, label }) => {
+    const el = document.getElementById(id);
+    if (el && hermesSkillContent) {
+      el.addEventListener("click", () => {
+        hermesSkillContent.value = hermesPresets[key];
+        showToast(`Loaded ${label} specification from Hermes Catalog`);
+      });
+    }
+  });
+
+  // ── Hermes Skills Hub & Capabilities Engine (97,986 Skills Index) ────
+  let hermesCurrentQuery = "";
+  let hermesCurrentCat = "all";
+  let hermesCurrentReg = "all";
+  let hermesCurrentPage = 1;
+  const hermesPageLimit = 24;
+  let hermesTotalSkills = 97986;
+  let hermesInstalledCapabilities = [];
+  let hermesSelectedCapability = null;
+  let hermesDebounceTimer = null;
+
+  const hermesSearchInput = document.getElementById("hermes-search-input");
+  const hermesRegistryChips = document.getElementById("hermes-registry-chips");
+  const hermesSidebar = document.getElementById("hermes-sidebar");
+  const hermesSkillsGrid = document.getElementById("hermes-skills-grid");
+  const hermesPageInfo = document.getElementById("hermes-page-info");
+  const hermesPrevPageBtn = document.getElementById("hermes-prev-page");
+  const hermesNextPageBtn = document.getElementById("hermes-next-page");
+  const capabilitiesList = document.getElementById("capabilities-list");
+  const capInspTitle = document.getElementById("cap-insp-title");
+  const capInspDesc = document.getElementById("cap-insp-desc");
+  const capInspMeta = document.getElementById("cap-insp-meta");
+  const capSkillsCount = document.getElementById("cap-skills-count");
+  const capToolsCount = document.getElementById("cap-tools-count");
+  const toggleCustomSkillBtn = document.getElementById("toggle-custom-skill-btn");
+  const customSkillContainer = document.getElementById("custom-skill-container");
+
+  if (toggleCustomSkillBtn && customSkillContainer) {
+    toggleCustomSkillBtn.addEventListener("click", () => {
+      const isHidden = customSkillContainer.style.display === "none";
+      customSkillContainer.style.display = isHidden ? "block" : "none";
+      toggleCustomSkillBtn.textContent = isHidden ? "- Hide Custom Spec Form" : "+ Paste Custom SKILL.md";
+    });
+  }
+
+  // Press "/" to focus search bar (as requested in Hermes Desktop)
+  document.addEventListener("keydown", (e) => {
+    if (e.key === "/" && document.activeElement !== hermesSearchInput && !["INPUT", "TEXTAREA"].includes((document.activeElement && document.activeElement.tagName) || "")) {
+      if (tabContentHermes && tabContentHermes.style.display !== "none") {
+        e.preventDefault();
+        hermesSearchInput && hermesSearchInput.focus();
+      }
+    }
+  });
+
+  async function fetchHermesStats() {
+    try {
+      const res = await fetch("/api/skills/ecosystem/stats");
+      if (!res.ok) return;
+      const stats = await res.json();
+      if (stats.builtin !== undefined) {
+        const bEl = document.getElementById("stat-builtin");
+        if (bEl) bEl.textContent = stats.builtin;
+      }
+      if (stats.optional !== undefined) {
+        const oEl = document.getElementById("stat-optional");
+        if (oEl) oEl.textContent = stats.optional;
+      }
+      if (stats.community !== undefined) {
+        const cEl = document.getElementById("stat-community");
+        if (cEl) cEl.textContent = stats.community.toLocaleString();
+      }
+      if (stats.categories !== undefined) {
+        const catEl = document.getElementById("stat-categories");
+        if (catEl) catEl.textContent = stats.categories;
+      }
+    } catch (e) {
+      console.warn("Could not fetch ecosystem stats:", e);
+    }
+  }
+
+  async function fetchHermesCapabilities() {
+    if (!capabilitiesList) return;
+    try {
+      const res = await fetch("/api/skills/capabilities");
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      hermesInstalledCapabilities = await res.json();
+
+      if (capSkillsCount) capSkillsCount.textContent = hermesInstalledCapabilities.length;
+      const registeredTools = document.querySelectorAll("#tool-list .tool-card");
+      if (capToolsCount) capToolsCount.textContent = (registeredTools && registeredTools.length) || 25;
+
+      if (!hermesInstalledCapabilities || hermesInstalledCapabilities.length === 0) {
+        capabilitiesList.innerHTML = `
+          <div style="text-align: center; padding: 18px; color: var(--text-dim); font-size: 12px;">
+            No capabilities active yet. Install skills from the catalog below.
+          </div>
+        `;
+        return;
+      }
+
+      capabilitiesList.innerHTML = hermesInstalledCapabilities.map((c, idx) => {
+        const isSelected = (!hermesSelectedCapability && idx === 0) || (hermesSelectedCapability && hermesSelectedCapability.name === c.name);
+        if (isSelected && !hermesSelectedCapability) hermesSelectedCapability = c;
+        return `
+          <div class="capability-item ${isSelected ? 'selected' : ''}" data-name="${escapeHtml(c.name)}">
+            <div class="capability-name-col">
+              <span class="capability-name">${escapeHtml(c.name)}</span>
+              <span class="capability-cat-tag">${escapeHtml(c.category || 'Productivity')}</span>
+            </div>
+            <label class="switch-toggle" onclick="event.stopPropagation();">
+              <input type="checkbox" class="cap-toggle-input" data-name="${escapeHtml(c.name)}" checked>
+              <span class="slider-round"></span>
+            </label>
+          </div>
+        `;
+      }).join("");
+
+      // Wire capability selection
+      capabilitiesList.querySelectorAll(".capability-item").forEach(item => {
+        item.addEventListener("click", () => {
+          const name = item.getAttribute("data-name");
+          const cap = hermesInstalledCapabilities.find(c => c.name === name);
+          if (cap) selectHermesCapability(cap);
+        });
+      });
+
+      // Wire toggles
+      capabilitiesList.querySelectorAll(".cap-toggle-input").forEach(toggle => {
+        toggle.addEventListener("change", () => {
+          const name = toggle.getAttribute("data-name");
+          showToast(`Capability '${name}' ${toggle.checked ? 'enabled' : 'disabled'} for upcoming sessions`);
+        });
+      });
+
+      if (hermesSelectedCapability) {
+        selectHermesCapability(hermesSelectedCapability);
+      } else if (hermesInstalledCapabilities[0]) {
+        selectHermesCapability(hermesInstalledCapabilities[0]);
+      }
+    } catch (e) {
+      console.warn("Could not fetch installed capabilities:", e);
+    }
+  }
+
+  function selectHermesCapability(cap) {
+    if (!cap) return;
+    hermesSelectedCapability = cap;
+    if (capabilitiesList) {
+      capabilitiesList.querySelectorAll(".capability-item").forEach(el => {
+        if (el.getAttribute("data-name") === cap.name) {
+          el.classList.add("selected");
+        } else {
+          el.classList.remove("selected");
+        }
+      });
+    }
+
+    if (capInspTitle) {
+      capInspTitle.innerHTML = `
+        <span>${escapeHtml(cap.title || cap.name)}</span>
+        <span class="capability-cat-tag">${escapeHtml(cap.category || 'Productivity')}</span>
+      `;
+    }
+    if (capInspDesc) {
+      capInspDesc.textContent = cap.description || "No description provided.";
+    }
+    if (capInspMeta) {
+      const paramsList = Object.keys(cap.parameters || {}).length > 0 
+        ? Object.entries(cap.parameters).map(([k, v]) => `  ${k}: ${v.description || v.type || 'string'}`).join("\n")
+        : "  (no parameters required)";
+      capInspMeta.innerHTML = `name: ${escapeHtml(cap.name)}<br>description: ${escapeHtml(cap.description || '')}<br>parameters:<br><span style="color:#93c5fd; white-space: pre;">${escapeHtml(paramsList)}</span>`;
+    }
+  }
+
+  async function fetchHermesHubSkills(page = 1) {
+    if (!hermesSkillsGrid) return;
+    hermesCurrentPage = page;
+    hermesSkillsGrid.innerHTML = `
+      <div style="grid-column: 1 / -1; text-align: center; padding: 32px; color: var(--text-dim); font-size: 13px;">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#f59e0b" stroke-width="2" style="animation: spin 1s linear infinite; margin-bottom: 8px;">
+          <circle cx="12" cy="12" r="10" stroke-dasharray="30" stroke-dashoffset="10"/>
+        </svg>
+        <div>Querying 97,986 skills ecosystem across 12 registries...</div>
+      </div>
+    `;
+
+    try {
+      const url = `/api/skills/ecosystem/search?q=${encodeURIComponent(hermesCurrentQuery)}&category=${encodeURIComponent(hermesCurrentCat)}&registry=${encodeURIComponent(hermesCurrentReg)}&page=${page}&limit=${hermesPageLimit}`;
+      const res = await fetch(url);
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      const data = await res.json();
+
+      const skills = data.skills || [];
+      hermesTotalSkills = data.total || 97986;
+
+      // Update page info
+      const from = (page - 1) * hermesPageLimit + 1;
+      const to = Math.min(page * hermesPageLimit, hermesTotalSkills);
+      if (hermesPageInfo) {
+        hermesPageInfo.textContent = `Showing ${from.toLocaleString()} - ${to.toLocaleString()} of ${hermesTotalSkills.toLocaleString()} skills`;
+      }
+
+      if (hermesPrevPageBtn) hermesPrevPageBtn.disabled = page <= 1;
+      if (hermesNextPageBtn) hermesNextPageBtn.disabled = to >= hermesTotalSkills;
+
+      if (!skills || skills.length === 0) {
+        hermesSkillsGrid.innerHTML = `
+          <div style="grid-column: 1 / -1; text-align: center; padding: 40px; color: var(--text-dim);">
+            <div style="font-size: 1.8rem; margin-bottom: 6px;">🔍</div>
+            <div style="font-size: 14px; font-weight: 600; color: #fff;">No matching skills found</div>
+            <div style="font-size: 12px; margin-top: 4px;">Try adjusting your search terms or filter criteria.</div>
+          </div>
+        `;
+        return;
+      }
+
+      hermesSkillsGrid.innerHTML = skills.map((s) => {
+        let badgeClass = "hermes-badge-community";
+        let badgeText = s.registry_label || "Community";
+        if (s.registry === "builtin" || s.registry_label === "Built-in") {
+          badgeClass = "hermes-badge-builtin";
+          badgeText = "✔ Built-in";
+        } else if (s.registry === "optional" || s.registry_label === "Optional") {
+          badgeClass = "hermes-badge-optional";
+          badgeText = "Optional";
+        }
+
+        const tagsHtml = (s.tags || [s.category || 'Skill'])
+          .slice(0, 3)
+          .map(t => `<span class="hermes-tag">${escapeHtml(t)}</span>`)
+          .join("");
+
+        const isInstalled = s.installed || hermesInstalledCapabilities.some(c => c.name === s.name || c.name === s.name.replace(/-/g, "_"));
+
+        return `
+          <div class="hermes-card" data-name="${escapeHtml(s.name)}">
+            <div>
+              <div class="hermes-card-top">
+                <span class="hermes-card-title">${escapeHtml(s.title || s.name)}</span>
+                <span class="${badgeClass}">${escapeHtml(badgeText)}</span>
+              </div>
+              <div class="hermes-card-desc" title="${escapeHtml(s.description)}">${escapeHtml(s.description)}</div>
+              <div class="hermes-card-tags">${tagsHtml}</div>
+            </div>
+            <div>
+              <button type="button" class="hermes-btn-add ${isInstalled ? 'installed' : ''}" data-skill='${JSON.stringify(s).replace(/'/g, "&apos;")}'>
+                ${isInstalled ? '✔ Added' : '+ Add to this Agent'}
+              </button>
+            </div>
+          </div>
+        `;
+      }).join("");
+
+      // Wire "+ Add to this Agent" install buttons
+      hermesSkillsGrid.querySelectorAll(".hermes-btn-add").forEach(btn => {
+        if (btn.classList.contains("installed")) return;
+        btn.addEventListener("click", async () => {
+          const raw = btn.getAttribute("data-skill");
+          if (!raw) return;
+          const sData = JSON.parse(raw.replace(/&apos;/g, "'"));
+          btn.disabled = true;
+          btn.textContent = "Installing...";
+
+          try {
+            const installRes = await fetch("/api/skills/ecosystem/install", {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify(sData),
+            });
+            if (!installRes.ok) throw new Error(`HTTP ${installRes.status}`);
+            const installed = await installRes.json();
+            showToast(`Installed '${installed.title || installed.name}' into Agent Skills Registry!`, "success");
+            btn.classList.add("installed");
+            btn.textContent = "✔ Added";
+            btn.disabled = true;
+
+            await fetchHermesCapabilities();
+            fetchTools();
+            fetchHealth();
+            populateSkillsPicker();
+          } catch (err) {
+            showToast(`Installation failed: ${err.message}`, "error");
+            btn.disabled = false;
+            btn.textContent = "+ Add to this Agent";
+          }
+        });
+      });
+
+    } catch (err) {
+      console.warn("Hermes skills search error:", err);
+    }
+  }
+
+  // Registry Chips Click Handler
+  if (hermesRegistryChips) {
+    hermesRegistryChips.querySelectorAll(".hermes-reg-chip").forEach(chip => {
+      chip.addEventListener("click", () => {
+        hermesRegistryChips.querySelectorAll(".hermes-reg-chip").forEach(c => c.classList.remove("active"));
+        chip.classList.add("active");
+        hermesCurrentReg = chip.getAttribute("data-reg") || "all";
+        fetchHermesHubSkills(1);
+      });
+    });
+  }
+
+  // Sidebar Categories Click Handler
+  if (hermesSidebar) {
+    hermesSidebar.querySelectorAll(".hermes-cat-btn").forEach(btn => {
+      btn.addEventListener("click", () => {
+        hermesSidebar.querySelectorAll(".hermes-cat-btn").forEach(b => b.classList.remove("active"));
+        btn.classList.add("active");
+        hermesCurrentCat = btn.getAttribute("data-cat") || "all";
+        fetchHermesHubSkills(1);
+      });
+    });
+  }
+
+  // Debounced Search Input
+  if (hermesSearchInput) {
+    hermesSearchInput.addEventListener("input", () => {
+      clearTimeout(hermesDebounceTimer);
+      hermesDebounceTimer = setTimeout(() => {
+        hermesCurrentQuery = hermesSearchInput.value.trim();
+        fetchHermesHubSkills(1);
+      }, 250);
+    });
+  }
+
+  // Pagination Next / Prev
+  if (hermesPrevPageBtn) {
+    hermesPrevPageBtn.addEventListener("click", () => {
+      if (hermesCurrentPage > 1) {
+        fetchHermesHubSkills(hermesCurrentPage - 1);
+      }
+    });
+  }
+
+  if (hermesNextPageBtn) {
+    hermesNextPageBtn.addEventListener("click", () => {
+      fetchHermesHubSkills(hermesCurrentPage + 1);
+    });
+  }
+
+  if (hermesImportBtn && hermesSkillContent) {
+    hermesImportBtn.addEventListener("click", async () => {
+      const content = hermesSkillContent.value.trim();
+      if (!content) {
+        showToast("Please enter a SKILL.md definition first", "error");
+        return;
+      }
+
+      hermesImportBtn.disabled = true;
+      hermesImportBtn.textContent = "⚡ Registering Skill...";
+      if (hermesImportStatus) hermesImportStatus.style.display = "none";
+
+      try {
+        const res = await fetch("/api/skills/import/hermes", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ content: content, persist: true }),
+        });
+
+        if (!res.ok) {
+          const errData = await res.json().catch(() => null);
+          throw new Error((errData && errData.detail) || `HTTP ${res.status}`);
+        }
+
+        const data = await res.json();
+        if (hermesImportStatus) {
+          hermesImportStatus.style.display = "block";
+          hermesImportStatus.style.background = "rgba(16, 185, 129, 0.2)";
+          hermesImportStatus.style.color = "#34d399";
+          hermesImportStatus.textContent = `✔ Skill '${data.name}' registered and converted to ToolSpec!`;
+        }
+
+        showToast(`Skill '${data.name}' registered!`);
+        fetchHermesCatalog();
+        fetchTools();
+        fetchHealth();
+        populateSkillsPicker();
+      } catch (err) {
+        if (hermesImportStatus) {
+          hermesImportStatus.style.display = "block";
+          hermesImportStatus.style.background = "rgba(244, 63, 94, 0.15)";
+          hermesImportStatus.style.color = "#fda4af";
+          hermesImportStatus.textContent = `✖ Import failed: ${err.message}`;
+        }
+        showToast(`Import error: ${err.message}`, "error");
+      } finally {
+        hermesImportBtn.disabled = false;
+        hermesImportBtn.textContent = "⚡ Register Skill into Engine";
+      }
+    });
+  }
+
+  // ── Scheduled Workflows Modal & Management ────────────────────────
+  const schedulesModal = document.getElementById("schedules-modal");
+  const openSchedulesBtn = document.getElementById("open-schedules-btn");
+  const closeSchedulesModalX = document.getElementById("close-schedules-modal-x");
+  const closeSchedulesModalBtn = document.getElementById("close-schedules-modal-btn");
+  const activeSchedulesBadge = document.getElementById("schedules-count") || document.getElementById("active-schedules-badge");
+  const schedulesList = document.getElementById("schedules-list");
+  const schedulesListCount = document.getElementById("schedules-list-count");
+  const scheduleForm = document.getElementById("schedule-form");
+  const schedName = document.getElementById("sched-name");
+  const schedCron = document.getElementById("sched-cron");
+  const schedQuery = document.getElementById("sched-query");
+  const schedEnabled = document.getElementById("sched-enabled");
+
+  async function updateSchedulesBadge() {
+    if (!activeSchedulesBadge) return;
+    try {
+      const res = await fetch("/api/schedules");
+      if (res.ok) {
+        const jobs = await res.json();
+        const activeCount = (jobs || []).filter((j) => j.enabled).length;
+        activeSchedulesBadge.textContent = activeCount;
+        activeSchedulesBadge.style.display = activeCount > 0 ? "inline-block" : "none";
+      }
+    } catch (_) {}
+  }
+
+  async function fetchSchedules() {
+    if (!schedulesList) return;
+    try {
+      const res = await fetch("/api/schedules");
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      const jobs = await res.json();
+
+      if (schedulesListCount) schedulesListCount.textContent = (jobs || []).length;
+      updateSchedulesBadge();
+
+      if (!jobs || jobs.length === 0) {
+        schedulesList.innerHTML = `
+          <div style="text-align: center; padding: 24px; color: var(--text-dim); font-size: 13px;">
+            No recurring schedules created yet. Create a schedule above!
+          </div>
+        `;
+        return;
+      }
+
+      schedulesList.innerHTML = jobs.map((job) => {
+        const statusClass = job.enabled ? "online" : "degraded";
+        const statusText = job.enabled ? "Active" : "Paused";
+        const toggleBtnText = job.enabled ? "⏸️ Pause" : "▶️ Resume";
+        const toggleStyle = job.enabled
+          ? "background: rgba(245, 158, 11, 0.15); color: #fbbf24; border: 1px solid rgba(245, 158, 11, 0.3);"
+          : "background: rgba(16, 185, 129, 0.15); color: #34d399; border: 1px solid rgba(16, 185, 129, 0.3);";
+
+        let nextRunText = "Calculating...";
+        if (job.next_run) {
+          try {
+            nextRunText = new Date(job.next_run).toLocaleString();
+          } catch (_) {
+            nextRunText = job.next_run;
+          }
+        }
+
+        return `
+          <div class="tool-card" style="display: flex; flex-direction: column; gap: 8px;">
+            <div style="display: flex; justify-content: space-between; align-items: center;">
+              <div style="display: flex; align-items: center; gap: 8px;">
+                <span style="font-weight: 700; color: #fff; font-size: 14px;">${escapeHtml(job.name)}</span>
+                <span class="status-pill ${statusClass}" style="padding: 2px 8px; font-size: 11px;">
+                  <span class="dot"></span>
+                  <span class="status-label">${statusText}</span>
+                </span>
+              </div>
+              <div style="display: flex; align-items: center; gap: 6px;">
+                <button type="button" class="btn-card-use toggle-schedule-btn" data-id="${job.id}" style="${toggleStyle} font-size: 11px; padding: 4px 10px;">
+                  ${toggleBtnText}
+                </button>
+                <button type="button" class="btn-card-icon delete-schedule-btn" data-id="${job.id}" data-name="${escapeHtml(job.name)}" title="Delete Schedule" style="color: #ef4444; font-size: 13px;">
+                  ✕
+                </button>
+              </div>
+            </div>
+
+            <div style="display: flex; align-items: center; gap: 12px; font-size: 12px; color: var(--text-muted);">
+              <span style="background: rgba(56, 189, 248, 0.15); color: #38bdf8; padding: 2px 8px; border-radius: 4px; font-family: 'JetBrains Mono', monospace; font-weight: 600;">
+                ⏱️ ${escapeHtml(job.cron_expression)}
+              </span>
+              <span>Next: ${nextRunText}</span>
+              <span>Runs: ${job.run_count || 0}</span>
+            </div>
+
+            <div style="font-size: 12px; color: var(--text-dim); background: rgba(0, 0, 0, 0.25); padding: 8px 10px; border-radius: 6px; border: 1px solid rgba(255, 255, 255, 0.05); font-family: 'JetBrains Mono', monospace; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">
+              ${escapeHtml(job.query)}
+            </div>
+          </div>
+        `;
+      }).join("");
+
+      // Wire up toggle buttons
+      document.querySelectorAll(".toggle-schedule-btn").forEach((btn) => {
+        btn.addEventListener("click", async (e) => {
+          e.stopPropagation();
+          const jobId = btn.getAttribute("data-id");
+          try {
+            const res = await fetch(`/api/schedules/${jobId}/toggle`, { method: "POST" });
+            if (!res.ok) throw new Error("Toggle failed");
+            fetchSchedules();
+          } catch (err) {
+            showToast(`Error toggling schedule: ${err.message}`, "error");
+          }
+        });
+      });
+
+      // Wire up delete buttons
+      document.querySelectorAll(".delete-schedule-btn").forEach((btn) => {
+        btn.addEventListener("click", async (e) => {
+          e.stopPropagation();
+          const jobId = btn.getAttribute("data-id");
+          const jobName = btn.getAttribute("data-name");
+          if (!confirm(`Delete recurring schedule '${jobName}'?`)) return;
+          try {
+            const res = await fetch(`/api/schedules/${jobId}`, { method: "DELETE" });
+            if (!res.ok) throw new Error("Delete failed");
+            showToast(`Schedule '${jobName}' deleted`);
+            fetchSchedules();
+          } catch (err) {
+            showToast(`Error deleting schedule: ${err.message}`, "error");
+          }
+        });
+      });
+    } catch (err) {
+      console.warn("Could not fetch schedules:", err);
+    }
+  }
+
+  if (openSchedulesBtn && schedulesModal) {
+    openSchedulesBtn.addEventListener("click", () => {
+      schedulesModal.classList.add("active");
+      fetchSchedules();
+    });
+  }
+
+  function closeSchedulesModal() {
+    if (schedulesModal) schedulesModal.classList.remove("active");
+  }
+
+  if (closeSchedulesModalX) closeSchedulesModalX.addEventListener("click", closeSchedulesModal);
+  if (closeSchedulesModalBtn) closeSchedulesModalBtn.addEventListener("click", closeSchedulesModal);
+  if (schedulesModal) {
+    schedulesModal.addEventListener("click", (e) => {
+      if (e.target === schedulesModal) closeSchedulesModal();
+    });
+  }
+
+  // Cron Presets
+  const presetCronDaily = document.getElementById("preset-cron-daily");
+  if (presetCronDaily && schedCron) {
+    presetCronDaily.addEventListener("click", () => {
+      schedCron.value = "0 8 * * *";
+    });
+  }
+  const presetCronHourly = document.getElementById("preset-cron-hourly");
+  if (presetCronHourly && schedCron) {
+    presetCronHourly.addEventListener("click", () => {
+      schedCron.value = "0 * * * *";
+    });
+  }
+  const presetCronWeekly = document.getElementById("preset-cron-weekly");
+  if (presetCronWeekly && schedCron) {
+    presetCronWeekly.addEventListener("click", () => {
+      schedCron.value = "0 0 * * 0";
+    });
+  }
+
+  // Schedule Form Submit
+  if (scheduleForm) {
+    scheduleForm.addEventListener("submit", async (e) => {
+      e.preventDefault();
+      const name = schedName ? schedName.value.trim() : "";
+      const cronExpr = schedCron ? schedCron.value.trim() : "";
+      const query = schedQuery ? schedQuery.value.trim() : "";
+      const enabled = schedEnabled ? schedEnabled.checked : true;
+
+      if (!name || !cronExpr || !query) {
+        showToast("Please fill in Job Name, Cron Expression, and Prompt Query", "error");
+        return;
+      }
+
+      try {
+        const res = await fetch("/api/schedules", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            name,
+            cron_expression: cronExpr,
+            query,
+            enabled,
+          }),
+        });
+
+        if (!res.ok) {
+          const errData = await res.json().catch(() => null);
+          throw new Error((errData && errData.detail) || `HTTP ${res.status}`);
+        }
+
+        if (schedName) schedName.value = "";
+        if (schedCron) schedCron.value = "";
+        if (schedQuery) schedQuery.value = "";
+
+        showToast(`Schedule '${name}' created!`);
+        fetchSchedules();
+      } catch (err) {
+        showToast(`Failed to create schedule: ${err.message}`, "error");
+      }
+    });
+  }
+
+  // ── Closed-Loop Skill Distillation (Hermes Self-Learning) ─────────
+  const distillSolutionBtn = document.getElementById("distill-solution-btn");
+  if (distillSolutionBtn) {
+    distillSolutionBtn.addEventListener("click", async () => {
+      distillSolutionBtn.disabled = true;
+      const originalHtml = distillSolutionBtn.innerHTML;
+      distillSolutionBtn.innerHTML = `
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="animation: spin 1s linear infinite;">
+          <circle cx="12" cy="12" r="10" stroke-dasharray="30" stroke-dashoffset="10"/>
+        </svg>
+        <span>Distilling Tool...</span>
+      `;
+
+      try {
+        let skillData = null;
+        if (currentWorkflowId) {
+          const res = await fetch(`/api/workflows/${currentWorkflowId}/distill-skill`, {
+            method: "POST",
+          });
+          if (res.ok) {
+            skillData = await res.json();
+          } else {
+            const errData = await res.json().catch(() => null);
+            console.warn("Distill endpoint error, falling back to generate:", errData);
+          }
+        }
+
+        if (!skillData) {
+          // Fallback to skill generation using prompt input & solution text
+          const query = promptInput ? promptInput.value.trim() : "Automated Workflow";
+          const solText = solutionBody ? solutionBody.innerText : "";
+          const res = await fetch("/api/skills/generate", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              description: `Synthesize a reusable tool from this verified solution for: ${query}. Solution summary: ${solText.slice(0, 300)}`,
+              suggested_name: query.toLowerCase().replace(/[^a-z0-9]/g, "_").slice(0, 30),
+            }),
+          });
+          if (res.ok) {
+            skillData = await res.json();
+          } else {
+            throw new Error("Skill distillation service unavailable");
+          }
+        }
+
+        currentGeneratedSkill = skillData;
+
+        // Open Agents Studio and switch to Skill Builder tab
+        if (agentsModal) agentsModal.classList.add("active");
+        if (tabBtnSkillBuilder) switchAgentStudioTab(tabBtnSkillBuilder);
+
+        if (skillBuilderDesc) skillBuilderDesc.value = skillData.explanation || "";
+        if (skillBuilderName) skillBuilderName.value = skillData.tool_name || "";
+        if (skillPreviewSection) skillPreviewSection.style.display = "block";
+        if (skillPreviewTitle) skillPreviewTitle.textContent = `Tool: ${skillData.tool_name}`;
+        if (skillPreviewRisk) {
+          skillPreviewRisk.textContent = (skillData.risk_level || "medium").toUpperCase();
+          skillPreviewRisk.className = `risk-badge risk-${(skillData.risk_level || "medium").toLowerCase()}`;
+        }
+        if (skillPreviewSkills) {
+          skillPreviewSkills.innerHTML = (skillData.skill_names || [])
+            .map((s) => `<span class="skill-tag">${s}</span>`)
+            .join("");
+        }
+        if (skillPreviewExplanation) skillPreviewExplanation.textContent = skillData.explanation || "";
+        if (skillPreviewCode) skillPreviewCode.value = skillData.tool_code || "";
+        if (skillRegisterStatus) skillRegisterStatus.style.display = "none";
+
+        showToast("Workflow solution distilled into reusable Python tool! Click 'Register & Persist' to save.", "success");
+      } catch (err) {
+        showToast(`Distillation failed: ${err.message}`, "error");
+      } finally {
+        distillSolutionBtn.disabled = false;
+        distillSolutionBtn.innerHTML = originalHtml;
       }
     });
   }

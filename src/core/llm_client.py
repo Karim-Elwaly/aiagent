@@ -98,15 +98,20 @@ class LocalLLMClient:
             resp.raise_for_status()
             data = resp.json()
 
-        content = data["choices"][0]["message"]["content"]
+        choices = data.get("choices", [])
+        if not choices:
+            raise ValueError(f"LLM returned no choices in response: {data}")
+
+        message = choices[0].get("message", {})
+        content = message.get("content") or message.get("reasoning_content") or ""
 
         logger.debug(
             "LLM response: %d chars, finish_reason=%s",
             len(content),
-            data["choices"][0].get("finish_reason", "unknown"),
+            choices[0].get("finish_reason", "unknown"),
         )
 
-        return content
+        return str(content)
 
     async def chat_stream(
         self, messages: list[dict[str, str]]
@@ -159,9 +164,9 @@ class LocalLLMClient:
                         choices = chunk.get("choices", [])
                         if choices:
                             delta = choices[0].get("delta", {})
-                            content = delta.get("content", "")
+                            content = delta.get("content") or delta.get("text") or ""
                             if content:
-                                yield content
+                                yield str(content)
                     except json.JSONDecodeError:
                         continue
 

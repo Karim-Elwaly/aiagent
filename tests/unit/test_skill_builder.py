@@ -131,3 +131,43 @@ async def test_generate_agent_profile_flow(temp_builder: SkillBuilder, mock_llm:
     assert resp.suggested_name == "Network Ops Specialist"
     assert resp.suggested_icon == "🌐"
     assert "network" in resp.suggested_tags
+
+
+def test_extract_json_with_think_tags_and_newlines(temp_builder: SkillBuilder):
+    raw_with_think = """<think>
+The user wants a pitch deck creator.
+I will suggest tools and a prompt.
+</think>
+```json
+{
+  "suggested_name": "Pitch Deck Strategist",
+  "suggested_description": "Designs high-converting venture pitches",
+  "suggested_icon": "📊",
+  "suggested_system_prompt_template": "You are a pitch deck strategist.
+Follow these rules:
+1. Clear narrative
+2. Compelling financial metrics",
+  "suggested_skills": ["web_search", "file_reading"],
+  "suggested_tags": ["pitch", "sales", "fundraising"],
+}
+```"""
+    data = temp_builder._extract_json(raw_with_think)
+    assert data["suggested_name"] == "Pitch Deck Strategist"
+    assert data["suggested_icon"] == "📊"
+    assert "pitch" in data["suggested_tags"]
+    assert "Clear narrative" in data["suggested_system_prompt_template"]
+
+
+def test_extract_json_regex_fallback(temp_builder: SkillBuilder):
+    malformed_output = """Here is the config:
+    "suggested_name": "Growth Hacker",
+    "suggested_description": "Drives viral marketing",
+    "suggested_icon": "🚀",
+    "suggested_skills": ["web_search"],
+    "suggested_tags": ["growth", "marketing"]
+    Hope you like it!"""
+    data = temp_builder._extract_json(malformed_output)
+    assert data["suggested_name"] == "Growth Hacker"
+    assert data["suggested_icon"] == "🚀"
+    assert "growth" in data["suggested_tags"]
+

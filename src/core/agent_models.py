@@ -100,3 +100,11 @@ class SkillRegisterRequest(BaseModel):
     skill_names: list[str] = Field(default_factory=list)
     risk_level: str = "medium"
     description: str = ""
+
+
+class HermesSkillImportPayload(BaseModel):
+    """Payload to import a Hermes-style SKILL.md or JSON skill into UAOS."""
+
+    content: str = Field(description="Raw SKILL.md markdown or JSON content")
+    name_override: str | None = Field(default=None, description="Optional name override")
+    persist: bool = Field(default=True, description="Persist to data/hermes_skills/")

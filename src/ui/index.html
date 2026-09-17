@@ -65,6 +65,14 @@
           <span>Workflow Studio</span>
         </button>
 
+        <button id="open-schedules-btn" class="header-btn" title="Automated Cron Workflows (Hermes pattern)">
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/>
+          </svg>
+          <span>Scheduled Jobs</span>
+          <span id="schedules-count" class="badge-pill">0</span>
+        </button>
+
         <button id="open-integrations-btn" class="header-btn" title="Inspect tools, connect MCP servers & OpenAPI">
           <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
             <path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z"/>
@@ -201,12 +209,20 @@
               </svg>
               <span>Agent Solution</span>
             </div>
-            <button id="copy-solution-btn" class="copy-btn" title="Copy solution text">
-              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                <rect x="9" y="9" width="13" height="13" rx="2" ry="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/>
-              </svg>
-              <span>Copy</span>
-            </button>
+            <div style="display: flex; gap: 8px;">
+              <button id="distill-solution-btn" class="copy-btn" style="display: none; background: rgba(16, 185, 129, 0.15); border-color: rgba(16, 185, 129, 0.4); color: #34d399;" title="Distill solution into a permanent Python tool (Hermes Self-Learning)">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                  <polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/>
+                </svg>
+                <span>✨ Save as Reusable Tool</span>
+              </button>
+              <button id="copy-solution-btn" class="copy-btn" title="Copy solution text">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                  <rect x="9" y="9" width="13" height="13" rx="2" ry="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/>
+                </svg>
+                <span>Copy</span>
+              </button>
+            </div>
           </div>
           <div id="solution-body" class="solution-body">
             <div class="empty-solution-notice">
@@ -360,12 +376,217 @@
         <button type="button" id="tab-btn-tools" class="tab-btn active">
           🧩 Installed Tools
         </button>
+        <button type="button" id="tab-btn-hermes" class="tab-btn">
+          ⚡ Skills Hub (97,986)
+        </button>
         <button type="button" id="tab-btn-mcp" class="tab-btn">
           ⚡ Model Context Protocol (MCP)
         </button>
         <button type="button" id="tab-btn-openapi" class="tab-btn">
           🌐 OpenAPI / Swagger
         </button>
+      </div>
+
+      <!-- Tab: Hermes Agent Skills Hub (97,986 Skills across 12 Registries) -->
+      <div id="tab-content-hermes" class="tab-content" style="display: none;">
+        <div class="hermes-hub-wrapper">
+
+          <!-- 1. Capabilities Top Section -->
+          <div class="capabilities-top-panel">
+            <div class="capabilities-header-row">
+              <div class="capabilities-title">
+                <span>Capabilities</span>
+              </div>
+              <div class="capabilities-subnav">
+                <span class="active">Skills <strong id="cap-skills-count">51</strong></span>
+                <span>Tools <strong id="cap-tools-count">25</strong></span>
+                <span>MCP</span>
+                <span>Plugins</span>
+              </div>
+            </div>
+
+            <div class="capabilities-split">
+              <!-- Left: Installed Capabilities List with Toggles -->
+              <div class="capabilities-list" id="capabilities-list">
+                <!-- Rendered dynamically via renderCapabilitiesList() -->
+              </div>
+
+              <!-- Right: Selected Capability Inspection View -->
+              <div class="capability-inspector" id="capability-inspector">
+                <div>
+                  <div class="cap-insp-title" id="cap-insp-title">
+                    <span>airtable</span>
+                    <span class="capability-cat-tag">Productivity</span>
+                  </div>
+                  <div class="cap-insp-desc" id="cap-insp-desc">
+                    Airtable REST API via curl. Records CRUD, filters, upserts.
+                  </div>
+                  <div class="cap-insp-meta" id="cap-insp-meta">
+                    name: airtable<br>
+                    description: Airtable REST API via curl. Records CRUD, filters, upserts.
+                  </div>
+                </div>
+                <div class="cap-insp-footer">Changes apply to new sessions.</div>
+              </div>
+            </div>
+          </div>
+
+          <!-- 2. Skills Hub Banner & Stats -->
+          <div class="hermes-hub-banner">
+            <div class="hermes-brand-tag">HERMES AGENT</div>
+            <div class="hermes-hub-title">Skills Hub</div>
+
+            <div class="hermes-hub-subpills">
+              <button type="button" class="hermes-hub-pill active" id="hermes-subtab-skills">Skills</button>
+              <button type="button" class="hermes-hub-pill" id="hermes-subtab-plugins">Plugins</button>
+            </div>
+
+            <div class="hermes-hub-desc">
+              Discover, search, and install from <strong>97,986</strong> skills across 12 registries. Open in Hermes Desktop to review and install, or copy the CLI command.
+            </div>
+            <div class="hermes-hub-subtext">
+              Catalog refreshed 1 day ago • auto-rebuilt twice daily
+            </div>
+
+            <!-- 4 Metrics Counter Row -->
+            <div class="hermes-stats-row">
+              <div class="hermes-stat-box">
+                <div class="hermes-stat-num" id="stat-builtin">58</div>
+                <div class="hermes-stat-label">BUILT-IN</div>
+              </div>
+              <div class="hermes-stat-box">
+                <div class="hermes-stat-num" id="stat-optional">150</div>
+                <div class="hermes-stat-label">OPTIONAL</div>
+              </div>
+              <div class="hermes-stat-box">
+                <div class="hermes-stat-num" id="stat-community">97,778</div>
+                <div class="hermes-stat-label">COMMUNITY</div>
+              </div>
+              <div class="hermes-stat-box">
+                <div class="hermes-stat-num" id="stat-categories">218</div>
+                <div class="hermes-stat-label">CATEGORIES</div>
+              </div>
+            </div>
+
+            <!-- Search Bar -->
+            <div class="hermes-search-bar">
+              <input type="text" id="hermes-search-input" class="hermes-search-input" placeholder="🔍 Search skills... (press &quot;/&quot; to focus)" />
+            </div>
+
+            <!-- 12 Registry Filter Chips -->
+            <div class="hermes-registry-chips" id="hermes-registry-chips">
+              <button type="button" class="hermes-reg-chip active" data-reg="all">All 97986</button>
+              <button type="button" class="hermes-reg-chip" data-reg="builtin">Built-in 58</button>
+              <button type="button" class="hermes-reg-chip" data-reg="optional">Optional 150</button>
+              <button type="button" class="hermes-reg-chip" data-reg="anthropic">Anthropic 19</button>
+              <button type="button" class="hermes-reg-chip" data-reg="openai">OpenAI 44</button>
+              <button type="button" class="hermes-reg-chip" data-reg="huggingface">HuggingFace 25</button>
+              <button type="button" class="hermes-reg-chip" data-reg="nvidia">NVIDIA 365</button>
+              <button type="button" class="hermes-reg-chip" data-reg="skills_sh">skills.sh 20000</button>
+              <button type="button" class="hermes-reg-chip" data-reg="clawhub">ClawHub 75765</button>
+              <button type="button" class="hermes-reg-chip" data-reg="browse_sh">browse.sh 469</button>
+              <button type="button" class="hermes-reg-chip" data-reg="lobehub">LobeHub 505</button>
+              <button type="button" class="hermes-reg-chip" data-reg="github">GitHub 511</button>
+              <button type="button" class="hermes-reg-chip" data-reg="gstack">gstack 53</button>
+            </div>
+          </div>
+
+          <!-- 3. Two-Column Browser: Categories Sidebar & Skills Grid -->
+          <div class="hermes-hub-browser">
+            <!-- Left Sidebar Categories -->
+            <div class="hermes-sidebar" id="hermes-sidebar">
+              <div class="hermes-sidebar-title">Categories</div>
+              <button type="button" class="hermes-cat-btn active" data-cat="all">
+                <span>📁 All Skills</span>
+                <span class="hermes-cat-count">97986</span>
+              </button>
+              <button type="button" class="hermes-cat-btn" data-cat="other">
+                <span>📁 Other</span>
+                <span class="hermes-cat-count">88792</span>
+              </button>
+              <button type="button" class="hermes-cat-btn" data-cat="ai">
+                <span>📁 AI Agents</span>
+                <span class="hermes-cat-count">1974</span>
+              </button>
+              <button type="button" class="hermes-cat-btn" data-cat="productivity">
+                <span>📁 Productivity</span>
+                <span class="hermes-cat-count">1371</span>
+              </button>
+              <button type="button" class="hermes-cat-btn" data-cat="dev_tools">
+                <span>📁 Developer Tools</span>
+                <span class="hermes-cat-count">1250</span>
+              </button>
+              <button type="button" class="hermes-cat-btn" data-cat="web_search">
+                <span>📁 Web & Search</span>
+                <span class="hermes-cat-count">980</span>
+              </button>
+              <button type="button" class="hermes-cat-btn" data-cat="automation">
+                <span>📁 Automation</span>
+                <span class="hermes-cat-count">850</span>
+              </button>
+              <button type="button" class="hermes-cat-btn" data-cat="security">
+                <span>📁 Security & SOC</span>
+                <span class="hermes-cat-count">620</span>
+              </button>
+              <button type="button" class="hermes-cat-btn" data-cat="cloud">
+                <span>📁 Cloud & DevOps</span>
+                <span class="hermes-cat-count">580</span>
+              </button>
+              <button type="button" class="hermes-cat-btn" data-cat="database">
+                <span>📁 Databases</span>
+                <span class="hermes-cat-count">440</span>
+              </button>
+              <button type="button" class="hermes-cat-btn" data-cat="fintech">
+                <span>📁 Finance & Crypto</span>
+                <span class="hermes-cat-count">390</span>
+              </button>
+              <button type="button" class="hermes-cat-btn" data-cat="creative">
+                <span>📁 Creative & Media</span>
+                <span class="hermes-cat-count">320</span>
+              </button>
+              <button type="button" class="hermes-cat-btn" data-cat="smart_home">
+                <span>📁 Smart Home & IoT</span>
+                <span class="hermes-cat-count">240</span>
+              </button>
+            </div>
+
+            <!-- Right Skills Grid & Pagination -->
+            <div class="hermes-skills-pane">
+              <div id="hermes-skills-grid" class="hermes-skills-grid">
+                <!-- Rendered dynamically via fetchHermesHubSkills() -->
+              </div>
+
+              <!-- Pagination Bar -->
+              <div class="hermes-pagination-bar">
+                <div id="hermes-page-info">Showing 1 - 24 of 97,986 skills</div>
+                <div style="display: flex; gap: 6px;">
+                  <button type="button" id="hermes-prev-page" class="hermes-page-btn" disabled>‹ Previous</button>
+                  <button type="button" id="hermes-next-page" class="hermes-page-btn">Next ›</button>
+                </div>
+              </div>
+
+              <div class="hermes-footer-hint">
+                Hit "+ Add to this Agent" on any skill — it installs and appears in the list above.
+              </div>
+            </div>
+          </div>
+
+          <!-- Quick Custom Specification Drawer -->
+          <div style="display: flex; justify-content: flex-end; margin-top: 4px;">
+            <button type="button" id="toggle-custom-skill-btn" class="link-btn" style="font-size: 11px; color: #38bdf8;">+ Paste Custom SKILL.md</button>
+          </div>
+          <div id="custom-skill-container" style="display: none; background: rgba(15, 23, 42, 0.7); border: 1px solid var(--border-subtle); border-radius: 8px; padding: 12px;">
+            <label class="field-label">Custom SKILL.md Specification (YAML Frontmatter + Instructions)</label>
+            <textarea id="hermes-skill-content" class="prompt-box modal-input font-mono" style="min-height: 110px; line-height: 1.4;" placeholder="Paste custom SKILL.md manifest..."></textarea>
+            <div style="display: flex; justify-content: flex-end; margin-top: 8px;">
+              <button type="button" id="hermes-import-btn" class="btn-approve" style="background: linear-gradient(135deg, #0ea5e9, #0284c7);">
+                ⚡ Register Skill into Engine
+              </button>
+            </div>
+            <div id="hermes-import-status" class="test-status-box" style="display: none; margin-top: 8px;"></div>
+          </div>
+
+        </div>
       </div>
 
       <!-- Tab 0: Installed Tools List -->
@@ -705,6 +926,76 @@
         <button id="apply-workflow-btn" class="btn-approve">
           <span>✔ Use This Custom Workflow</span>
         </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Scheduled Jobs Modal (Cron Automation inspired by Hermes) -->
+  <div id="schedules-modal" class="modal-overlay">
+    <div class="modal-card modal-large" style="max-width: 820px;">
+      <div class="modal-header">
+        <div class="brand-icon icon-circle gradient-purple">
+          <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="#fff" stroke-width="2">
+            <circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/>
+          </svg>
+        </div>
+        <div style="flex: 1;">
+          <div style="display: flex; justify-content: space-between; align-items: center;">
+            <div class="modal-title">Scheduled Jobs & Cron Automation</div>
+            <button id="close-schedules-modal-x" type="button" class="modal-close-icon" title="Close modal">✕</button>
+          </div>
+          <div class="modal-subtitle">Configure recurring DAG workflows with automatic execution (Hermes-style autonomous scheduling).</div>
+        </div>
+      </div>
+
+      <div class="modal-body" style="padding-top: 14px;">
+        <!-- Add Schedule Form -->
+        <form id="schedule-form" style="display: flex; flex-direction: column; gap: 10px; background: rgba(15, 23, 42, 0.6); padding: 14px; border-radius: 8px; border: 1px solid var(--border-subtle);">
+          <div style="display: flex; justify-content: space-between; align-items: center;">
+            <span style="font-size: 13px; font-weight: 600; color: #fff;">➕ Add New Scheduled Workflow</span>
+          </div>
+
+          <div style="display: grid; grid-template-columns: 2fr 1fr; gap: 12px;">
+            <div>
+              <label class="field-label">Schedule Name</label>
+              <input type="text" id="sched-name" class="prompt-box modal-input" placeholder="e.g. Daily Security & Disk Sweep" required>
+            </div>
+            <div>
+              <label class="field-label">Cron Expression</label>
+              <input type="text" id="sched-cron" class="prompt-box modal-input font-mono" placeholder="0 8 * * *" value="0 8 * * *" required>
+            </div>
+          </div>
+
+          <div>
+            <label class="field-label">Problem Query to Solve Automatically</label>
+            <input type="text" id="sched-query" class="prompt-box modal-input" placeholder="e.g. Inspect disk usage, find files > 500MB, and check system health" required>
+          </div>
+
+          <div style="display: flex; justify-content: space-between; align-items: center; margin-top: 4px;">
+            <div style="display: flex; gap: 8px;">
+              <button type="button" class="preset-chip" id="preset-cron-daily">☀️ Daily (08:00 UTC)</button>
+              <button type="button" class="preset-chip" id="preset-cron-hourly">⏱️ Hourly</button>
+              <button type="button" class="preset-chip" id="preset-cron-weekly">📅 Weekly</button>
+            </div>
+            <button type="submit" class="btn-approve" style="background: linear-gradient(135deg, #059669, #0284c7);">
+              ➕ Schedule Workflow
+            </button>
+          </div>
+        </form>
+
+        <!-- Active Schedules List -->
+        <div style="margin-top: 16px;">
+          <h4 style="font-size: 13px; font-weight: 700; color: #fff; margin-bottom: 8px;">
+            Active Schedules (<span id="schedules-list-count">0</span>)
+          </h4>
+          <div id="schedules-list" class="tool-list" style="max-height: 220px; overflow-y: auto;">
+            <!-- Rendered schedules -->
+          </div>
+        </div>
+      </div>
+
+      <div class="modal-actions" style="justify-content: flex-end; margin-top: 14px;">
+        <button type="button" id="close-schedules-modal-btn" class="btn-reject">Close</button>
       </div>
     </div>
   </div>

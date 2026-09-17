@@ -41,6 +41,7 @@ htmlcov/
 .env
 .env.local
 commit_msg.txt
+test_counts.py
 
 # Temporal local data
 temporal-data/
@@ -57,3 +58,5 @@ Thumbs.db
 scratch/
 explore_soc.py
 scratch_test_api.py
+scratch_test*.py
+
