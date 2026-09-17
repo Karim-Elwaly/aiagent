@@ -28,7 +28,7 @@ class Settings(BaseSettings):
     worker_llm_model: str | None = None
 
     # ── Temporal Configuration ───────────────────────────
-    temporal_host: str = "localhost:7233"
+    temporal_host: str = "localhost:7234"
     temporal_namespace: str = "default"
     temporal_task_queue: str = "uaos-workers"
 

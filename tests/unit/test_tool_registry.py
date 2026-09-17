@@ -87,10 +87,24 @@ def test_auto_discovery():
     assert reg.get_tool("file_reader_v1") is not None
     assert reg.get_tool("python_executor_v1") is not None
     assert reg.get_tool("web_search_v1") is not None
+    assert reg.get_tool("dir_lister_v1") is not None
+    assert reg.get_tool("disk_usage_v1") is not None
+    assert reg.get_tool("system_command_v1") is not None
+
+    # Check skill resolution
+    resolved_tree = reg.resolve(["file_tree"])
+    assert len(resolved_tree) == 1
+    assert resolved_tree[0].tool_id == "dir_lister_v1"
+
+    resolved_disk = reg.resolve(["disk_usage"])
+    assert len(resolved_disk) == 1
+    assert resolved_disk[0].tool_id == "disk_usage_v1"
 
     skills = reg.list_skills()
     assert len(skills) > 0
     assert "web_search" in skills
     assert "file_reading" in skills
     assert "code_execution" in skills
+    assert "file_tree" in skills
+    assert "disk_usage" in skills
 

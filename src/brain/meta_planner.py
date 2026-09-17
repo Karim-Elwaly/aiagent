@@ -103,6 +103,19 @@ class MetaPlanner:
                 dag = TaskDAG.model_validate(json.loads(json_str))
                 dag.validate_integrity()
 
+                # Multi-phase enforcement for operational/benchmark queries
+                if len(dag.tasks) < 2 and any(k in user_query.lower() for k in ["benchmark", "investigate", "audit", "and report", "and verify", "and benchmark", "inspect and"]):
+                    if attempt + 1 < self.max_retries:
+                        last_error = (
+                            "The query requires a multi-phase pipeline (e.g. Phase 1: Execution/Computation, Phase 2: Verification/Benchmark Profiling). "
+                            "You MUST return at least 2 tasks in the 'tasks' array."
+                        )
+                        logger.warning(
+                            "Plan attempt %d had only 1 task for multi-phase query. Re-prompting for decomposition...",
+                            attempt + 1,
+                        )
+                        continue
+
                 logger.info(
                     "Planning succeeded: %d tasks, goal='%s'",
                     len(dag.tasks),

@@ -4,6 +4,14 @@ $ErrorActionPreference = "Stop"
 
 Write-Host "Checking Python environment..." -ForegroundColor Cyan
 
+# Optional: Auto-start Temporal and Web UI (ports 7234 & 8234) if Docker is present
+if (Get-Command docker -ErrorAction SilentlyContinue) {
+    Write-Host "[*] Checking Temporal container on Docker..." -ForegroundColor Cyan
+    try {
+        docker compose up -d temporal 2>$null
+    } catch {}
+}
+
 # Check if .venv exists
 if (Test-Path ".venv\Scripts\python.exe") {
     & .venv\Scripts\python.exe run.py

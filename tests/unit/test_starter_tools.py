@@ -59,3 +59,49 @@ async def test_web_search_offline_graceful():
     res = await web_search("test query")
     assert "Error performing web search" in res or "Cannot search for" in res or "No results" in res
 
+
+@pytest.mark.asyncio
+async def test_get_disk_usage(tmp_path):
+    from src.registry.tools.file_ops import get_disk_usage
+
+    # Create dummy files
+    sub = tmp_path / "test_folder"
+    sub.mkdir()
+    (sub / "sample.txt").write_text("content", encoding="utf-8")
+
+    usage_str = await get_disk_usage(str(tmp_path))
+    assert "Disk Usage Summary" in usage_str
+    assert "Total Storage Capacity" in usage_str
+    assert "Free Space Available" in usage_str
+    assert "test_folder" in usage_str
+    assert "Top-Level Entries and Storage Breakdown" in usage_str
+    assert "| Name | Type | Size" in usage_str
+
+
+@pytest.mark.asyncio
+async def test_recursive_directory_listing(tmp_path):
+    nested_dir = tmp_path / "parent" / "child"
+    nested_dir.mkdir(parents=True)
+    (nested_dir / "nested_file.txt").write_text("deep data", encoding="utf-8")
+
+    tree_str = await list_directory(str(tmp_path), recursive=True, max_depth=3)
+    assert "Directory Tree" in tree_str
+    assert "parent" in tree_str
+    assert "child" in tree_str
+    assert "nested_file.txt" in tree_str
+    assert "items enumerated" in tree_str
+
+
+@pytest.mark.asyncio
+async def test_live_d_drive_and_ai_gpu():
+    from pathlib import Path
+    exists = Path(r"D:\ai_gpu").exists()
+    res_list = await list_directory(r"D:\ai_gpu")
+    res_disk = await get_disk_usage(r"D:\ai_gpu")
+    assert isinstance(res_list, str) and len(res_list) > 0
+    assert isinstance(res_disk, str) and len(res_disk) > 0
+    # Both tools must supply host metrics and JSON data even if the specific subfolder is missing
+    assert "total_bytes" in res_disk or "Total Storage Capacity" in res_disk
+    assert "```json" in res_list or "Directory Tree" in res_list
+
+

@@ -156,3 +156,50 @@ async def test_guardrail_output_truncation(mock_llm, simple_task):
     call_messages = mock_llm.chat.call_args_list[1][0][0]
     observation_msg = call_messages[-1]["content"]
     assert "[...output truncated]" in observation_msg
+
+
+@pytest.mark.asyncio
+async def test_react_forced_tool_steering_when_tools_available(mock_llm, simple_task, math_tool):
+    """If tools are available and iteration 1 produces no tool call, worker must steer the model to call tools."""
+    mock_llm.chat.side_effect = [
+        "I will calculate this by adding numbers.",  # Conversational text without tool call
+        '{"tool": "add", "args": {"a": 2, "b": 2}}',  # Steered into tool call
+        "FINAL_ANSWER: 4",  # Final answer with data
+    ]
+    worker = UniversalWorkerAgent(llm=mock_llm)
+
+    result = await worker.execute(
+        simple_task,
+        persona="Math specialist",
+        tools=[math_tool],
+    )
+    assert result.status == TaskStatus.COMPLETED
+    assert result.tool_calls_made == ["add"]
+    assert mock_llm.chat.call_count == 3
+    # Check that iteration 2 prompt was a steering message requiring tool execution
+    iter2_messages = mock_llm.chat.call_args_list[1][0][0]
+    assert any("You have NOT executed any tools yet" in m["content"] for m in iter2_messages)
+
+
+def test_react_flexible_tool_call_parsing(mock_llm):
+    """Test robust tool call extraction: JSON, single quotes, function syntax, and positional args."""
+    worker = UniversalWorkerAgent(llm=mock_llm)
+
+    # Standard JSON
+    call1 = worker._extract_tool_call('{"tool": "list_directory", "args": {"directory_path": "D:\\\\ai_gpu"}}')
+    assert call1 == {"tool": "list_directory", "args": {"directory_path": "D:\\ai_gpu"}}
+
+    # Python dict with single quotes
+    call2 = worker._extract_tool_call("{'tool': 'get_disk_usage', 'args': {'path': 'D:\\\\ai_gpu'}}")
+    assert call2 == {"tool": "get_disk_usage", "args": {"path": "D:\\ai_gpu"}}
+
+    # Function call syntax with kwargs
+    call3 = worker._extract_tool_call('list_directory(directory_path="D:\\\\ai_gpu", recursive=True)')
+    assert call3["tool"] == "list_directory"
+    assert call3["args"]["directory_path"] == "D:\\ai_gpu"
+    assert call3["args"]["recursive"] is True
+
+    # Function call syntax with positional argument
+    call4 = worker._extract_tool_call('get_disk_usage("D:\\\\ai_gpu")')
+    assert call4["tool"] == "get_disk_usage"
+    assert call4["args"]["path"] == "D:\\ai_gpu"

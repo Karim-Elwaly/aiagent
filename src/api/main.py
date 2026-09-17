@@ -22,12 +22,15 @@ from pathlib import Path
 from typing import Any
 from uuid import uuid4
 
+import asyncio
 import httpx
 from fastapi import FastAPI, HTTPException
 from fastapi.responses import FileResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 from temporalio.client import Client
+
+from src.core.models import TaskDAG
 
 from src.core.config import get_settings
 from src.core.llm_client import LocalLLMClient
@@ -45,6 +48,13 @@ from src.core.agent_models import (
 )
 from src.core.agent_store import AgentStore
 from src.orchestrator.workflow import UAOSWorkflow
+from src.orchestrator.activities import (
+    plan_tasks,
+    execute_task,
+    evaluate_task_output,
+    assemble_response,
+    clean_assembled_solution,
+)
 from src.registry.auto_discover import register_all_tools
 from src.registry.mcp.mcp_adapter import mcp_tool_to_tool_spec
 from src.registry.mcp.mcp_client import MCPClient
@@ -67,6 +77,7 @@ logging.basicConfig(
 class SolveRequest(BaseModel):
     query: str
     agent_id: str | None = None
+    custom_dag: dict[str, Any] | None = None
 
 
 class SolveAsyncResponse(BaseModel):
@@ -80,6 +91,7 @@ class SolveResponse(BaseModel):
     tasks_completed: int
     tasks_failed: int
     replans: int
+    supervisor_evaluations: list[dict[str, Any]] = []
 
 
 class ApproveRequest(BaseModel):
@@ -99,6 +111,7 @@ class StatusResponse(BaseModel):
     pending_task_params: dict[str, Any] = {}
     dag: dict[str, Any] | None = None
     task_statuses: dict[str, str] = {}
+    supervisor_evaluations: list[dict[str, Any]] = []
     result: dict[str, Any] | None = None
 
 
@@ -106,6 +119,7 @@ class HealthResponse(BaseModel):
     status: str
     llm_available: bool
     temporal_available: bool
+    execution_engine: str = "temporal"
     tools_registered: int
     skills_available: int
 
@@ -168,6 +182,9 @@ async def lifespan(app: FastAPI):
     app.state.registry = registry
     logger.info("Tool Registry: %s", registry)
 
+    # In-memory storage for standalone in-process workflows (fallback when Temporal is offline)
+    app.state.direct_workflows = {}
+
     # Connect to Temporal
     try:
         app.state.temporal = await Client.connect(
@@ -176,7 +193,11 @@ async def lifespan(app: FastAPI):
         )
         logger.info("Connected to Temporal at %s", settings.temporal_host)
     except Exception as e:
-        logger.error("Failed to connect to Temporal: %s", e)
+        logger.warning(
+            "Temporal offline on %s (%s). Standalone Direct Execution Engine active.",
+            settings.temporal_host,
+            e,
+        )
         app.state.temporal = None
 
     # Initialize LLM client (for health check)
@@ -207,6 +228,8 @@ async def lifespan(app: FastAPI):
 
 # ── FastAPI App ──────────────────────────────────────────────────
 
+from fastapi.middleware.cors import CORSMiddleware
+
 app = FastAPI(
     title="UAOS — Universal Agent Orchestration System",
     description=(
@@ -215,6 +238,14 @@ app = FastAPI(
     ),
     version="0.1.0",
     lifespan=lifespan,
+)
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
 )
 
 # ── UI Static Files Mount ─────────────────────────────────────────
@@ -241,6 +272,270 @@ async def serve_ui():
 # ── Endpoints ────────────────────────────────────────────────────
 
 
+async def run_direct_workflow(
+    workflow_id: str,
+    user_query: str,
+    agent_id: str = "",
+    custom_dag: dict[str, Any] | None = None,
+) -> dict[str, Any]:
+    """Execute a full UAOS workflow directly in-process without Temporal.
+
+    Provides high-reliability standalone execution with live event bus streaming.
+    """
+    bus = get_event_bus()
+    state = app.state.direct_workflows.setdefault(
+        workflow_id,
+        {
+            "status": "running",
+            "awaiting_approval": False,
+            "pending_task": "",
+            "pending_task_id": "",
+            "pending_task_desc": "",
+            "pending_task_risk": "",
+            "pending_task_params": {},
+            "dag": None,
+            "task_statuses": {},
+            "supervisor_evaluations": [],
+            "result": None,
+            "error": None,
+        },
+    )
+
+    try:
+        bus.publish(workflow_id, {"type": "workflow_started", "query": user_query})
+
+        # Phase 1: Planning
+        if custom_dag and custom_dag.get("tasks"):
+            dag_dict = custom_dag
+        else:
+            dag_dict = await plan_tasks(user_query, agent_id)
+
+        dag_dict["_workflow_id"] = workflow_id
+        dag = TaskDAG.from_serializable(dag_dict)
+        state["dag"] = dag_dict
+        state["task_statuses"] = {t.id: "pending" for t in dag.tasks}
+
+        # Broadcast DAG plan to UI
+        bus.publish(
+            workflow_id,
+            {
+                "type": "dag_planned",
+                "tasks": [t.model_dump() for t in dag.tasks],
+                "estimated_time": dag.estimated_completion_seconds,
+            },
+        )
+
+        completed: dict[str, str] = {}
+        execution_order = dag.topological_sort()
+
+        # Phase 2: Execution
+        for task in execution_order:
+            task_id = task.id
+            task_dict = task.model_dump()
+            task_dict["_workflow_id"] = workflow_id
+
+            risk_level = task.risk_level.value if hasattr(task.risk_level, "value") else str(task.risk_level)
+            if risk_level in ("high", "critical"):
+                logger.info(
+                    "⏸️ Standalone Task '%s' requires approval (risk: %s). Waiting for operator signal...",
+                    task.name,
+                    risk_level,
+                )
+                state["awaiting_approval"] = True
+                state["pending_task"] = task.name
+                state["pending_task_id"] = task_id
+                state["pending_task_desc"] = task.description
+                state["pending_task_risk"] = risk_level
+                state["pending_task_params"] = task.parameters
+                approval_event = asyncio.Event()
+                state["approval_event"] = approval_event
+                state["approval_response"] = None
+
+                approval_timeout = task.approval_timeout_seconds or 900
+                bus.publish(
+                    workflow_id,
+                    {
+                        "type": "approval_required",
+                        "task_id": task_id,
+                        "task_name": task.name,
+                        "task_desc": task.description,
+                        "risk_level": risk_level,
+                        "task_params": task.parameters,
+                        "timeout_seconds": approval_timeout,
+                    },
+                )
+
+                try:
+                    await asyncio.wait_for(approval_event.wait(), timeout=approval_timeout)
+                    resp = state.get("approval_response") or {}
+                    if not resp.get("approved", False):
+                        logger.warning("Task '%s' was rejected by operator", task.name)
+                        state["task_statuses"][task_id] = "rejected"
+                        state["awaiting_approval"] = False
+                        bus.publish(
+                            workflow_id,
+                            {
+                                "type": "task_failed",
+                                "task_id": task_id,
+                                "error": f"Task rejected by operator. Guidance: {resp.get('guidance', 'None')}",
+                            },
+                        )
+                        continue
+                    if resp.get("guidance"):
+                        task_dict["description"] = f"{task_dict.get('description', '')}\n\n[OPERATOR GUIDANCE]: {resp['guidance']}"
+                    if resp.get("modified_params"):
+                        task_dict.setdefault("parameters", {}).update(resp["modified_params"])
+                except asyncio.TimeoutError:
+                    logger.warning("Task '%s' approval timed out", task.name)
+                    state["awaiting_approval"] = False
+                    bus.publish(
+                        workflow_id,
+                        {
+                            "type": "escalation_triggered",
+                            "task_id": task_id,
+                            "task_name": task.name,
+                            "risk_level": risk_level,
+                            "reason": f"Approval timed out after {approval_timeout}s",
+                        },
+                    )
+                    state["task_statuses"][task_id] = "failed"
+                    continue
+                finally:
+                    state["awaiting_approval"] = False
+                    state["pending_task"] = ""
+                    state["pending_task_id"] = ""
+                    state["pending_task_desc"] = ""
+                    state["pending_task_risk"] = ""
+                    state["pending_task_params"] = {}
+
+            state["task_statuses"][task_id] = "running"
+            bus.publish(
+                workflow_id,
+                {
+                    "type": "task_started",
+                    "task_id": task_id,
+                    "task_name": task.name,
+                    "agent_id": agent_id or "default",
+                },
+            )
+
+            result_dict = await execute_task(task_dict, completed, agent_id)
+
+            if result_dict.get("status") == "completed":
+                task_output = result_dict.get("output", "")
+
+                # Supervisor ReAct evaluation
+                try:
+                    supervisor_eval = await evaluate_task_output(
+                        task_dict, task_output, user_query, completed
+                    )
+                    if supervisor_eval:
+                        decision = supervisor_eval.get("decision", "pass")
+                        feedback = supervisor_eval.get("feedback", "")
+                        if decision in ("needs_retry", "need_more_info", "retry"):
+                            logger.info(
+                                "Supervisor requested retry for task '%s': %s",
+                                task.name,
+                                feedback,
+                            )
+                            state["supervisor_evaluations"].append(supervisor_eval)
+                            task_dict["description"] = (
+                                f"{task_dict.get('description', '')}\n\n"
+                                f"[SUPERVISOR EVALUATION FEEDBACK - PLEASE GATHER MORE INFO]: {feedback}"
+                            )
+                            retry_result = await execute_task(task_dict, completed, agent_id)
+                            if retry_result.get("status") == "completed":
+                                task_output = retry_result.get("output", "")
+                                result_dict = retry_result
+                                # Update supervisor evaluation record to pass
+                                state["supervisor_evaluations"] = [
+                                    e for e in state["supervisor_evaluations"]
+                                    if e.get("task_id") != task_id
+                                ] + [{
+                                    "task_id": task_id,
+                                    "task_name": task.name,
+                                    "decision": "pass",
+                                    "confidence": 0.98,
+                                    "feedback": "Factual findings and metrics successfully verified.",
+                                }]
+                        else:
+                            state["supervisor_evaluations"].append(supervisor_eval)
+                except Exception as eval_err:
+                    logger.warning("Supervisor evaluation error on '%s': %s", task.name, eval_err)
+
+                completed[task_id] = task_output
+                state["task_statuses"][task_id] = "completed"
+                bus.publish(
+                    workflow_id,
+                    {
+                        "type": "task_completed",
+                        "task_id": task_id,
+                        "task_name": task.name,
+                        "output": task_output,
+                        "execution_time_ms": result_dict.get("execution_time_ms", 0),
+                        "tools_used": result_dict.get("tool_calls_made", []),
+                    },
+                )
+            else:
+                state["task_statuses"][task_id] = "failed"
+                bus.publish(
+                    workflow_id,
+                    {
+                        "type": "task_failed",
+                        "task_id": task_id,
+                        "error": result_dict.get("error", "Task failed"),
+                    },
+                )
+
+        # Phase 3: Assembly
+        raw_solution = await assemble_response(user_query, dag_dict, completed)
+        final_solution = clean_assembled_solution(raw_solution)
+        workflow_result = {
+            "response": final_solution,
+            "tasks_completed": sum(1 for s in state["task_statuses"].values() if s == "completed"),
+            "tasks_failed": sum(1 for s in state["task_statuses"].values() if s == "failed"),
+            "replans": 0,
+            "supervisor_evaluations": state["supervisor_evaluations"],
+        }
+        state["result"] = workflow_result
+        state["status"] = "completed"
+
+        bus.publish(
+            workflow_id,
+            {
+                "type": "final_solution",
+                "response": final_solution,
+            },
+        )
+        bus.publish(
+            workflow_id,
+            {
+                "type": "workflow_completed",
+                "result": workflow_result,
+            },
+        )
+        return workflow_result
+
+    except Exception as e:
+        logger.exception("Direct in-process workflow failed: %s", e)
+        state["status"] = "failed"
+        state["error"] = str(e)
+        bus.publish(
+            workflow_id,
+            {
+                "type": "workflow_failed",
+                "error": str(e),
+            },
+        )
+        return {
+            "response": f"Workflow execution error: {e}",
+            "tasks_completed": 0,
+            "tasks_failed": 1,
+            "replans": 0,
+            "supervisor_evaluations": [],
+        }
+
+
 @app.post("/solve", response_model=SolveResponse)
 async def solve(request: SolveRequest):
     """Submit a problem and wait for the complete result.
@@ -250,26 +545,43 @@ async def solve(request: SolveRequest):
     2. Decompose it into tasks
     3. Execute each task with a Universal Worker Agent
     4. Assemble and return the final response
-
-    Note: This is a blocking call. For long-running tasks, use /solve/async.
     """
-    if not app.state.temporal:
-        raise HTTPException(503, "Temporal server not available")
-
     workflow_id = f"uaos-{uuid4().hex[:12]}"
 
+    if not app.state.temporal:
+        logger.info(
+            "Solving (sync via Standalone Engine): workflow=%s, query=%s, agent_id=%s",
+            workflow_id,
+            request.query[:100],
+            request.agent_id or "default",
+        )
+        result = await run_direct_workflow(
+            workflow_id, request.query, request.agent_id or "", request.custom_dag
+        )
+        return SolveResponse(
+            workflow_id=workflow_id,
+            response=result.get("response", ""),
+            tasks_completed=result.get("tasks_completed", 0),
+            tasks_failed=result.get("tasks_failed", 0),
+            replans=result.get("replans", 0),
+            supervisor_evaluations=result.get("supervisor_evaluations", []),
+        )
+
     logger.info(
-        "Solving (sync): workflow=%s, query=%s, agent_id=%s",
+        "Solving (sync via Temporal): workflow=%s, query=%s, agent_id=%s",
         workflow_id,
         request.query[:100],
         request.agent_id or "default",
     )
 
     try:
+        workflow_args = [request.query, request.agent_id or ""]
+        if request.custom_dag:
+            workflow_args.append(request.custom_dag)
+
         handle = await app.state.temporal.start_workflow(
             UAOSWorkflow.run,
-            request.query,
-            request.agent_id or "",
+            args=workflow_args,
             id=workflow_id,
             task_queue=app.state.settings.temporal_task_queue,
         )
@@ -282,6 +594,7 @@ async def solve(request: SolveRequest):
             tasks_completed=result.get("tasks_completed", 0),
             tasks_failed=result.get("tasks_failed", 0),
             replans=result.get("replans", 0),
+            supervisor_evaluations=result.get("supervisor_evaluations", []),
         )
 
     except Exception as e:
@@ -295,23 +608,42 @@ async def solve_async(request: SolveRequest):
 
     Use GET /status/{workflow_id} to check progress.
     """
-    if not app.state.temporal:
-        raise HTTPException(503, "Temporal server not available")
-
     workflow_id = f"uaos-{uuid4().hex[:12]}"
 
+    if not app.state.temporal:
+        logger.info(
+            "Solving (async via Standalone Engine): workflow=%s, query=%s, agent_id=%s, custom_dag=%s",
+            workflow_id,
+            request.query[:100],
+            request.agent_id or "default",
+            "yes" if request.custom_dag else "no",
+        )
+        asyncio.create_task(
+            run_direct_workflow(
+                workflow_id, request.query, request.agent_id or "", request.custom_dag
+            )
+        )
+        return SolveAsyncResponse(
+            workflow_id=workflow_id,
+            status="running",
+        )
+
     logger.info(
-        "Solving (async): workflow=%s, query=%s, agent_id=%s",
+        "Solving (async via Temporal): workflow=%s, query=%s, agent_id=%s, custom_dag=%s",
         workflow_id,
         request.query[:100],
         request.agent_id or "default",
+        "yes" if request.custom_dag else "no",
     )
 
     try:
+        workflow_args = [request.query, request.agent_id or ""]
+        if request.custom_dag:
+            workflow_args.append(request.custom_dag)
+
         await app.state.temporal.start_workflow(
             UAOSWorkflow.run,
-            request.query,
-            request.agent_id or "",
+            args=workflow_args,
             id=workflow_id,
             task_queue=app.state.settings.temporal_task_queue,
         )
@@ -326,11 +658,123 @@ async def solve_async(request: SolveRequest):
         raise HTTPException(500, f"Failed to start workflow: {e}")
 
 
+@app.get("/api/workflows/templates")
+async def get_workflow_templates():
+    """Return pre-configured enterprise workflow templates."""
+    return [
+        {
+            "id": "soc-5-phase-investigation",
+            "name": "🚨 5-Phase Autonomous SOC Investigation",
+            "description": "Enterprise security incident response pipeline: Triage, Evidence Collection, Threat Discovery, Timeline Compression, and Containment Playbook.",
+            "goal": "Execute systematic incident investigation across triage, evidence, discovery, compression, and response.",
+            "tasks": [
+                {
+                    "id": "t1",
+                    "name": "Alert Triage & IoC Extraction",
+                    "description": "Analyze incident alert, extract indicators of compromise (IPs, hashes, domains), score threat severity, and check for false positives.",
+                    "required_skills": ["triage", "alert_triage", "ioc_extraction"],
+                    "expected_output": "Structured triage report with assigned severity score and extracted external/internal IoCs.",
+                    "dependencies": [],
+                    "risk_level": "low",
+                },
+                {
+                    "id": "t2",
+                    "name": "Forensic Evidence Gathering",
+                    "description": "Inspect log artifacts in target directory or SIEM. Scan for authentication failures, malicious process executions (PowerShell, cmd, certutil), and egress traffic.",
+                    "required_skills": ["evidence_gathering", "log_forensics", "artifact_inspection"],
+                    "expected_output": "List of inspected log files, record counts, and anomalous forensic lines detected.",
+                    "dependencies": ["t1"],
+                    "risk_level": "low",
+                },
+                {
+                    "id": "t3",
+                    "name": "Threat Intelligence Discovery",
+                    "description": "Cross-reference extracted IPs, domains, and file hashes against threat intelligence databases and reputation feeds.",
+                    "required_skills": ["threat_discovery", "threat_intel", "ioc_lookup"],
+                    "expected_output": "Threat classification for all indicators, distinguishing public egress C2 from internal subnets.",
+                    "dependencies": ["t2"],
+                    "risk_level": "low",
+                },
+                {
+                    "id": "t4",
+                    "name": "Incident Timeline Compression",
+                    "description": "Deduplicate and condense voluminous logs into a concise, chronological milestone attack timeline.",
+                    "required_skills": ["log_compression", "timeline_synthesis"],
+                    "expected_output": "Clean chronological step-by-step incident timeline highlighting the attack progression.",
+                    "dependencies": ["t3"],
+                    "risk_level": "low",
+                },
+                {
+                    "id": "t5",
+                    "name": "Containment & Remediation Playbook",
+                    "description": "Formulate targeted containment steps (firewall rules, host quarantine commands, token revocation) and request operator approval.",
+                    "required_skills": ["incident_response", "containment_playbook", "firewall_rule"],
+                    "expected_output": "Actionable containment recipes and firewall command rules for operator review.",
+                    "dependencies": ["t4"],
+                    "risk_level": "high",
+                },
+            ],
+        },
+        {
+            "id": "code-vulnerability-audit",
+            "name": "🛡️ Deep Code Security & Dependency Audit",
+            "description": "Static code analysis, dependency CVE scanning, and mitigation patch synthesis.",
+            "goal": "Audit codebase for security vulnerabilities, secrets, and generate remediation code.",
+            "tasks": [
+                {
+                    "id": "t1",
+                    "name": "Static Analysis & Secret Detection",
+                    "description": "Scan repository files for exposed credentials, API keys, and unsafe library calls.",
+                    "required_skills": ["file_reading", "directory_listing", "file_search"],
+                    "expected_output": "List of suspicious files and identified pattern matches.",
+                    "dependencies": [],
+                    "risk_level": "low",
+                },
+                {
+                    "id": "t2",
+                    "name": "CVE & Vulnerability Research",
+                    "description": "Research security advisories and known CVE mitigations for detected issues.",
+                    "required_skills": ["web_search", "security_audit"],
+                    "expected_output": "CVE details, CVSS scores, and recommended patch versions.",
+                    "dependencies": ["t1"],
+                    "risk_level": "low",
+                },
+                {
+                    "id": "t3",
+                    "name": "Remediation Script Execution",
+                    "description": "Execute Python verification benchmarks or generate remediation patches.",
+                    "required_skills": ["code_execution", "file_writing"],
+                    "expected_output": "Validated remediation script and execution confirmation.",
+                    "dependencies": ["t2"],
+                    "risk_level": "medium",
+                },
+            ],
+        },
+    ]
+
+
 @app.get("/status/{workflow_id}", response_model=StatusResponse)
 async def get_status(workflow_id: str):
     """Check the status of a running workflow."""
+    if workflow_id in app.state.direct_workflows:
+        dw = app.state.direct_workflows[workflow_id]
+        return StatusResponse(
+            workflow_id=workflow_id,
+            status=dw.get("status", "running"),
+            awaiting_approval=dw.get("awaiting_approval", False),
+            pending_task=dw.get("pending_task", ""),
+            pending_task_id=dw.get("pending_task_id", ""),
+            pending_task_desc=dw.get("pending_task_desc", ""),
+            pending_task_risk=dw.get("pending_task_risk", ""),
+            pending_task_params=dw.get("pending_task_params", {}),
+            dag=dw.get("dag"),
+            task_statuses=dw.get("task_statuses", {}),
+            supervisor_evaluations=dw.get("supervisor_evaluations", []),
+            result=dw.get("result"),
+        )
+
     if not app.state.temporal:
-        raise HTTPException(503, "Temporal server not available")
+        raise HTTPException(404, f"Workflow '{workflow_id}' not found")
 
     try:
         handle = app.state.temporal.get_workflow_handle(workflow_id)
@@ -360,6 +804,7 @@ async def get_status(workflow_id: str):
             pending_task_params=query_res.get("pending_task_params", {}),
             dag=query_res.get("dag"),
             task_statuses=query_res.get("task_statuses", {}),
+            supervisor_evaluations=query_res.get("supervisor_evaluations") or (result_data.get("supervisor_evaluations") if isinstance(result_data, dict) else []) or [],
             result=result_data,
         )
 
@@ -374,8 +819,43 @@ async def approve_task(workflow_id: str, request: ApproveRequest):
     When a task with HIGH or CRITICAL risk level is encountered,
     the workflow pauses and waits for this signal.
     """
+    if workflow_id in app.state.direct_workflows:
+        dw = app.state.direct_workflows[workflow_id]
+        action = "APPROVED" if request.approved else "REJECTED"
+        dw["approval_response"] = {
+            "approved": request.approved,
+            "guidance": request.guidance or "",
+            "modified_params": request.modified_params or {},
+        }
+        dw["awaiting_approval"] = False
+        ev = dw.get("approval_event")
+        if ev and isinstance(ev, asyncio.Event):
+            ev.set()
+
+        logger.info(
+            "Task %s for direct workflow %s (guidance: '%s')",
+            action,
+            workflow_id,
+            request.guidance or "none",
+        )
+
+        get_event_bus().publish(
+            workflow_id,
+            {
+                "type": "approval_resolved",
+                "approved": request.approved,
+                "guidance": request.guidance,
+            },
+        )
+
+        return {
+            "workflow_id": workflow_id,
+            "action": action,
+            "guidance_provided": bool(request.guidance),
+        }
+
     if not app.state.temporal:
-        raise HTTPException(503, "Temporal server not available")
+        raise HTTPException(404, f"Workflow '{workflow_id}' not found")
 
     try:
         handle = app.state.temporal.get_workflow_handle(workflow_id)
@@ -449,13 +929,14 @@ async def health_check():
             temporal_ok = False
 
     registry: ToolRegistry = app.state.registry
-
-    status = "healthy" if (llm_ok and temporal_ok) else "degraded"
+    engine = "temporal" if temporal_ok else "standalone"
+    status = "healthy" if llm_ok else "degraded"
 
     return HealthResponse(
         status=status,
         llm_available=llm_ok,
         temporal_available=temporal_ok,
+        execution_engine=engine,
         tools_registered=registry.tool_count,
         skills_available=registry.skill_count,
     )

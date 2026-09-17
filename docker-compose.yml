@@ -1,16 +1,12 @@
 services:
   # ── Temporal Local Dev Server (Server + Web UI) ────────────────
   temporal:
-    image: temporalio/server:latest
+    image: temporalio/temporal:latest
     container_name: uaos-temporal
-    command: ["server", "start-dev", "--ip", "0.0.0.0"]
+    command: ["server", "start-dev", "--ip", "0.0.0.0", "--ui-port", "8233"]
     ports:
-      - "7233:7233"  # gRPC API
-      - "8233:8233"  # Temporal Web UI
-    volumes:
-      - temporal-data:/tmp/temporal
-    environment:
-      - DB=sqlite
+      - "7234:7233"  # gRPC API (Host 7234 -> Container 7233)
+      - "8234:8233"  # Temporal Web UI (Host 8234 -> Container 8233)
     restart: unless-stopped
 
   # ── SearXNG (Self-Hosted Private Search Backend) ───────────────
@@ -57,6 +53,3 @@ services:
     depends_on:
       - temporal
     restart: unless-stopped
-
-volumes:
-  temporal-data:

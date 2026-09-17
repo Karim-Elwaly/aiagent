@@ -29,6 +29,7 @@ with workflow.unsafe.imports_passed_through():
     from src.orchestrator.activities import (
         assemble_response,
         escalate_approval,
+        evaluate_task_output,
         execute_task,
         notify_approval_required,
         plan_tasks,
@@ -66,6 +67,7 @@ class UAOSWorkflow:
         self._approval_modified_params: dict[str, Any] = {}
         self._dag_dict: dict[str, Any] = {}
         self._task_statuses: dict[str, str] = {}
+        self._supervisor_evaluations: list[dict[str, Any]] = []
         self._result: dict[str, Any] | None = None
 
     @workflow.signal
@@ -114,38 +116,53 @@ class UAOSWorkflow:
             and self._pending_task_name != "",
             "dag": self._dag_dict,
             "task_statuses": self._task_statuses,
+            "supervisor_evaluations": self._supervisor_evaluations,
             "result": self._result,
         }
 
     @workflow.run
-    async def run(self, user_query: str, agent_id: str = "") -> dict[str, Any]:
-        """Execute the full UAOS pipeline for a user query.
+    async def run(
+        self,
+        user_query: str,
+        agent_id: str = "",
+        custom_dag: dict[str, Any] | None = None,
+    ) -> dict[str, Any]:
+        """Main workflow execution entry point.
 
         Args:
             user_query: The raw user request.
             agent_id: Optional AgentProfile ID to steer persona and restrict tools.
+            custom_dag: Optional user-defined TaskDAG to execute directly without auto-planning.
 
         Returns:
             Dict with 'response', 'tasks_completed', 'tasks_failed',
             and 'replans' counts.
         """
         workflow.logger.info(
-            "Starting UAOS workflow for: %s (agent_id: %s)",
+            "Starting UAOS workflow for: %s (agent_id: %s, custom_dag: %s)",
             user_query[:100],
             agent_id or "default",
+            "yes" if custom_dag else "no",
         )
 
         # ── Phase 1: Plan ────────────────────────────────
-        dag_dict = await workflow.execute_activity(
-            plan_tasks,
-            args=[user_query, agent_id],
-            start_to_close_timeout=timedelta(seconds=180),
-            retry_policy=RetryPolicy(
-                maximum_attempts=3,
-                initial_interval=timedelta(seconds=2),
-                backoff_coefficient=2.0,
-            ),
-        )
+        if custom_dag and custom_dag.get("tasks"):
+            workflow.logger.info(
+                "Using user-defined custom TaskDAG with %d tasks",
+                len(custom_dag["tasks"]),
+            )
+            dag_dict = custom_dag
+        else:
+            dag_dict = await workflow.execute_activity(
+                plan_tasks,
+                args=[user_query, agent_id],
+                start_to_close_timeout=timedelta(seconds=180),
+                retry_policy=RetryPolicy(
+                    maximum_attempts=3,
+                    initial_interval=timedelta(seconds=2),
+                    backoff_coefficient=2.0,
+                ),
+            )
 
         self._dag_dict = dag_dict
         self._task_statuses = {t["id"]: "pending" for t in dag_dict.get("tasks", [])}
@@ -314,7 +331,58 @@ class UAOSWorkflow:
                 )
 
                 if result_dict["status"] == "completed":
-                    completed[task_id] = result_dict["output"]
+                    task_output = result_dict["output"]
+
+                    # ── Supervisor Evaluation ReAct Loop ─────────
+                    supervisor_eval = {}
+                    try:
+                        supervisor_eval = await workflow.execute_activity(
+                            evaluate_task_output,
+                            args=[task_dict, task_output, user_query, completed],
+                            start_to_close_timeout=timedelta(seconds=90),
+                            retry_policy=RetryPolicy(maximum_attempts=2),
+                        )
+                    except Exception as eval_err:
+                        workflow.logger.warning(
+                            "Supervisor evaluation error on '%s': %s", task_name, eval_err
+                        )
+
+                    if supervisor_eval:
+                        self._supervisor_evaluations.append(supervisor_eval)
+
+                    decision = supervisor_eval.get("decision", "pass")
+                    feedback = supervisor_eval.get("feedback", "")
+                    task_retried = task_dict.get("_supervisor_retried", 0)
+
+                    # If supervisor requests retry and we haven't retried this task yet
+                    if (
+                        decision in ("needs_retry", "need_more_info", "retry")
+                        and task_retried < 1
+                    ):
+                        if not feedback:
+                            feedback = "Task output was incomplete or lacked required calculations/findings. Please use tools to execute the task fully."
+                        workflow.logger.info(
+                            "🔄 Supervisor requested retry for '%s': %s. Retrying with feedback...",
+                            task_name,
+                            feedback,
+                        )
+                        task_dict["_supervisor_retried"] = task_retried + 1
+                        task_dict["description"] = (
+                            f"{task_dict.get('description', '')}\n\n"
+                            f"[SUPERVISOR EVALUATION FEEDBACK - PLEASE GATHER MORE INFO]: {feedback}"
+                        )
+                        # Re-execute immediately with updated prompt
+                        retry_result = await workflow.execute_activity(
+                            execute_task,
+                            args=[task_dict, completed, agent_id],
+                            start_to_close_timeout=timedelta(seconds=timeout + 60),
+                            retry_policy=RetryPolicy(maximum_attempts=2),
+                        )
+                        if retry_result["status"] == "completed":
+                            task_output = retry_result["output"]
+                            result_dict = retry_result
+
+                    completed[task_id] = task_output
                     self._task_statuses[task_id] = "completed"
                     workflow.logger.info(
                         "Task '%s' COMPLETED (%dms)",
@@ -354,6 +422,7 @@ class UAOSWorkflow:
             "tasks_completed": len(completed),
             "tasks_failed": len(failed),
             "replans": replan_count,
+            "supervisor_evaluations": self._supervisor_evaluations,
         }
         return self._result
 

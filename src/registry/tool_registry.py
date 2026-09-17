@@ -160,10 +160,21 @@ class ToolRegistry:
         unresolved: list[str] = []
 
         for skill in required_skills:
-            tool_ids = self._skill_index.get(skill, [])
+            tool_ids = list(self._skill_index.get(skill, []))
+            if not tool_ids:
+                # Fuzzy fallback: match by tool name or provided skills substring
+                normalized = skill.lower().replace("-", "_").strip()
+                for tid, spec in self._tools.items():
+                    sname = spec.name.lower()
+                    if (
+                        normalized in sname
+                        or sname in normalized
+                        or any(normalized in s.lower() or s.lower() in normalized for s in spec.skills_provided)
+                    ):
+                        if tid not in tool_ids:
+                            tool_ids.append(tid)
+
             if tool_ids:
-                # Pick the first registered tool for this skill
-                # Future enhancement: rank by reliability, latency, cost
                 best_id = tool_ids[0]
                 if best_id not in resolved:
                     resolved[best_id] = self._tools[best_id]

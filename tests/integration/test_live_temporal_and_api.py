@@ -23,8 +23,9 @@ from src.orchestrator.workflow import UAOSWorkflow
 @pytest.mark.asyncio
 async def test_live_temporal_connection_and_worker():
     """Verify live connection to Temporal and worker registration."""
+    settings = get_settings()
     try:
-        client = await Client.connect("localhost:7233", namespace="default")
+        client = await Client.connect(settings.temporal_host, namespace=settings.temporal_namespace)
     except Exception as e:
         pytest.skip(f"Temporal server not running locally: {e}")
 

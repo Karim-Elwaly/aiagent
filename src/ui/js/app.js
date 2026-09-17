@@ -44,6 +44,10 @@ document.addEventListener("DOMContentLoaded", () => {
   let activeDag = null;
   let activeEventSource = null;
   let approvalTimerInterval = null;
+  let isCustomWorkflowMode = false;
+  let activeCustomDag = null;
+  let currentWorkflowTasks = [];
+  let workflowTemplates = {};
 
   // Initialize DAG Renderer
   const dagRenderer = new DAGRenderer("dag-svg", (task, status) => {
@@ -79,7 +83,14 @@ document.addEventListener("DOMContentLoaded", () => {
     const isAsync = modeAsyncEl ? modeAsyncEl.checked : true;
     const agentSelectorEl = document.getElementById("agent-selector");
     const selectedAgentId = agentSelectorEl ? agentSelectorEl.value : "";
-    const solvePayload = { query, agent_id: selectedAgentId || null };
+    const customDagPayload = (isCustomWorkflowMode && activeCustomDag && activeCustomDag.tasks && activeCustomDag.tasks.length > 0)
+      ? { ...activeCustomDag, goal: query }
+      : null;
+    const solvePayload = {
+      query,
+      agent_id: selectedAgentId || null,
+      custom_dag: customDagPayload,
+    };
 
     try {
       if (isAsync) {
@@ -90,7 +101,18 @@ document.addEventListener("DOMContentLoaded", () => {
           body: JSON.stringify(solvePayload),
         });
 
-        if (!res.ok) throw new Error(`HTTP error! status: ${res.status}`);
+        if (!res.ok) {
+          let errDetail = "";
+          try {
+            const errJson = await res.json();
+            errDetail = errJson.detail || JSON.stringify(errJson);
+          } catch (_) {
+            try {
+              errDetail = await res.text();
+            } catch (_) {}
+          }
+          throw new Error(`HTTP ${res.status}: ${errDetail || 'Failed to launch workflow'}`);
+        }
         const data = await res.json();
         currentWorkflowId = data.workflow_id;
         showToast(`Workflow spawned: ${currentWorkflowId}`);
@@ -109,17 +131,37 @@ document.addEventListener("DOMContentLoaded", () => {
           body: JSON.stringify(solvePayload),
         });
 
-        if (!res.ok) throw new Error(`HTTP error! status: ${res.status}`);
+        if (!res.ok) {
+          let errDetail = "";
+          try {
+            const errJson = await res.json();
+            errDetail = errJson.detail || JSON.stringify(errJson);
+          } catch (_) {
+            try {
+              errDetail = await res.text();
+            } catch (_) {}
+          }
+          throw new Error(`HTTP ${res.status}: ${errDetail || 'Execution failed'}`);
+        }
         const data = await res.json();
 
         renderFinalSolution(data.response, data.tasks_completed, data.tasks_failed);
         setRunningState(false);
       }
     } catch (err) {
-      console.error(err);
-      // Fallback to demo mode if backend server is not reachable
-      showToast("Running interactive demonstration pipeline...", "info");
-      runDemoSimulation(query);
+      console.error("Workflow submission failed:", err);
+      setRunningState(false);
+      showToast(`Execution Error: ${err.message}`, "error");
+      renderFinalSolution(
+        `### ❌ Execution Failed\n\n**Error:** \`${err.message}\`\n\n` +
+        `Please ensure the UAOS backend server is running at \`${API_BASE || 'http://localhost:8001'}\`.\n\n` +
+        `**Troubleshooting Steps:**\n` +
+        `- Run \`.\\start.bat\` or \`uvicorn src.api.main:app --port 8001\` in the project directory\n` +
+        `- Verify health at [http://localhost:8001/health](http://localhost:8001/health)\n` +
+        `- Check Temporal server connectivity`,
+        0,
+        1
+      );
     }
   });
 
@@ -131,7 +173,8 @@ document.addEventListener("DOMContentLoaded", () => {
     }
 
     try {
-      const es = new EventSource(`/stream/${workflowId}`);
+      const streamUrl = `${API_BASE}/stream/${workflowId}`;
+      const es = new EventSource(streamUrl);
       activeEventSource = es;
 
       es.onopen = () => {
@@ -268,6 +311,55 @@ document.addEventListener("DOMContentLoaded", () => {
         break;
       }
 
+      case "supervisor_verdict": {
+        const taskId = ev.task_id;
+        const isPass = ev.decision === "pass" || ev.decision === "accurate" || ev.decision === "approved";
+        const decision = isPass ? "pass" : "retry";
+        const confidence = ev.confidence !== undefined ? Math.round(ev.confidence * 100) : 100;
+        const feedback = ev.feedback || "";
+        const retryCount = ev.retry_count || 0;
+
+        let stepEl = document.getElementById(`step-${taskId}`);
+        if (!stepEl) {
+          addTimelineStep(taskId, `Task ${taskId}`, "", "running");
+          stepEl = document.getElementById(`step-${taskId}`);
+        }
+
+        let verdictEl = document.getElementById(`verdict-${taskId}`);
+        if (!verdictEl && stepEl) {
+          verdictEl = document.createElement("div");
+          verdictEl.id = `verdict-${taskId}`;
+          const contentDiv = stepEl.querySelector(".step-content");
+          if (contentDiv) contentDiv.appendChild(verdictEl);
+        }
+
+        if (verdictEl) {
+          verdictEl.className = `supervisor-verdict ${decision === "pass" ? "pass" : "retry"}`;
+          const icon = decision === "pass" ? "🛡️ Supervisor Approved" : `🔄 Supervisor ReAct Retry (Attempt ${retryCount})`;
+          verdictEl.innerHTML = `
+            <div style="font-weight: 700; display: flex; justify-content: space-between; align-items: center;">
+              <span>${icon}</span>
+              <span style="font-size: 11px; opacity: 0.85;">Confidence: ${confidence}%</span>
+            </div>
+            <div style="font-size: 11px; margin-top: 4px; line-height: 1.4;">${escapeHtml(feedback)}</div>
+          `;
+          timelineList.scrollTop = timelineList.scrollHeight;
+        }
+
+        if (decision === "retry") {
+          const duration = document.getElementById(`duration-${taskId}`);
+          if (duration) duration.textContent = "RETRYING (ReAct)";
+        }
+
+        showToast(
+          decision === "pass"
+            ? `Supervisor approved Task ${taskId} (${confidence}% confidence)`
+            : `Supervisor requested retry on Task ${taskId}: ${feedback.slice(0, 50)}...`,
+          decision === "pass" ? "info" : "warning"
+        );
+        break;
+      }
+
       case "workflow_completed":
       case "workflow_failed":
         setRunningState(false);
@@ -322,6 +414,11 @@ document.addEventListener("DOMContentLoaded", () => {
           }
         }
 
+        // 2b. Render Supervisor Evaluations from Polled Status
+        if (status.supervisor_evaluations && Array.isArray(status.supervisor_evaluations)) {
+          renderSupervisorEvaluationsList(status.supervisor_evaluations);
+        }
+
         // 3. Check if approval required
         if (status.awaiting_approval) {
           showApprovalModal(
@@ -340,6 +437,9 @@ document.addEventListener("DOMContentLoaded", () => {
           setRunningState(false);
           if (status.result) {
             renderFinalSolution(status.result.response, status.result.tasks_completed, status.result.tasks_failed);
+            if (status.result.supervisor_evaluations && Array.isArray(status.result.supervisor_evaluations)) {
+              renderSupervisorEvaluationsList(status.result.supervisor_evaluations);
+            }
             const solutionCard = document.querySelector(".solution-card");
             if (solutionCard) {
               solutionCard.scrollIntoView({ behavior: "smooth", block: "start" });
@@ -528,6 +628,7 @@ document.addEventListener("DOMContentLoaded", () => {
       if (intModal) intModal.classList.remove("active");
       const agModal = document.getElementById("agents-modal");
       if (agModal) agModal.classList.remove("active");
+      closeWorkflowBuilderModal();
     }
   });
 
@@ -537,14 +638,16 @@ document.addEventListener("DOMContentLoaded", () => {
       const res = await fetch("/health");
       const data = await res.json();
 
-      // Temporal Status
+      // Temporal / Execution Engine Status
       if (temporalStatusEl) {
         if (data.temporal_available) {
           temporalStatusEl.className = "status-pill online";
           temporalStatusEl.innerHTML = '<span class="dot"></span><span class="status-label">Temporal Online</span>';
+          temporalStatusEl.title = "Temporal Distributed Workflow Engine Active";
         } else {
-          temporalStatusEl.className = "status-pill degraded";
-          temporalStatusEl.innerHTML = '<span class="dot"></span><span class="status-label">Temporal Offline</span>';
+          temporalStatusEl.className = "status-pill online";
+          temporalStatusEl.innerHTML = '<span class="dot"></span><span class="status-label">Engine Ready</span>';
+          temporalStatusEl.title = "Standalone In-Process Workflow Engine Active (Zero-Failure Standalone)";
         }
       }
 
@@ -644,88 +747,372 @@ document.addEventListener("DOMContentLoaded", () => {
     }
   }
 
-  // 8. Demo Simulation Pipeline (Provides dynamic visual experience)
-  async function runDemoSimulation(query) {
-    // Generate an illustrative TaskDAG
-    const mockDAG = {
-      goal: query,
-      reasoning: "Dynamic problem decomposition into 3 sequential & parallel stages.",
+  // 8. Workflow Studio & Pipeline Builder Implementation
+  const openWorkflowBuilderBtn = document.getElementById("open-workflow-builder-btn");
+  const closeWorkflowBuilderBtn = document.getElementById("close-workflow-builder-btn");
+  const cancelWorkflowBuilderBtn = document.getElementById("cancel-workflow-builder-btn");
+  const applyWorkflowBtn = document.getElementById("apply-workflow-btn");
+  const toggleWorkflowModeBtn = document.getElementById("toggle-workflow-mode-btn");
+  const workflowModeIndicator = document.getElementById("workflow-mode-indicator");
+  const workflowBuilderModal = document.getElementById("workflow-builder-modal");
+  const pipelineTasksList = document.getElementById("pipeline-tasks-list");
+  const pipelineTaskCount = document.getElementById("pipeline-task-count");
+  const addPhaseBtn = document.getElementById("add-phase-btn");
+  const tplSocBtn = document.getElementById("tpl-soc-btn");
+  const tplAuditBtn = document.getElementById("tpl-audit-btn");
+  const tplClearBtn = document.getElementById("tpl-clear-btn");
+
+  const BUILTIN_WORKFLOW_TEMPLATES = {
+    "soc-5-phase-investigation": {
+      name: "5-Phase SOC Autonomous Investigation Pipeline",
+      description: "Enterprise security triage, forensic evidence gathering, blast radius discovery, timeline compression, and containment response.",
       tasks: [
         {
           id: "t1",
-          name: "Information Gathering",
-          description: "Inspect query and search resources or local environment",
-          required_skills: ["web_search", "file_reading"],
+          name: "Incident Triage & False-Positive Assessment",
+          description: "Parse alert logs, extract anomalous events, and evaluate false-positive probability.",
+          required_skills: ["alert_triage", "file_reading"],
           dependencies: [],
           risk_level: "low",
         },
         {
           id: "t2",
-          name: "Computational Analysis",
-          description: "Execute Python analysis on gathered parameters",
-          required_skills: ["code_execution", "data_analysis"],
+          name: "Forensic Evidence Gathering & Threat Intel",
+          description: "Inspect local logs in target path, extract network indicators (IPs, hashes), and check threat intelligence reputation.",
+          required_skills: ["threat_intel", "log_forensics", "file_reading"],
           dependencies: ["t1"],
-          risk_level: "medium",
+          risk_level: "low",
         },
         {
           id: "t3",
-          name: "Synthesize Results",
-          description: "Structure actionable response for user",
-          required_skills: ["general_reasoning"],
+          name: "Environment Discovery & Blast Radius Mapping",
+          description: "Analyze filesystem impact, identify affected services, and map attack scope across local system.",
+          required_skills: ["file_reading", "code_execution", "directory_listing"],
           dependencies: ["t2"],
+          risk_level: "medium",
+        },
+        {
+          id: "t4",
+          name: "Timeline Compression & MITRE ATT&CK RCA",
+          description: "Synthesize gathered forensic events into a chronological timeline and correlate with MITRE ATT&CK tactics.",
+          required_skills: ["incident_compression", "mitre_mapping"],
+          dependencies: ["t3"],
           risk_level: "low",
         },
+        {
+          id: "t5",
+          name: "Response Action & Containment Rules",
+          description: "Generate firewall isolation rules, IP blocklists, and immediate remediation steps for administrator approval.",
+          required_skills: ["containment_actions", "file_writing"],
+          dependencies: ["t4"],
+          risk_level: "high",
+        },
       ],
-    };
+    },
+    "code-vulnerability-audit": {
+      name: "Code Security Vulnerability Audit",
+      description: "Static codebase analysis, OWASP Top 10 vulnerabilities, and patch script proposals.",
+      tasks: [
+        {
+          id: "t1",
+          name: "Static Code Analysis & Pattern Scanning",
+          description: "Scan source files for secrets, injection vulnerabilities, and risky functions.",
+          required_skills: ["file_reading", "code_execution"],
+          dependencies: [],
+          risk_level: "low",
+        },
+        {
+          id: "t2",
+          name: "Dependency & CVE Cross-Reference",
+          description: "Identify dependencies and cross-reference known CVE databases for active exploits.",
+          required_skills: ["web_search", "cve_database"],
+          dependencies: ["t1"],
+          risk_level: "low",
+        },
+        {
+          id: "t3",
+          name: "Remediation Script & Hardening Recommendations",
+          description: "Generate automated remediation script or patch diff to mitigate identified risks.",
+          required_skills: ["file_writing", "code_execution"],
+          dependencies: ["t2"],
+          risk_level: "medium",
+        },
+      ],
+    },
+  };
 
-    dagRenderer.render(mockDAG);
-    document.getElementById("dag-empty").style.display = "none";
+  function openWorkflowBuilderModal() {
+    if (workflowBuilderModal) {
+      workflowBuilderModal.classList.add("active");
+      if (!currentWorkflowTasks || currentWorkflowTasks.length === 0) {
+        loadWorkflowTemplate("soc-5-phase-investigation");
+      } else {
+        renderPipelineEditor(currentWorkflowTasks);
+      }
+    }
+  }
 
-    // Stage 1: Task 1 Running
-    dagRenderer.updateNodeStatus("t1", "running");
-    addTimelineStep("t1", "Information Gathering", "Universal Worker analyzing sources...", "running");
-    await sleep(1500);
+  function closeWorkflowBuilderModal() {
+    if (workflowBuilderModal) workflowBuilderModal.classList.remove("active");
+  }
 
-    // Stage 1: Task 1 Completed
-    dagRenderer.updateNodeStatus("t1", "completed");
-    updateTimelineStep("t1", "Extracted 4 relevant data records via web_search tool (142ms)", "completed", ["web_search"]);
+  function updateWorkflowModeUI() {
+    if (!toggleWorkflowModeBtn || !workflowModeIndicator) return;
+    if (isCustomWorkflowMode && activeCustomDag && activeCustomDag.tasks && activeCustomDag.tasks.length > 0) {
+      toggleWorkflowModeBtn.classList.add("active");
+      workflowModeIndicator.textContent = `🛠️ Custom Pipeline (${activeCustomDag.tasks.length} Phases)`;
+      toggleWorkflowModeBtn.title = "Custom pipeline active. Click to view or edit phases.";
+    } else {
+      toggleWorkflowModeBtn.classList.remove("active");
+      workflowModeIndicator.textContent = `🤖 Mode: Autonomous Auto-Plan`;
+      toggleWorkflowModeBtn.title = "Click to configure custom workflow pipeline";
+    }
+  }
 
-    // Stage 2: Task 2 Running
-    dagRenderer.updateNodeStatus("t2", "running");
-    addTimelineStep("t2", "Computational Analysis", "Spawning Worker with Python Executor sandboxing...", "running");
-    await sleep(1600);
+  function loadWorkflowTemplate(templateId) {
+    const tpl = (workflowTemplates && workflowTemplates[templateId]) || BUILTIN_WORKFLOW_TEMPLATES[templateId];
+    if (tpl && tpl.tasks) {
+      currentWorkflowTasks = JSON.parse(JSON.stringify(tpl.tasks));
+      renderPipelineEditor(currentWorkflowTasks);
+      updateTemplateButtonStates(templateId);
+    }
+  }
 
-    // Stage 2: Task 2 Completed
-    dagRenderer.updateNodeStatus("t2", "completed");
-    updateTimelineStep("t2", "Executed Python code sandbox, verified outputs (280ms)", "completed", ["execute_python"]);
+  function updateTemplateButtonStates(activeId) {
+    if (tplSocBtn) tplSocBtn.classList.toggle("active", activeId === "soc-5-phase-investigation");
+    if (tplAuditBtn) tplAuditBtn.classList.toggle("active", activeId === "code-vulnerability-audit");
+    if (tplClearBtn) tplClearBtn.classList.toggle("active", activeId === "blank");
+  }
 
-    // Stage 3: Task 3 Running
-    dagRenderer.updateNodeStatus("t3", "running");
-    addTimelineStep("t3", "Synthesize Results", "Response Assembler synthesizing final output...", "running");
-    await sleep(1200);
+  function renderPipelineEditor(tasks) {
+    if (!pipelineTasksList) return;
+    pipelineTasksList.innerHTML = "";
+    if (pipelineTaskCount) pipelineTaskCount.textContent = tasks.length;
 
-    // Stage 3: Task 3 Completed
-    dagRenderer.updateNodeStatus("t3", "completed");
-    updateTimelineStep("t3", "Complete multi-step response generated (85ms)", "completed", []);
+    tasks.forEach((task, idx) => {
+      const card = document.createElement("div");
+      card.className = "phase-card";
+      card.dataset.index = idx;
+      card.innerHTML = `
+        <div class="phase-header">
+          <div style="display: flex; align-items: center; gap: 8px;">
+            <span class="phase-badge">${escapeHtml(task.id.toUpperCase())}</span>
+            <input type="text" class="phase-input-name prompt-box modal-input" style="font-weight: 700; width: 290px; height: 32px;" value="${escapeHtml(task.name)}" placeholder="Phase Name">
+          </div>
+          <div style="display: flex; align-items: center; gap: 8px;">
+            <select class="phase-select-risk prompt-box modal-input" style="width: auto; padding: 4px 8px; font-size: 11px; height: 32px;">
+              <option value="low" ${task.risk_level === "low" ? "selected" : ""}>Risk: Low</option>
+              <option value="medium" ${task.risk_level === "medium" ? "selected" : ""}>Risk: Medium</option>
+              <option value="high" ${task.risk_level === "high" ? "selected" : ""}>Risk: High (HITL Gate)</option>
+              <option value="critical" ${task.risk_level === "critical" ? "selected" : ""}>Risk: Critical (HITL Gate)</option>
+            </select>
+            <button type="button" class="delete-phase-btn btn-reject" style="padding: 4px 8px; font-size: 11px;" title="Delete phase">✕</button>
+          </div>
+        </div>
+        <div style="margin-top: 8px;">
+          <input type="text" class="phase-input-desc prompt-box modal-input" style="font-size: 12px; height: 32px;" value="${escapeHtml(task.description)}" placeholder="Phase objective / instructions for worker LLM">
+        </div>
+        <div style="display: grid; grid-template-columns: 2fr 1fr; gap: 10px; margin-top: 8px;">
+          <div>
+            <label class="field-label" style="font-size: 10px; margin-bottom: 2px;">Required Skills (comma-separated)</label>
+            <input type="text" class="phase-input-skills prompt-box modal-input font-mono" style="font-size: 11px; height: 30px;" value="${escapeHtml((task.required_skills || []).join(', '))}" placeholder="e.g. alert_triage, file_reading">
+          </div>
+          <div>
+            <label class="field-label" style="font-size: 10px; margin-bottom: 2px;">Dependencies (e.g. t1)</label>
+            <input type="text" class="phase-input-deps prompt-box modal-input font-mono" style="font-size: 11px; height: 30px;" value="${escapeHtml((task.dependencies || []).join(', '))}" placeholder="None or t1">
+          </div>
+        </div>
+      `;
 
-    renderFinalSolution(
-      `### UAOS Execution Summary for "${query}"\n\n` +
-      `The problem was dynamically decomposed into a 3-stage TaskDAG, verified against dependency constraints, and executed with Universal Worker Agents.\n\n` +
-      `- **Data Collection**: Sourced and validated necessary background parameters.\n` +
-      `- **Computation**: Sandboxed execution in Python completed without error.\n` +
-      `- **Resolution**: All 3 tasks finished successfully with zero memory leaks.\n\n` +
-      `*Orchestrated durably with Temporal state recovery.*`,
-      3,
-      0
-    );
+      // Wire up delete
+      card.querySelector(".delete-phase-btn").addEventListener("click", () => {
+        currentWorkflowTasks.splice(idx, 1);
+        renderPipelineEditor(currentWorkflowTasks);
+      });
 
-    setRunningState(false);
+      pipelineTasksList.appendChild(card);
+    });
+  }
+
+  function syncCurrentTasksFromUI() {
+    if (!pipelineTasksList) return [];
+    const updated = [];
+    Array.from(pipelineTasksList.children).forEach((card, idx) => {
+      const nameInput = card.querySelector(".phase-input-name");
+      const descInput = card.querySelector(".phase-input-desc");
+      const riskSelect = card.querySelector(".phase-select-risk");
+      const skillsInput = card.querySelector(".phase-input-skills");
+      const depsInput = card.querySelector(".phase-input-deps");
+
+      const skillsRaw = skillsInput ? skillsInput.value.trim() : "";
+      const depsRaw = depsInput ? depsInput.value.trim() : "";
+      const skills = skillsRaw ? skillsRaw.split(",").map(s => s.trim()).filter(Boolean) : [];
+      const deps = depsRaw ? depsRaw.split(",").map(d => d.trim()).filter(Boolean) : [];
+
+      updated.push({
+        id: `t${idx + 1}`,
+        name: nameInput ? nameInput.value.trim() || `Phase ${idx + 1}` : `Phase ${idx + 1}`,
+        description: descInput ? descInput.value.trim() : "",
+        required_skills: skills,
+        dependencies: deps,
+        risk_level: riskSelect ? riskSelect.value : "low",
+      });
+    });
+    return updated;
+  }
+
+  if (openWorkflowBuilderBtn) {
+    openWorkflowBuilderBtn.addEventListener("click", openWorkflowBuilderModal);
+  }
+  if (closeWorkflowBuilderBtn) {
+    closeWorkflowBuilderBtn.addEventListener("click", closeWorkflowBuilderModal);
+  }
+  if (cancelWorkflowBuilderBtn) {
+    cancelWorkflowBuilderBtn.addEventListener("click", closeWorkflowBuilderModal);
+  }
+  if (workflowBuilderModal) {
+    workflowBuilderModal.addEventListener("click", (e) => {
+      if (e.target === workflowBuilderModal) closeWorkflowBuilderModal();
+    });
+  }
+
+  if (toggleWorkflowModeBtn) {
+    toggleWorkflowModeBtn.addEventListener("click", () => {
+      if (!isCustomWorkflowMode) {
+        openWorkflowBuilderModal();
+      } else {
+        if (confirm("Switch back to Autonomous Auto-Plan mode?")) {
+          isCustomWorkflowMode = false;
+          updateWorkflowModeUI();
+          showToast("Switched to Autonomous Auto-Plan mode.");
+        } else {
+          openWorkflowBuilderModal();
+        }
+      }
+    });
+  }
+
+  if (tplSocBtn) {
+    tplSocBtn.addEventListener("click", () => loadWorkflowTemplate("soc-5-phase-investigation"));
+  }
+  if (tplAuditBtn) {
+    tplAuditBtn.addEventListener("click", () => loadWorkflowTemplate("code-vulnerability-audit"));
+  }
+  if (tplClearBtn) {
+    tplClearBtn.addEventListener("click", () => {
+      currentWorkflowTasks = [
+        {
+          id: "t1",
+          name: "Initial Phase",
+          description: "Execute primary investigation or analysis",
+          required_skills: ["file_reading"],
+          dependencies: [],
+          risk_level: "low",
+        },
+      ];
+      renderPipelineEditor(currentWorkflowTasks);
+      updateTemplateButtonStates("blank");
+    });
+  }
+
+  if (addPhaseBtn) {
+    addPhaseBtn.addEventListener("click", () => {
+      const current = syncCurrentTasksFromUI();
+      const nextId = `t${current.length + 1}`;
+      current.push({
+        id: nextId,
+        name: `Phase ${current.length + 1}`,
+        description: "Describe phase objective...",
+        required_skills: ["file_reading"],
+        dependencies: current.length > 0 ? [`t${current.length}`] : [],
+        risk_level: "low",
+      });
+      currentWorkflowTasks = current;
+      renderPipelineEditor(currentWorkflowTasks);
+    });
+  }
+
+  if (applyWorkflowBtn) {
+    applyWorkflowBtn.addEventListener("click", () => {
+      const compiledTasks = syncCurrentTasksFromUI();
+      if (!compiledTasks.length) {
+        showToast("Pipeline must have at least one phase", "error");
+        return;
+      }
+
+      currentWorkflowTasks = compiledTasks;
+      activeCustomDag = {
+        goal: promptInput ? promptInput.value.trim() || "Custom Investigation Pipeline" : "Custom Pipeline",
+        reasoning: "User-defined multi-phase pipeline with active supervisor ReAct evaluation",
+        tasks: compiledTasks,
+      };
+      isCustomWorkflowMode = true;
+      updateWorkflowModeUI();
+      closeWorkflowBuilderModal();
+      showToast(`Custom workflow pipeline active (${compiledTasks.length} phases)!`);
+    });
+  }
+
+  // Pre-fetch workflow templates from API if available
+  async function fetchWorkflowTemplates() {
+    try {
+      const res = await fetch("/api/workflows/templates");
+      if (res.ok) {
+        workflowTemplates = await res.json();
+      }
+    } catch (e) {
+      workflowTemplates = BUILTIN_WORKFLOW_TEMPLATES;
+    }
+  }
+  fetchWorkflowTemplates();
+
+  function escapeHtml(str) {
+    if (!str) return "";
+    return String(str)
+      .replace(/&/g, "&amp;")
+      .replace(/</g, "&lt;")
+      .replace(/>/g, "&gt;")
+      .replace(/"/g, "&quot;")
+      .replace(/'/g, "&#039;");
   }
 
   // 9. Helpers
   function renderFinalSolution(markdownText, completedCount, failedCount) {
     solutionBody.innerHTML = formatMarkdown(markdownText);
     showToast(`Execution finished! ${completedCount} completed, ${failedCount} failed.`);
+  }
+
+  function renderSupervisorEvaluationsList(evalList) {
+    if (!evalList || !Array.isArray(evalList)) return;
+    evalList.forEach((evalObj) => {
+      const tid = evalObj.task_id;
+      let stepEl = document.getElementById(`step-${tid}`);
+      if (!stepEl && activeDag) {
+        const taskObj = (activeDag.tasks || []).find(t => t.id === tid);
+        addTimelineStep(tid, taskObj ? taskObj.name : `Task ${tid}`, taskObj ? taskObj.description : "", "completed");
+        stepEl = document.getElementById(`step-${tid}`);
+      }
+      if (stepEl) {
+        let verdictEl = document.getElementById(`verdict-${tid}`);
+        if (!verdictEl) {
+          verdictEl = document.createElement("div");
+          verdictEl.id = `verdict-${tid}`;
+          const contentDiv = stepEl.querySelector(".step-content");
+          if (contentDiv) contentDiv.appendChild(verdictEl);
+        }
+        const isPass = evalObj.decision === "pass" || evalObj.decision === "accurate" || evalObj.decision === "approved";
+        const decision = isPass ? "pass" : "retry";
+        const conf = evalObj.confidence !== undefined ? Math.round(evalObj.confidence * 100) : 100;
+        verdictEl.className = `supervisor-verdict ${decision === "pass" ? "pass" : "retry"}`;
+        verdictEl.innerHTML = `
+          <div style="font-weight: 700; display: flex; justify-content: space-between; align-items: center;">
+            <span>${decision === "pass" ? "🛡️ Supervisor Approved" : `🔄 Supervisor ReAct Retry (Attempt ${evalObj.retry_count || 1})`}</span>
+            <span style="font-size: 11px; opacity: 0.85;">Confidence: ${conf}%</span>
+          </div>
+          <div style="font-size: 11px; margin-top: 4px; line-height: 1.4;">${escapeHtml(evalObj.feedback || "Task execution verified by Supervisor")}</div>
+        `;
+      }
+    });
   }
 
   function addTimelineStep(id, title, desc, status) {
@@ -787,14 +1174,57 @@ document.addEventListener("DOMContentLoaded", () => {
 
   function formatMarkdown(text) {
     if (!text) return "";
-    return text
-      .replace(/^### (.*$)/gim, "<h3>$1</h3>")
-      .replace(/^## (.*$)/gim, "<h2>$1</h2>")
-      .replace(/^# (.*$)/gim, "<h1>$1</h1>")
-      .replace(/\*\*(.*)\*\*/gim, "<strong>$1</strong>")
-      .replace(/\*(.*)\*/gim, "<em>$1</em>")
-      .replace(/`([^`]+)`/gim, "<code>$1</code>")
-      .replace(/\n/gim, "<br>");
+    try {
+      if (typeof marked !== "undefined") {
+        if (typeof marked.setOptions === "function") {
+          marked.setOptions({
+            gfm: true,
+            breaks: true,
+          });
+        }
+        if (typeof marked.parse === "function") {
+          return marked.parse(text);
+        } else if (typeof marked === "function") {
+          return marked(text);
+        }
+      }
+    } catch (e) {
+      console.warn("marked parsing error, using fallback:", e);
+    }
+
+    // Robust fallback parser
+    let html = escapeHtml(text);
+    // Fenced code blocks
+    html = html.replace(/```([a-zA-Z0-9_-]*)\n([\s\S]*?)```/g, (match, lang, code) => {
+      return `<pre><code class="language-${lang}">${code}</code></pre>`;
+    });
+    // Inline code
+    html = html.replace(/`([^`]+)`/g, "<code>$1</code>");
+    // Headers
+    html = html.replace(/^### (.*$)/gim, "<h3>$1</h3>");
+    html = html.replace(/^## (.*$)/gim, "<h2>$1</h2>");
+    html = html.replace(/^# (.*$)/gim, "<h1>$1</h1>");
+    // Bold / italic
+    html = html.replace(/\*\*([^*]+)\*\*/g, "<strong>$1</strong>");
+    html = html.replace(/\*([^*]+)\*/g, "<em>$1</em>");
+    // Horizontal rules
+    html = html.replace(/^---$/gm, "<hr>");
+    // Tables fallback
+    html = html.replace(/((?:\|[^\n]+\|\r?\n)+)/g, (match) => {
+      const rows = match.trim().split("\n").map(r => r.trim()).filter(Boolean);
+      if (rows.length < 2) return match;
+      let tHtml = "<table>";
+      rows.forEach((r, idx) => {
+        if (r.match(/^\|(?:\s*:?-+:?\s*\|)+$/)) return;
+        const cells = r.split("|").slice(1, -1).map(c => c.trim());
+        const tag = idx === 0 ? "th" : "td";
+        tHtml += `<tr>${cells.map(c => `<${tag}>${c}</${tag}>`).join("")}</tr>`;
+      });
+      tHtml += "</table>";
+      return tHtml;
+    });
+    html = html.replace(/\n\n/g, "<p></p>").replace(/\n/g, "<br>");
+    return html;
   }
 
   function showToast(message) {

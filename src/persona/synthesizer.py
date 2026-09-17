@@ -64,40 +64,28 @@ class PersonaSynthesizer:
         )
 
         return f"""# Your Role
-You are a specialized worker agent executing ONE specific task. Your entire focus is on completing this task accurately using your available tools.
+You are a worker agent executing ONE task on the host machine using available tools.
 
 # Your Task
 **{task.name}**
-
 {task.description}
 
 # Expected Output
 {task.expected_output}
 
 # Available Tools
-When you need to use a tool, output a tool call in this EXACT JSON format on its own line:
-{{"tool": "<tool_name>", "args": {{"param1": "value1", "param2": "value2"}}}}
+Tool call format:
+{{"tool": "<tool_name>", "args": {{"param1": "value1"}}}}
 
 {tool_block}
 
-# Workflow
-1. Think about what you need to do.
-2. If you need information or need to perform an action, call a tool.
-3. After receiving a tool result, analyze it and decide your next step.
-4. You may call multiple tools sequentially.
-5. When you have enough information to provide a complete answer, write:
-
-FINAL_ANSWER: <your complete, well-structured response>
-
-6. If you truly cannot complete the task with available tools, write:
-
-CANNOT_COMPLETE: <specific explanation of what's missing>
-
-# Rules
-- Use tools proactively — don't guess when you can look up or compute.
-- Be precise and structured — downstream tasks depend on your output.
-- Do NOT invent tool names. Only use tools listed above.
-- Do NOT call a tool and provide a FINAL_ANSWER in the same response.
+# Workflow & Rules
+1. Always call tools first to inspect real paths and compute data.
+2. Host environment with direct filesystem/drive access (C:, D:). Never claim lack of access.
+3. When done, output: FINAL_ANSWER: <complete findings, table, and data>.
+4. If truly impossible with tools, output: CANNOT_COMPLETE: <reason>.
+5. Never return an empty FINAL_ANSWER. Always include tool results.
+6. Do NOT invent tools. Only use tools listed above.
 {context_block}"""
 
     def synthesize_from_profile(
@@ -192,8 +180,12 @@ FINAL_ANSWER: <your complete, well-structured response>
 CANNOT_COMPLETE: <specific explanation of what's missing>
 
 # Rules
-- Use tools proactively — don't guess when you can look up or compute.
-- Be precise and structured — downstream tasks depend on your output.
+- You run on the host machine. Tools have real access to filesystem and drives (C:, D:).
+- Always execute tools first to get real data (e.g. call list_directory or get_disk_usage).
+- After receiving tool results, provide your full response under: FINAL_ANSWER: <complete findings, table, and data>.
+- Never return an empty or blank FINAL_ANSWER. Always include the data and findings obtained from the tools.
+- Never claim to lack filesystem access or be in a sandbox. Call tools to inspect real paths.
+- Use tools proactively — do not guess.
 - Do NOT invent tool names. Only use tools listed above.
 - Do NOT call a tool and provide a FINAL_ANSWER in the same response.
 {context_block}"""
@@ -228,18 +220,27 @@ CANNOT_COMPLETE: <specific explanation of what's missing>
         return "\n\n".join(lines)
 
     def _example_args(self, tool: ToolSpec) -> str:
-        """Generate an example args dict for the tool."""
+        """Generate a realistic example args dict for the tool."""
         example = {}
         for pname, pinfo in tool.parameters.items():
             ptype = pinfo.get("type", "string")
-            if ptype == "string":
-                example[pname] = f"<{pname}>"
+            pname_lower = pname.lower()
+            if "path" in pname_lower or "dir" in pname_lower or "folder" in pname_lower:
+                example[pname] = "D:\\"
+            elif "file" in pname_lower:
+                example[pname] = "D:\\example.txt"
+            elif "code" in pname_lower or "script" in pname_lower:
+                example[pname] = "print('Hello')"
+            elif "query" in pname_lower or "search" in pname_lower:
+                example[pname] = "system metrics"
+            elif "command" in pname_lower or "cmd" in pname_lower:
+                example[pname] = "dir D:\\"
             elif ptype == "integer":
-                example[pname] = 5
+                example[pname] = 2
             elif ptype == "boolean":
                 example[pname] = True
             else:
-                example[pname] = f"<{pname}>"
+                example[pname] = "value"
         return json.dumps(example)
 
     def _format_upstream_context(

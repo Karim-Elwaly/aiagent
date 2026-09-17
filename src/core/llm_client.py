@@ -170,33 +170,52 @@ class LocalLLMClient:
 
         Returns True if the server responds, False otherwise.
         """
-        try:
-            async with httpx.AsyncClient(timeout=5.0) as client:
-                resp = await client.get(f"{self.base_url}/models")
-                return resp.status_code == 200
-        except (httpx.ConnectError, httpx.TimeoutException):
-            return False
+        urls_to_try = [
+            f"{self.base_url}/models",
+            self.base_url,
+        ]
+        if self.base_url.endswith("/v1"):
+            parent = self.base_url[:-3]
+            urls_to_try.extend([f"{parent}/api/tags", parent])
+
+        for url in urls_to_try:
+            try:
+                async with httpx.AsyncClient(timeout=3.0) as client:
+                    resp = await client.get(url)
+                    if resp.status_code in (200, 204, 301, 302, 307, 308):
+                        return True
+            except Exception:
+                continue
+        return False
 
     async def list_models(self) -> list[str]:
         """Fetch list of available model identifiers from the server.
 
         Compatible with OpenAI /v1/models response format used by LM Studio, Ollama, vLLM.
         """
-        try:
-            async with httpx.AsyncClient(timeout=5.0) as client:
-                resp = await client.get(f"{self.base_url}/models")
-                if resp.status_code == 200:
-                    data = resp.json()
-                    # Handle {"data": [{"id": "..."}, ...]} (OpenAI/LM Studio format)
-                    if isinstance(data, dict) and "data" in data and isinstance(data["data"], list):
-                        return [m["id"] for m in data["data"] if "id" in m]
-                    # Handle Ollama {"models": [{"name": "..."}, ...]} format
-                    if isinstance(data, dict) and "models" in data and isinstance(data["models"], list):
-                        return [m["name"] for m in data["models"] if "name" in m]
-            return []
-        except Exception as e:
-            logger.warning("Failed to list models from %s: %s", self.base_url, e)
-            return []
+        urls_to_try = [f"{self.base_url}/models"]
+        if self.base_url.endswith("/v1"):
+            urls_to_try.append(f"{self.base_url[:-3]}/api/tags")
+
+        for url in urls_to_try:
+            try:
+                async with httpx.AsyncClient(timeout=5.0) as client:
+                    resp = await client.get(url)
+                    if resp.status_code == 200:
+                        data = resp.json()
+                        # Handle {"data": [{"id": "..."}, ...]} (OpenAI/LM Studio format)
+                        if isinstance(data, dict) and "data" in data and isinstance(data["data"], list):
+                            models = [m["id"] for m in data["data"] if "id" in m]
+                            if models:
+                                return models
+                        # Handle Ollama {"models": [{"name": "..."}, ...]} format
+                        if isinstance(data, dict) and "models" in data and isinstance(data["models"], list):
+                            models = [m["name"] for m in data["models"] if "name" in m]
+                            if models:
+                                return models
+            except Exception as e:
+                logger.debug("Failed to list models from %s: %s", url, e)
+        return []
 
 
     def __repr__(self) -> str:

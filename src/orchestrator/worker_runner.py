@@ -20,6 +20,7 @@ from src.core.config import get_settings
 from src.orchestrator.activities import (
     assemble_response,
     escalate_approval,
+    evaluate_task_output,
     execute_task,
     notify_approval_required,
     plan_tasks,
@@ -46,10 +47,20 @@ async def main() -> None:
         settings.temporal_namespace,
     )
 
-    client = await Client.connect(
-        settings.temporal_host,
-        namespace=settings.temporal_namespace,
-    )
+    while True:
+        try:
+            client = await Client.connect(
+                settings.temporal_host,
+                namespace=settings.temporal_namespace,
+            )
+            break
+        except Exception as e:
+            logger.info(
+                "Temporal server not reached on %s (%s). Retrying in 10s... (Standalone engine is handling tasks in the meantime)",
+                settings.temporal_host,
+                e,
+            )
+            await asyncio.sleep(10.0)
 
     logger.info(
         "Starting worker on task queue: %s", settings.temporal_task_queue
@@ -66,6 +77,7 @@ async def main() -> None:
             assemble_response,
             escalate_approval,
             notify_approval_required,
+            evaluate_task_output,
         ],
     )
 
