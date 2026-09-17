@@ -53,6 +53,8 @@ def determine_risk_level(name: str, description: str) -> RiskLevel:
 
     if tokens & CRITICAL_KEYWORDS:
         return RiskLevel.CRITICAL
+    if "readonly" in tokens or "read_only" in tokens or "read only" in text:
+        return RiskLevel.LOW
     if tokens & HIGH_KEYWORDS:
         return RiskLevel.HIGH
     return RiskLevel.LOW

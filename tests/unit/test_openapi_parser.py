@@ -119,7 +119,8 @@ async def test_execute_openapi_request():
     mock_resp.status_code = 200
     mock_resp.reason_phrase = "OK"
     mock_resp.headers = {"content-type": "application/json"}
-    mock_resp.json.return_value = [{"id": 1, "name": "Fido"}]
+    mock_resp.json = lambda: [{"id": 1, "name": "Fido"}]
+    mock_resp.text = '[{"id": 1, "name": "Fido"}]'
 
     with patch("httpx.AsyncClient.request", return_value=mock_resp) as mock_req:
         output = await execute_openapi_request(

@@ -9,6 +9,7 @@ ending with _SPEC (e.g., WEB_SEARCH_SPEC, CODE_EXECUTOR_SPEC).
 from __future__ import annotations
 
 import importlib
+import importlib.util
 import logging
 import pkgutil
 
@@ -77,7 +78,6 @@ def register_all_tools(registry: ToolRegistry) -> int:
 
     # Auto-discover user-generated tools from data/custom_tools/
     from src.core.config import ROOT_DIR
-    import importlib.util
 
     custom_tools_dir = ROOT_DIR / "data" / "custom_tools"
     if custom_tools_dir.exists():

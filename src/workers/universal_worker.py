@@ -404,4 +404,19 @@ class UniversalWorkerAgent:
         except (json.JSONDecodeError, IndexError):
             pass
 
+        # ReAct style format: ACTION: <tool_name>\n[ACTION INPUT:] {"arg": val}
+        action_match = re.search(r"ACTION:\s*([a-zA-Z0-9_\-]+)", response, re.IGNORECASE)
+        if action_match:
+            tool_name = action_match.group(1).strip()
+            remainder = response[action_match.end():]
+            json_match = re.search(r"(\{.*?\})", remainder, re.DOTALL)
+            if json_match:
+                try:
+                    args = json.loads(json_match.group(1))
+                    if isinstance(args, dict):
+                        return {"tool": tool_name, "args": args}
+                except json.JSONDecodeError:
+                    pass
+            return {"tool": tool_name, "args": {}}
+
         return None

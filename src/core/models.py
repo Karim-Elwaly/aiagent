@@ -61,7 +61,8 @@ class Task(BaseModel):
         )
     )
     expected_output: str = Field(
-        description="Description of what this task should produce"
+        default="",
+        description="Description of what this task should produce",
     )
     dependencies: list[str] = Field(
         default_factory=list,

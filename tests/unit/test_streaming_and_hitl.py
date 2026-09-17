@@ -148,6 +148,7 @@ async def test_universal_worker_streaming():
         id="t-stream",
         name="Stream Task",
         description="Add 2 and 3",
+        expected_output="Sum of numbers",
         required_skills=["math"],
         timeout_seconds=10,
     )
