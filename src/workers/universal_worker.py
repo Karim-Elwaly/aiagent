@@ -77,7 +77,8 @@ class UniversalWorkerAgent:
         user_query: str = "",
         on_token: Callable[[str], None] | None = None,
         on_event: Callable[[dict[str, Any]], None] | None = None,
-        on_heartbeat: Callable[[], None] | None = None,
+        on_heartbeat: Callable[..., None] | None = None,
+        resume_checkpoint: dict[str, Any] | None = None,
     ) -> TaskResult:
         """Execute a single task via the guarded ReAct loop.
 
@@ -125,6 +126,21 @@ class UniversalWorkerAgent:
             {"role": "user", "content": user_content},
         ]
 
+        start_iteration = 1
+        if resume_checkpoint and isinstance(resume_checkpoint, dict):
+            if "messages" in resume_checkpoint and isinstance(resume_checkpoint["messages"], list):
+                messages = resume_checkpoint["messages"]
+            if "tool_calls_made" in resume_checkpoint:
+                tool_calls_made = list(resume_checkpoint["tool_calls_made"])
+            start_iteration = int(resume_checkpoint.get("step", 0)) + 1
+            logger.info(
+                "Worker resuming task '%s' from Temporal checkpoint at step %d/%d (restored %d previous tool calls)",
+                task.id,
+                start_iteration,
+                self.max_iterations,
+                len(tool_calls_made),
+            )
+
         logger.info(
             "Worker starting task '%s' (%s) with %d tools, max %d iterations",
             task.name,
@@ -133,7 +149,7 @@ class UniversalWorkerAgent:
             self.max_iterations,
         )
 
-        for iteration in range(1, self.max_iterations + 1):
+        for iteration in range(start_iteration, self.max_iterations + 1):
             logger.debug(
                 "Task '%s' iteration %d/%d",
                 task.id,
@@ -143,6 +159,13 @@ class UniversalWorkerAgent:
 
             if on_heartbeat:
                 try:
+                    on_heartbeat({
+                        "task_id": task.id,
+                        "step": iteration - 1,
+                        "messages": messages,
+                        "tool_calls_made": tool_calls_made,
+                    })
+                except TypeError:
                     on_heartbeat()
                 except Exception:
                     pass
@@ -343,7 +366,11 @@ class UniversalWorkerAgent:
                 })
 
             try:
-                result = await tool_spec.function(**tool_args)
+                import inspect
+                if inspect.iscoroutinefunction(tool_spec.function):
+                    result = await tool_spec.function(**tool_args)
+                else:
+                    result = await asyncio.to_thread(tool_spec.function, **tool_args)
                 result_str = str(result)
 
                 # Guardrail 3: Cap output size
@@ -387,6 +414,13 @@ class UniversalWorkerAgent:
 
             if on_heartbeat:
                 try:
+                    on_heartbeat({
+                        "task_id": task.id,
+                        "step": iteration,
+                        "messages": messages,
+                        "tool_calls_made": tool_calls_made,
+                    })
+                except TypeError:
                     on_heartbeat()
                 except Exception:
                     pass

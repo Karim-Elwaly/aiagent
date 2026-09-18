@@ -31,6 +31,7 @@ class Settings(BaseSettings):
     temporal_host: str = "localhost:7234"
     temporal_namespace: str = "default"
     temporal_task_queue: str = "uaos-workers"
+    temporal_max_concurrent_activities: int = 3  # Max parallel tasks in a single ready batch
 
     # ── Worker Configuration ─────────────────────────────
     worker_max_iterations: int = 8  # ReAct loop iteration limit

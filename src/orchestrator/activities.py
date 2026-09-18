@@ -250,6 +250,20 @@ async def execute_task(
         max_output_chars=settings.worker_max_output_chars,
     )
 
+    # Temporal Native Heartbeat Checkpointing
+    resume_checkpoint = None
+    try:
+        details = activity.info().heartbeat_details
+        if details and isinstance(details[0], dict) and "messages" in details[0]:
+            resume_checkpoint = details[0]
+            logger.info(
+                "Temporal Activity '%s' restoring state from server heartbeat details (step %s)",
+                task.id,
+                resume_checkpoint.get("step", 0),
+            )
+    except Exception:
+        pass
+
     # Connect streaming event bus
     bus = get_event_bus()
     wf_id = task_dict.get("_workflow_id")
@@ -265,9 +279,12 @@ async def execute_task(
     def handle_event(ev: dict) -> None:
         bus.publish(wf_id, ev)
 
-    def handle_heartbeat() -> None:
+    def handle_heartbeat(checkpoint_data: dict[str, Any] | None = None) -> None:
         try:
-            activity.heartbeat("react_step", task.id)
+            if checkpoint_data:
+                activity.heartbeat(checkpoint_data)
+            else:
+                activity.heartbeat("react_step", task.id)
         except Exception:
             pass
 
@@ -282,6 +299,7 @@ async def execute_task(
         on_token=handle_token,
         on_event=handle_event,
         on_heartbeat=handle_heartbeat,
+        resume_checkpoint=resume_checkpoint,
     )
 
     logger.info(

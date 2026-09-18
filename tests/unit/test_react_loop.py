@@ -263,7 +263,7 @@ async def test_heartbeat_callback_invoked(mock_llm, simple_task):
     worker = UniversalWorkerAgent(llm=mock_llm)
     heartbeat_calls = []
 
-    def on_heartbeat():
+    def on_heartbeat(*args, **kwargs):
         heartbeat_calls.append(True)
 
     result = await worker.execute(
@@ -274,4 +274,68 @@ async def test_heartbeat_callback_invoked(mock_llm, simple_task):
     )
     assert result.status == TaskStatus.COMPLETED
     assert len(heartbeat_calls) >= 1
+
+
+@pytest.mark.asyncio
+async def test_resume_from_heartbeat_checkpoint(mock_llm, simple_task):
+    # Simulated previous checkpoint at step 2 with prior tool call
+    checkpoint = {
+        "task_id": "t1",
+        "step": 2,
+        "messages": [
+            {"role": "system", "content": "You are a math helper"},
+            {"role": "user", "content": "Compute 2 + 2"},
+            {"role": "assistant", "content": "Let me calculate."},
+            {"role": "user", "content": "Observation: Result is 4"},
+        ],
+        "tool_calls_made": ["math_tool_call"],
+    }
+
+    mock_llm.chat.return_value = "FINAL_ANSWER: 4"
+    worker = UniversalWorkerAgent(llm=mock_llm, max_iterations=5)
+
+    result = await worker.execute(
+        simple_task,
+        persona="You are a math helper",
+        tools=[],
+        resume_checkpoint=checkpoint,
+    )
+
+    assert result.status == TaskStatus.COMPLETED
+    assert result.output.strip() == "4"
+    assert "math_tool_call" in result.tool_calls_made
+
+
+@pytest.mark.asyncio
+async def test_sync_tool_execution_safety(mock_llm, simple_task):
+    # Register a standard synchronous function (def instead of async def)
+    def sync_multiply(a: int, b: int) -> int:
+        return a * b
+
+    sync_tool = ToolSpec(
+        tool_id="sync_mult",
+        name="sync_multiply",
+        description="Multiply two numbers synchronously",
+        skills_provided=["math"],
+        parameters={"a": {"type": "integer"}, "b": {"type": "integer"}},
+        risk_level=RiskLevel.LOW,
+        function=sync_multiply,
+    )
+
+    mock_llm.chat.side_effect = [
+        'THOUGHT: Multiplying 3 by 4.\nACTION: {"tool": "sync_multiply", "args": {"a": 3, "b": 4}}',
+        'FINAL_ANSWER: 12',
+    ]
+
+    worker = UniversalWorkerAgent(llm=mock_llm, max_iterations=3)
+    result = await worker.execute(
+        simple_task,
+        persona="You are a math helper",
+        tools=[sync_tool],
+    )
+
+    assert result.status == TaskStatus.COMPLETED
+    assert result.output.strip() == "12"
+    assert "sync_multiply" in result.tool_calls_made
+
 

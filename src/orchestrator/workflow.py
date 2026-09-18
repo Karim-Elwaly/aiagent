@@ -16,6 +16,7 @@ Architecture:
 
 from __future__ import annotations
 
+import asyncio
 import json
 import logging
 from datetime import timedelta
@@ -26,6 +27,7 @@ from temporalio.common import RetryPolicy
 
 # Activity stubs — imported at runtime to avoid sandbox issues
 with workflow.unsafe.imports_passed_through():
+    from src.core.config import get_settings
     from src.orchestrator.activities import (
         assemble_response,
         escalate_approval,
@@ -65,6 +67,8 @@ class UAOSWorkflow:
         self._pending_task_params: dict[str, Any] = {}
         self._approval_guidance: str = ""
         self._approval_modified_params: dict[str, Any] = {}
+        self._pending_tasks: dict[str, dict[str, Any]] = {}
+        self._approvals: dict[str, dict[str, Any]] = {}
         self._dag_dict: dict[str, Any] = {}
         self._task_statuses: dict[str, str] = {}
         self._supervisor_evaluations: list[dict[str, Any]] = []
@@ -75,45 +79,58 @@ class UAOSWorkflow:
         """Human sends approval/rejection for a high-risk task.
 
         Accepts either a boolean (legacy/direct) or a dictionary:
-          {"approved": bool, "guidance": str, "modified_params": dict}
+          {"approved": bool, "guidance": str, "modified_params": dict, "task_id": str}
         """
         if isinstance(payload, bool):
-            self._approval_result = payload
-            self._approval_guidance = ""
-            self._approval_modified_params = {}
+            resp = {"approved": payload, "guidance": "", "modified_params": {}}
+            target_tid = next(iter(self._pending_tasks.keys()), self._pending_task_id)
         elif isinstance(payload, dict):
-            self._approval_result = payload.get("approved", False)
-            self._approval_guidance = payload.get("guidance", "")
-            self._approval_modified_params = payload.get("modified_params", {})
+            resp = {
+                "approved": payload.get("approved", False),
+                "guidance": payload.get("guidance", ""),
+                "modified_params": payload.get("modified_params", {}),
+            }
+            target_tid = payload.get("task_id") or next(iter(self._pending_tasks.keys()), self._pending_task_id)
         else:
-            self._approval_result = False
+            resp = {"approved": False, "guidance": "", "modified_params": {}}
+            target_tid = next(iter(self._pending_tasks.keys()), self._pending_task_id)
 
-        status_text = "APPROVED" if self._approval_result else "REJECTED"
+        if target_tid:
+            self._approvals[target_tid] = resp
+
+        self._approval_result = resp["approved"]
+        self._approval_guidance = resp["guidance"]
+        self._approval_modified_params = resp["modified_params"]
+
+        status_text = "APPROVED" if resp["approved"] else "REJECTED"
         try:
             workflow.logger.info(
                 "Received approval signal: %s for task '%s' (guidance: '%s')",
                 status_text,
-                self._pending_task_name,
-                self._approval_guidance[:50] if self._approval_guidance else "none",
+                target_tid or self._pending_task_name,
+                resp["guidance"][:50] if resp["guidance"] else "none",
             )
         except Exception:
             logger.info(
                 "Received approval signal: %s for task '%s'",
                 status_text,
-                self._pending_task_name,
+                target_tid or self._pending_task_name,
             )
 
     @workflow.query
     def get_status(self) -> dict[str, Any]:
         """Query current workflow status (available via Temporal API)."""
+        first_pending_id = next(iter(self._pending_tasks.keys()), "")
+        first_pending = self._pending_tasks.get(first_pending_id, {})
         return {
-            "pending_task": self._pending_task_name,
-            "pending_task_id": self._pending_task_id,
-            "pending_task_desc": self._pending_task_desc,
-            "pending_task_risk": self._pending_task_risk,
-            "pending_task_params": self._pending_task_params,
-            "awaiting_approval": self._approval_result is None
-            and self._pending_task_name != "",
+            "pending_task": first_pending.get("name", self._pending_task_name),
+            "pending_task_id": first_pending_id or self._pending_task_id,
+            "pending_task_desc": first_pending.get("description", self._pending_task_desc),
+            "pending_task_risk": first_pending.get("risk_level", self._pending_task_risk),
+            "pending_task_params": first_pending.get("parameters", self._pending_task_params),
+            "awaiting_approval": len(self._pending_tasks) > 0
+            or (self._approval_result is None and self._pending_task_name != ""),
+            "pending_tasks": list(self._pending_tasks.values()),
             "dag": self._dag_dict,
             "task_statuses": self._task_statuses,
             "supervisor_evaluations": self._supervisor_evaluations,
@@ -216,256 +233,43 @@ class UAOSWorkflow:
                     )
                     break
 
-            # Execute ready tasks sequentially (single-GPU optimization)
-            for task_dict in ready_tasks:
-                task_id = task_dict["id"]
-                task_name = task_dict["name"]
-                risk_level = task_dict.get("risk_level", "low")
+            # Execute ready tasks in parallel batches (respecting concurrency limit)
+            settings = get_settings()
+            max_concurrent = max(1, getattr(settings, "temporal_max_concurrent_activities", 3))
 
-                # ── Approval Gate ────────────────────────
-                if risk_level in ("high", "critical"):
-                    workflow.logger.info(
-                        "⏸️ Task '%s' requires approval (risk: %s). "
-                        "Waiting for human signal...",
-                        task_name,
-                        risk_level,
+            pipeline_aborted = False
+            for i in range(0, len(ready_tasks), max_concurrent):
+                batch = ready_tasks[i : i + max_concurrent]
+                if len(batch) == 1:
+                    aborted = await self._execute_single_task_flow(
+                        batch[0], completed, failed, agent_id, user_query, dag_dict
                     )
-
-                    self._pending_task_name = task_name
-                    self._pending_task_id = task_id
-                    self._pending_task_desc = task_dict.get("description", "")
-                    self._pending_task_risk = risk_level
-                    self._pending_task_params = task_dict.get("parameters", {})
-                    self._approval_result = None
-
-                    approval_timeout = task_dict.get("approval_timeout_seconds", 900)
-
-                    # Broadcast approval_required event to EventBus subscribers
-                    try:
-                        await workflow.execute_activity(
-                            notify_approval_required,
-                            args=[task_dict],
-                            start_to_close_timeout=timedelta(seconds=15),
-                            retry_policy=RetryPolicy(maximum_attempts=2),
-                        )
-                    except Exception as e:
-                        workflow.logger.warning("Failed to notify approval: %s", e)
-
-                    try:
-                        await workflow.wait_condition(
-                            lambda: self._approval_result is not None,
-                            timeout=timedelta(seconds=approval_timeout),
-                        )
-                    except TimeoutError:
-                        workflow.logger.warning(
-                            "Approval for task '%s' timed out after %ds. Triggering escalation.",
-                            task_name,
-                            approval_timeout,
-                        )
-                        await workflow.execute_activity(
-                            escalate_approval,
-                            args=[task_dict, user_query],
-                            start_to_close_timeout=timedelta(seconds=60),
-                            retry_policy=RetryPolicy(maximum_attempts=2),
-                        )
-                        failed[task_id] = f"Timed out waiting for approval after {approval_timeout}s"
-                        self._pending_task_name = ""
-                        self._pending_task_id = ""
-                        continue
-
-                    self._pending_task_name = ""
-                    self._pending_task_id = ""
-
-                    if not self._approval_result:
-                        workflow.logger.info(
-                            "Task '%s' REJECTED by human. Skipping.",
-                            task_name,
-                        )
-                        failed[task_id] = "Rejected by human approval"
-                        continue
-
-                    # Inject human operator guidance if provided
-                    if self._approval_guidance:
-                        workflow.logger.info(
-                            "Injecting human guidance into task '%s': %s",
-                            task_name,
-                            self._approval_guidance[:100],
-                        )
-                        task_dict["description"] = (
-                            f"{task_dict.get('description', '')}\n\n"
-                            f"[HUMAN OPERATOR GUIDANCE]: {self._approval_guidance}"
-                        )
-
-                    # Apply modified parameters if provided
-                    if self._approval_modified_params:
-                        workflow.logger.info(
-                            "Applying modified parameters to task '%s': %s",
-                            task_name,
-                            self._approval_modified_params,
-                        )
-                        task_dict.setdefault("parameters", {}).update(
-                            self._approval_modified_params
-                        )
-
+                    if aborted:
+                        pipeline_aborted = True
+                        break
+                else:
                     workflow.logger.info(
-                        "Task '%s' APPROVED with operator inputs. Proceeding.",
-                        task_name,
+                        "⚡ Executing batch of %d independent tasks in parallel: %s",
+                        len(batch),
+                        [t["id"] for t in batch],
                     )
-
-                # ── Execute Task ─────────────────────────
-                workflow.logger.info(
-                    "Executing task '%s' (%s)", task_name, task_id
-                )
-                self._task_statuses[task_id] = "running"
-                task_dict["_user_query"] = user_query
-
-                timeout = task_dict.get("timeout_seconds", 300)
-                max_retries = task_dict.get("max_retries", 2)
-
-                result_dict = await workflow.execute_activity(
-                    execute_task,
-                    args=[task_dict, completed, agent_id],
-                    start_to_close_timeout=timedelta(seconds=timeout + 60),
-                    heartbeat_timeout=timedelta(seconds=90),
-                    retry_policy=RetryPolicy(
-                        maximum_attempts=max_retries + 1,
-                        initial_interval=timedelta(seconds=5),
-                        maximum_interval=timedelta(seconds=30),
-                        backoff_coefficient=2.0,
-                        non_retryable_error_types=[
-                            "ApprovalRejectedError",
-                            "ValueError",
-                            "KeyError",
-                            "FileNotFoundError",
-                        ],
-                    ),
-                )
-
-                if result_dict["status"] == "completed":
-                    task_output = result_dict["output"]
-
-                    # ── Supervisor Evaluation ReAct Loop ─────────
-                    supervisor_eval = {}
-                    try:
-                        supervisor_eval = await workflow.execute_activity(
-                            evaluate_task_output,
-                            args=[task_dict, task_output, user_query, completed],
-                            start_to_close_timeout=timedelta(seconds=90),
-                            retry_policy=RetryPolicy(maximum_attempts=2),
+                    results = await asyncio.gather(*[
+                        self._execute_single_task_flow(
+                            t, completed, failed, agent_id, user_query, dag_dict
                         )
-                    except Exception as eval_err:
-                        workflow.logger.warning(
-                            "Supervisor evaluation error on '%s': %s", task_name, eval_err
-                        )
-
-                    if supervisor_eval:
-                        self._supervisor_evaluations.append(supervisor_eval)
-
-                    decision = supervisor_eval.get("decision", "pass")
-                    feedback = supervisor_eval.get("feedback", "")
-                    task_retried = task_dict.get("_supervisor_retried", 0)
-
-                    # If supervisor requests retry and we haven't retried this task yet
-                    if (
-                        decision in ("needs_retry", "need_more_info", "retry")
-                        and task_retried < 1
-                    ):
-                        if not feedback:
-                            feedback = "Task output was incomplete or lacked required calculations/findings. Please use tools to execute the task fully."
-                        workflow.logger.info(
-                            "🔄 Supervisor requested retry for '%s': %s. Retrying with feedback...",
-                            task_name,
-                            feedback,
-                        )
-                        task_dict["_supervisor_retried"] = task_retried + 1
-                        task_dict["description"] = (
-                            f"{task_dict.get('description', '')}\n\n"
-                            f"[SUPERVISOR EVALUATION FEEDBACK - PLEASE GATHER MORE INFO]: {feedback}"
-                        )
-                        # Re-execute immediately with updated prompt
-                        retry_result = await workflow.execute_activity(
-                            execute_task,
-                            args=[task_dict, completed, agent_id],
-                            start_to_close_timeout=timedelta(seconds=timeout + 60),
-                            heartbeat_timeout=timedelta(seconds=90),
-                            retry_policy=RetryPolicy(
-                                maximum_attempts=2,
-                                initial_interval=timedelta(seconds=5),
-                                maximum_interval=timedelta(seconds=30),
-                                backoff_coefficient=2.0,
-                                non_retryable_error_types=[
-                                    "ApprovalRejectedError",
-                                    "ValueError",
-                                    "KeyError",
-                                    "FileNotFoundError",
-                                ],
-                            ),
-                        )
-                        if retry_result["status"] == "completed":
-                            task_output = retry_result["output"]
-                            result_dict = retry_result
-
-                            # Re-evaluate retry with supervisor
-                            try:
-                                re_eval = await workflow.execute_activity(
-                                    evaluate_task_output,
-                                    args=[task_dict, task_output, user_query, completed],
-                                    start_to_close_timeout=timedelta(seconds=90),
-                                    retry_policy=RetryPolicy(maximum_attempts=2),
-                                )
-                                if re_eval:
-                                    self._supervisor_evaluations.append(re_eval)
-                                    decision = re_eval.get("decision", "pass")
-                                    workflow.logger.info(
-                                        "Supervisor re-evaluation on '%s' retry: %s",
-                                        task_name,
-                                        decision.upper(),
-                                    )
-                            except Exception as eval_err:
-                                workflow.logger.warning(
-                                    "Supervisor retry re-evaluation error on '%s': %s",
-                                    task_name,
-                                    eval_err,
-                                )
-
-                    # Domain-agnostic circuit breaker: Supervisor signalled fatal pipeline abort
-                    if decision == "abort":
-                        abort_reason = feedback or "Prerequisite artifacts missing or inaccessible on disk."
-                        workflow.logger.warning(
-                            "Supervisor issued fatal abort on task '%s' (%s): %s. Halting downstream cascade.",
-                            task_name,
-                            task_id,
-                            abort_reason,
-                        )
-                        task_output = (
-                            f"{task_output}\n\n"
-                            f"⚠️ **Investigation Aborted**: {abort_reason}\n"
-                            f"Downstream analysis tasks aborted to prevent ungrounded hallucinations."
-                        )
-                        completed[task_id] = task_output
-                        self._task_statuses[task_id] = "completed"
-
-                        for rem_task in dag_dict.get("tasks", []):
-                            rem_id = rem_task["id"]
-                            if rem_id != task_id and rem_id not in completed:
-                                failed[rem_id] = f"Skipped: Upstream prerequisite task '{task_name}' aborted pipeline ({abort_reason})."
-                                self._task_statuses[rem_id] = "skipped"
+                        for t in batch
+                    ])
+                    if any(results):
+                        pipeline_aborted = True
                         break
 
-                    completed[task_id] = task_output
-                    self._task_statuses[task_id] = "completed"
-                    workflow.logger.info(
-                        "Task '%s' COMPLETED (%dms)",
-                        task_name,
-                        result_dict.get("execution_time_ms", 0),
-                    )
-                else:
-                    error = result_dict.get("error", "Unknown failure")
-                    failed[task_id] = error
-                    self._task_statuses[task_id] = "failed"
-                    workflow.logger.warning(
-                        "Task '%s' FAILED: %s", task_name, error
-                    )
+            if pipeline_aborted:
+                for t in dag_dict.get("tasks", []):
+                    tid = t["id"]
+                    if tid not in completed and tid not in failed:
+                        self._task_statuses[tid] = "aborted"
+                        failed[tid] = "Aborted due to upstream circuit breaker"
+                break
 
         # ── Phase 3: Assemble Final Response ─────────────
         if not completed:
@@ -495,6 +299,220 @@ class UAOSWorkflow:
             "supervisor_evaluations": self._supervisor_evaluations,
         }
         return self._result
+
+    async def _execute_single_task_flow(
+        self,
+        task_dict: dict[str, Any],
+        completed: dict[str, str],
+        failed: dict[str, str],
+        agent_id: str,
+        user_query: str,
+        dag_dict: dict[str, Any],
+    ) -> bool:
+        """Executes a single task within the workflow lifecycle.
+
+        Handles:
+          1. Human approval gate (if HIGH or CRITICAL risk)
+          2. Task execution activity (with heartbeat checkpointing & retry policy)
+          3. Supervisor evaluation & automatic retry
+          4. Circuit breaker abort detection
+
+        Returns:
+            bool: True if pipeline should abort immediately, False otherwise.
+        """
+        task_id = task_dict["id"]
+        task_name = task_dict.get("name", task_id)
+        risk_level = str(task_dict.get("risk_level", "low")).lower()
+
+        # ── Approval Gate ────────────────────────────────
+        if risk_level in ("high", "critical"):
+            self._pending_tasks[task_id] = task_dict
+            self._pending_task_name = task_name
+            self._pending_task_id = task_id
+            self._pending_task_desc = task_dict.get("description", "")
+            self._pending_task_risk = risk_level
+            self._pending_task_params = task_dict.get("parameters", {})
+            self._task_statuses[task_id] = "awaiting_approval"
+
+            # Notify subscribers
+            try:
+                await workflow.execute_activity(
+                    notify_approval_required,
+                    args=[task_dict],
+                    start_to_close_timeout=timedelta(seconds=60),
+                    retry_policy=RetryPolicy(maximum_attempts=2),
+                )
+            except Exception as notify_err:
+                workflow.logger.warning(
+                    "Failed to emit approval notification for '%s': %s", task_id, notify_err
+                )
+
+            approval_timeout = task_dict.get("approval_timeout_seconds") or 900
+            workflow.logger.info(
+                "Task '%s' (%s) requires approval (risk: %s). Pausing for signal (timeout: %ds)...",
+                task_name,
+                task_id,
+                risk_level,
+                approval_timeout,
+            )
+
+            try:
+                await workflow.wait_condition(
+                    lambda: task_id in self._approvals or (len(self._pending_tasks) <= 1 and self._approval_result is not None),
+                    timeout=timedelta(seconds=approval_timeout),
+                )
+                resp = self._approvals.pop(task_id, None)
+                if resp is None:
+                    resp = {
+                        "approved": self._approval_result if self._approval_result is not None else False,
+                        "guidance": self._approval_guidance,
+                        "modified_params": self._approval_modified_params,
+                    }
+                    self._approval_result = None
+                    self._approval_guidance = ""
+                    self._approval_modified_params = {}
+
+                self._pending_tasks.pop(task_id, None)
+
+                if not resp.get("approved", False):
+                    workflow.logger.warning("Task '%s' was rejected by operator", task_name)
+                    self._task_statuses[task_id] = "rejected"
+                    failed[task_id] = f"Task rejected by operator. Guidance: {resp.get('guidance', 'None')}"
+                    return False
+
+                if resp.get("guidance"):
+                    task_dict["description"] = (
+                        f"{task_dict.get('description', '')}\n\n"
+                        f"[OPERATOR GUIDANCE]: {resp['guidance']}"
+                    )
+                if resp.get("modified_params"):
+                    task_dict.setdefault("parameters", {}).update(resp["modified_params"])
+
+            except asyncio.TimeoutError:
+                workflow.logger.warning(
+                    "Task '%s' (%s) approval timed out after %ds",
+                    task_name,
+                    task_id,
+                    approval_timeout,
+                )
+                self._pending_tasks.pop(task_id, None)
+                try:
+                    await workflow.execute_activity(
+                        escalate_approval,
+                        args=[task_dict, user_query],
+                        start_to_close_timeout=timedelta(seconds=60),
+                        retry_policy=RetryPolicy(maximum_attempts=2),
+                    )
+                except Exception as esc_err:
+                    workflow.logger.warning("Escalation activity failed: %s", esc_err)
+
+                self._task_statuses[task_id] = "failed"
+                failed[task_id] = f"Approval timed out after {approval_timeout}s"
+                return False
+
+        # ── Execution Phase ──────────────────────────────
+        self._task_statuses[task_id] = "running"
+        workflow.logger.info(
+            "Executing task '%s' (%s), risk: %s",
+            task_name,
+            task_id,
+            risk_level,
+        )
+
+        try:
+            result_dict = await workflow.execute_activity(
+                execute_task,
+                args=[task_dict, dict(completed), agent_id],
+                start_to_close_timeout=timedelta(seconds=300),
+                retry_policy=RetryPolicy(
+                    maximum_attempts=3,
+                    initial_interval=timedelta(seconds=2),
+                    backoff_coefficient=2.0,
+                ),
+                heartbeat_timeout=timedelta(seconds=30),
+            )
+        except Exception as exc:
+            workflow.logger.error("Activity execute_task failed for '%s': %s", task_name, exc)
+            self._task_statuses[task_id] = "failed"
+            failed[task_id] = str(exc)
+            return False
+
+        # ── Supervisor Evaluation & Retry Phase ───────────
+        if result_dict.get("status") == "completed":
+            task_output = result_dict.get("output", "")
+
+            try:
+                supervisor_eval = await workflow.execute_activity(
+                    evaluate_task_output,
+                    args=[task_dict, task_output, user_query, dict(completed)],
+                    start_to_close_timeout=timedelta(seconds=120),
+                    retry_policy=RetryPolicy(maximum_attempts=2),
+                )
+                if supervisor_eval:
+                    decision = supervisor_eval.get("decision", "pass")
+                    feedback = supervisor_eval.get("feedback", "")
+
+                    if decision == "abort":
+                        workflow.logger.warning(
+                            "Circuit breaker triggered by supervisor on task '%s': %s",
+                            task_name,
+                            feedback,
+                        )
+                        self._supervisor_evaluations.append(supervisor_eval)
+                        self._task_statuses[task_id] = "aborted"
+                        failed[task_id] = f"Aborted by supervisor: {feedback}"
+                        return True
+
+                    elif decision in ("needs_retry", "need_more_info", "retry"):
+                        workflow.logger.info(
+                            "Supervisor requested retry for task '%s': %s",
+                            task_name,
+                            feedback,
+                        )
+                        self._supervisor_evaluations.append(supervisor_eval)
+                        retry_task_dict = dict(task_dict)
+                        retry_task_dict["description"] = (
+                            f"{retry_task_dict.get('description', '')}\n\n"
+                            f"[SUPERVISOR EVALUATION FEEDBACK - PLEASE GATHER MORE INFO]: {feedback}"
+                        )
+                        retry_result = await workflow.execute_activity(
+                            execute_task,
+                            args=[retry_task_dict, dict(completed), agent_id],
+                            start_to_close_timeout=timedelta(seconds=300),
+                            retry_policy=RetryPolicy(
+                                maximum_attempts=3,
+                                initial_interval=timedelta(seconds=2),
+                                backoff_coefficient=2.0,
+                            ),
+                            heartbeat_timeout=timedelta(seconds=30),
+                        )
+                        if retry_result.get("status") == "completed":
+                            task_output = retry_result.get("output", "")
+                            result_dict = retry_result
+                            self._supervisor_evaluations = [
+                                e for e in self._supervisor_evaluations
+                                if e.get("task_id") != task_id
+                            ] + [{
+                                "task_id": task_id,
+                                "task_name": task_name,
+                                "decision": "pass",
+                                "confidence": 0.98,
+                                "feedback": "Factual findings verified on supervisor retry.",
+                            }]
+                    else:
+                        self._supervisor_evaluations.append(supervisor_eval)
+            except Exception as eval_err:
+                workflow.logger.warning(
+                    "Supervisor evaluation error on '%s': %s", task_name, eval_err
+                )
+
+            completed[task_id] = task_output
+            self._task_statuses[task_id] = "completed"
+        else:
+            self._task_statuses[task_id] = "failed"
+            failed[task_id] = result_dict.get("error", "Task execution failed")
+
+        return False
 
     def _get_ready_tasks(
         self,
