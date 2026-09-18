@@ -167,12 +167,21 @@
               <rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/>
             </svg>
             <span>Workflow Execution Plan</span>
+            <span id="dag-interactive-hint" class="dag-interactive-hint" style="display: none;">💡 Click any pending node to edit parameters & guidance</span>
           </div>
-          <div class="dag-legend">
-            <span class="legend-item"><span class="dot dot-pending"></span> Pending</span>
-            <span class="legend-item"><span class="dot dot-running"></span> Running</span>
-            <span class="legend-item"><span class="dot dot-completed"></span> Completed</span>
-            <span class="legend-item"><span class="dot dot-approval"></span> Approval Gate</span>
+          <div style="display: flex; align-items: center; gap: 12px;">
+            <button id="load-template-dag-btn" type="button" class="copy-btn" style="background: rgba(99, 102, 241, 0.15); border-color: rgba(99, 102, 241, 0.4); color: #a5b4fc;" title="Load a pipeline template into visualizer to inspect and edit before execution">
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/>
+              </svg>
+              <span>⚡ Load Template to Plan</span>
+            </button>
+            <div class="dag-legend">
+              <span class="legend-item"><span class="dot dot-pending"></span> Pending</span>
+              <span class="legend-item"><span class="dot dot-running"></span> Running</span>
+              <span class="legend-item"><span class="dot dot-completed"></span> Completed</span>
+              <span class="legend-item"><span class="dot dot-approval"></span> Approval Gate</span>
+            </div>
           </div>
         </div>
 
@@ -298,6 +307,89 @@
       <div class="modal-actions">
         <button id="modal-reject-btn" class="btn-reject" type="button">Reject Task</button>
         <button id="modal-approve-btn" class="btn-approve" type="button">Approve & Continue</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Pre-Execution Task Configuration & Parameter Editor Modal -->
+  <div id="task-edit-modal" class="modal-overlay">
+    <div class="modal-card modal-task-edit">
+      <div class="modal-header">
+        <div class="task-edit-icon">
+          <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2">
+            <polygon points="14 2 18 6 7 17 3 17 3 13 14 2"/>
+            <line x1="3" y1="22" x2="21" y2="22"/>
+          </svg>
+        </div>
+        <div style="flex: 1;">
+          <div style="display: flex; justify-content: space-between; align-items: center;">
+            <div style="display: flex; align-items: center; gap: 8px;">
+              <span id="edit-task-id-badge" class="phase-badge">T1</span>
+              <div class="modal-title">Pre-Execution Task Config</div>
+            </div>
+            <div style="display: flex; align-items: center; gap: 8px;">
+              <span id="edit-task-status-badge" class="node-badge badge-pending">PENDING</span>
+              <button id="close-task-edit-btn" type="button" class="modal-close-icon" title="Close modal">✕</button>
+            </div>
+          </div>
+          <div class="modal-subtitle">Customize parameters, risk levels, or operator guidance before execution</div>
+        </div>
+      </div>
+
+      <div class="modal-body-scroll" style="display: flex; flex-direction: column; gap: 14px; margin-top: 14px; max-height: 65vh; overflow-y: auto; padding-right: 4px;">
+        <!-- Task Name -->
+        <div style="display: flex; flex-direction: column; gap: 6px;">
+          <label style="font-size: 12px; font-weight: 600; color: var(--text-main);">Task Name</label>
+          <input type="text" id="edit-task-name" class="prompt-box modal-input" placeholder="Task Name">
+        </div>
+
+        <!-- Task Description / Objective -->
+        <div style="display: flex; flex-direction: column; gap: 6px;">
+          <label style="font-size: 12px; font-weight: 600; color: var(--text-main);">Execution Objective & Instructions</label>
+          <textarea id="edit-task-desc" class="prompt-box modal-input" rows="2" placeholder="Task instructions for worker agent"></textarea>
+        </div>
+
+        <!-- Risk Level -->
+        <div style="display: flex; flex-direction: column; gap: 6px;">
+          <label style="font-size: 12px; font-weight: 600; color: var(--text-main);">Execution Risk Level</label>
+          <select id="edit-task-risk" class="agent-dropdown modal-select" style="width: 100%; height: 38px;">
+            <option value="low">🟢 Low Risk (Autonomous Execution)</option>
+            <option value="medium">🟡 Medium Risk (Standard Execution)</option>
+            <option value="high">🔴 High Risk (Requires Human Approval Gate)</option>
+            <option value="critical">⛔ Critical Risk (Strict Approval Gate)</option>
+          </select>
+          <div style="font-size: 11px; color: var(--text-dim); line-height: 1.4;">High or Critical risk will suspend the workflow and trigger an interactive approval gate before this task runs.</div>
+        </div>
+
+        <!-- Operator Guidance Injection -->
+        <div style="display: flex; flex-direction: column; gap: 6px;">
+          <label style="font-size: 12px; font-weight: 600; color: var(--text-main); display: flex; align-items: center; justify-content: space-between;">
+            <span>💬 Pre-Execution Operator Guidance</span>
+            <span style="font-size: 10.5px; color: #38bdf8; background: rgba(56, 189, 248, 0.12); padding: 2px 7px; border-radius: 4px; border: 1px solid rgba(56, 189, 248, 0.3);">Prompt Injection</span>
+          </label>
+          <textarea id="edit-task-guidance" class="prompt-box modal-input" rows="2" placeholder="e.g. Focus only on 2026 logs; ignore 404 errors; do not touch production files."></textarea>
+          <div style="font-size: 11px; color: var(--text-dim); line-height: 1.4;">Injected directly into the worker agent's system prompt prior to execution.</div>
+        </div>
+
+        <!-- Task Parameters (JSON) -->
+        <div style="display: flex; flex-direction: column; gap: 6px;">
+          <label style="font-size: 12px; font-weight: 600; color: var(--text-main); display: flex; align-items: center; justify-content: space-between;">
+            <span>⚙️ Task Parameters (JSON Object)</span>
+            <span style="font-size: 10.5px; color: #c084fc; background: rgba(192, 132, 252, 0.12); padding: 2px 7px; border-radius: 4px; border: 1px solid rgba(192, 132, 252, 0.3);">Overrides</span>
+          </label>
+          <textarea id="edit-task-params" class="prompt-box modal-input font-mono" rows="4" style="font-size: 11.5px; line-height: 1.5;" placeholder='{\n  "max_results": 10,\n  "timeout_seconds": 60\n}'></textarea>
+          <div id="edit-task-params-error" style="display: none; font-size: 11px; color: #f87171; font-weight: 500;">❌ Invalid JSON syntax. Please verify quotes and commas.</div>
+        </div>
+      </div>
+
+      <div class="modal-actions" style="margin-top: 18px;">
+        <button id="cancel-task-edit-btn" class="btn-reject" type="button" style="background: rgba(255, 255, 255, 0.05); color: var(--text-dim); border: 1px solid rgba(255, 255, 255, 0.1);">Cancel</button>
+        <button id="save-task-edit-btn" class="btn-primary" type="button" style="display: flex; align-items: center; gap: 6px;">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <polyline points="20 6 9 17 4 12"/>
+          </svg>
+          <span>Apply to Plan</span>
+        </button>
       </div>
     </div>
   </div>

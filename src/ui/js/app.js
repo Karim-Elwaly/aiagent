@@ -54,8 +54,186 @@ document.addEventListener("DOMContentLoaded", () => {
 
   // Initialize DAG Renderer
   const dagRenderer = new DAGRenderer("dag-svg", (task, status) => {
-    showToast(`Task ${task.id}: ${task.name} (${status.toUpperCase()})`);
+    onNodeClicked(task, status);
   });
+
+  // ── Pre-Execution Task Configuration Modal Elements ──
+  const taskEditModal = document.getElementById("task-edit-modal");
+  const closeTaskEditBtn = document.getElementById("close-task-edit-btn");
+  const cancelTaskEditBtn = document.getElementById("cancel-task-edit-btn");
+  const saveTaskEditBtn = document.getElementById("save-task-edit-btn");
+  const editTaskIdBadge = document.getElementById("edit-task-id-badge");
+  const editTaskStatusBadge = document.getElementById("edit-task-status-badge");
+  const editTaskName = document.getElementById("edit-task-name");
+  const editTaskDesc = document.getElementById("edit-task-desc");
+  const editTaskRisk = document.getElementById("edit-task-risk");
+  const editTaskGuidance = document.getElementById("edit-task-guidance");
+  const editTaskParams = document.getElementById("edit-task-params");
+  const editTaskParamsError = document.getElementById("edit-task-params-error");
+  const loadTemplateDagBtn = document.getElementById("load-template-dag-btn");
+  const dagInteractiveHint = document.getElementById("dag-interactive-hint");
+  let currentlyEditingTask = null;
+
+  function onNodeClicked(task, status) {
+    const isPending = !status || status === "pending";
+    if (isPending) {
+      openTaskEditModal(task);
+    } else {
+      showToast(`Task ${task.id}: ${task.name} (${(status || "").toUpperCase()})`);
+    }
+  }
+
+  function openTaskEditModal(task) {
+    if (!taskEditModal || !task) return;
+    currentlyEditingTask = task;
+
+    if (editTaskIdBadge) editTaskIdBadge.textContent = (task.id || "T").toUpperCase();
+    if (editTaskStatusBadge) {
+      const status = (dagRenderer && dagRenderer.statusMap.get(task.id)) || "pending";
+      editTaskStatusBadge.textContent = status.toUpperCase();
+      editTaskStatusBadge.className = `node-badge badge-${status}`;
+    }
+
+    if (editTaskName) editTaskName.value = task.name || "";
+
+    let desc = task.description || "";
+    let guidance = task.operator_guidance || "";
+    if (desc.includes("\n\n[OPERATOR GUIDANCE]: ")) {
+      const parts = desc.split("\n\n[OPERATOR GUIDANCE]: ");
+      desc = parts[0];
+      if (!guidance) guidance = parts[1] || "";
+    } else if (desc.includes("[OPERATOR GUIDANCE]: ")) {
+      const parts = desc.split("[OPERATOR GUIDANCE]: ");
+      desc = parts[0].trim();
+      if (!guidance) guidance = parts[1] || "";
+    }
+
+    if (editTaskDesc) editTaskDesc.value = desc;
+    if (editTaskRisk) editTaskRisk.value = (task.risk_level || "low").toLowerCase();
+    if (editTaskGuidance) editTaskGuidance.value = guidance;
+
+    if (editTaskParams) {
+      const params = task.parameters && Object.keys(task.parameters).length > 0
+        ? { ...task.parameters }
+        : {};
+      delete params.operator_guidance;
+      editTaskParams.value = Object.keys(params).length > 0
+        ? JSON.stringify(params, null, 2)
+        : "";
+    }
+    if (editTaskParamsError) editTaskParamsError.style.display = "none";
+
+    taskEditModal.classList.add("active");
+  }
+
+  function closeTaskEditModal() {
+    if (taskEditModal) taskEditModal.classList.remove("active");
+    currentlyEditingTask = null;
+  }
+
+  function saveTaskEdit() {
+    if (!currentlyEditingTask) return;
+
+    let parsedParams = {};
+    const rawParams = editTaskParams ? editTaskParams.value.trim() : "";
+    if (rawParams) {
+      try {
+        parsedParams = JSON.parse(rawParams);
+        if (typeof parsedParams !== "object" || parsedParams === null || Array.isArray(parsedParams)) {
+          throw new Error("Parameters must be a valid JSON object.");
+        }
+      } catch (err) {
+        if (editTaskParamsError) {
+          editTaskParamsError.textContent = `❌ Invalid JSON: ${err.message}`;
+          editTaskParamsError.style.display = "block";
+        }
+        return;
+      }
+    }
+
+    const newName = editTaskName ? editTaskName.value.trim() || currentlyEditingTask.name : currentlyEditingTask.name;
+    let newDesc = editTaskDesc ? editTaskDesc.value.trim() : (currentlyEditingTask.description || "");
+    const newRisk = editTaskRisk ? editTaskRisk.value : (currentlyEditingTask.risk_level || "low");
+    const newGuidance = editTaskGuidance ? editTaskGuidance.value.trim() : "";
+
+    if (newGuidance) {
+      newDesc = `${newDesc}\n\n[OPERATOR GUIDANCE]: ${newGuidance}`;
+      parsedParams.operator_guidance = newGuidance;
+    }
+
+    // Ensure activeCustomDag exists
+    if (!activeCustomDag || !activeCustomDag.tasks) {
+      if (dagRenderer && dagRenderer.dag && dagRenderer.dag.tasks) {
+        activeCustomDag = JSON.parse(JSON.stringify(dagRenderer.dag));
+      } else {
+        activeCustomDag = {
+          goal: promptInput ? promptInput.value.trim() || "Custom Investigation Pipeline" : "Custom Investigation Pipeline",
+          reasoning: "Pre-execution customized workflow DAG",
+          tasks: [],
+        };
+      }
+    }
+
+    // Update target task in activeCustomDag
+    let found = false;
+    activeCustomDag.tasks.forEach((t) => {
+      if (t.id === currentlyEditingTask.id) {
+        t.name = newName;
+        t.description = newDesc;
+        t.risk_level = newRisk;
+        t.parameters = parsedParams;
+        t.is_customized = true;
+        t.operator_guidance = newGuidance;
+        found = true;
+      }
+    });
+
+    if (!found) {
+      activeCustomDag.tasks.push({
+        ...currentlyEditingTask,
+        name: newName,
+        description: newDesc,
+        risk_level: newRisk,
+        parameters: parsedParams,
+        is_customized: true,
+        operator_guidance: newGuidance,
+      });
+    }
+
+    isCustomWorkflowMode = true;
+    updateWorkflowModeUI();
+
+    dagRenderer.render(activeCustomDag);
+    if (dagInteractiveHint) dagInteractiveHint.style.display = "inline-flex";
+
+    closeTaskEditModal();
+    showToast(`Task ${currentlyEditingTask.id.toUpperCase()} customized! (${newRisk.toUpperCase()})`);
+  }
+
+  if (closeTaskEditBtn) closeTaskEditBtn.addEventListener("click", closeTaskEditModal);
+  if (cancelTaskEditBtn) cancelTaskEditBtn.addEventListener("click", closeTaskEditModal);
+  if (saveTaskEditBtn) saveTaskEditBtn.addEventListener("click", saveTaskEdit);
+  if (taskEditModal) {
+    taskEditModal.addEventListener("click", (e) => {
+      if (e.target === taskEditModal) closeTaskEditModal();
+    });
+  }
+
+  if (loadTemplateDagBtn) {
+    loadTemplateDagBtn.addEventListener("click", () => {
+      const templateId = "soc-5-phase-investigation";
+      const tpl = (workflowTemplates && workflowTemplates[templateId]) || BUILTIN_WORKFLOW_TEMPLATES[templateId];
+      if (tpl && tpl.tasks) {
+        activeCustomDag = JSON.parse(JSON.stringify(tpl));
+        currentWorkflowTasks = JSON.parse(JSON.stringify(tpl.tasks));
+        isCustomWorkflowMode = true;
+        updateWorkflowModeUI();
+        dagRenderer.render(activeCustomDag);
+        if (dagInteractiveHint) dagInteractiveHint.style.display = "inline-flex";
+        showToast("Template loaded into visualizer! Click any node to customize parameters.");
+      }
+    });
+  }
 
   // 1. Initial Health, Tools, Agents, Schedules, and Workflow Templates Fetch
   fetchHealth();
@@ -1646,6 +1824,9 @@ document.addEventListener("DOMContentLoaded", () => {
       approvalTimerInterval = null;
     }
     activeDag = null;
+    if (dagInteractiveHint) {
+      dagInteractiveHint.style.display = "none";
+    }
     if (dagRenderer && typeof dagRenderer.reset === "function") {
       dagRenderer.reset();
     }

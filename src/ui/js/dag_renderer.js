@@ -183,7 +183,8 @@ class DAGRenderer {
 
   _createNodeElement(node) {
     const g = document.createElementNS("http://www.w3.org/2000/svg", "g");
-    g.setAttribute("class", "dag-node");
+    const isEditable = node.status === "pending";
+    g.setAttribute("class", `dag-node ${isEditable ? "node-editable" : ""}`);
     g.setAttribute("transform", `translate(${node.x}, ${node.y})`);
 
     // Rich Native Tooltip for complete task details
@@ -192,7 +193,8 @@ class DAGRenderer {
     titleEl.textContent = `${node.task.name || node.task.id} (${node.task.id.toUpperCase()})\n` +
       `Risk: ${(node.task.risk_level || 'low').toUpperCase()} | Status: ${node.status.toUpperCase()}\n` +
       `Skills: ${skillList}\n` +
-      `Description: ${node.task.description || 'No description provided'}`;
+      `Description: ${node.task.description || 'No description provided'}` +
+      (isEditable ? "\n\n👉 Click to edit parameters, risk level, or guidance before execution" : "");
     g.appendChild(titleEl);
 
     // Box background
@@ -237,6 +239,36 @@ class DAGRenderer {
     textId.setAttribute("font-weight", "700");
     textId.textContent = node.task.id.toUpperCase();
     g.appendChild(textId);
+
+    // Custom Parameter Override Pill (in header)
+    const isCustomized = node.task.is_customized ||
+      (node.task.parameters && Object.keys(node.task.parameters).length > 0) ||
+      (node.task.description && node.task.description.includes("[OPERATOR GUIDANCE]")) ||
+      node.task.operator_guidance;
+
+    if (isCustomized) {
+      const customPill = document.createElementNS("http://www.w3.org/2000/svg", "rect");
+      customPill.setAttribute("x", "50");
+      customPill.setAttribute("y", "7");
+      customPill.setAttribute("width", "52");
+      customPill.setAttribute("height", "15");
+      customPill.setAttribute("rx", "3");
+      customPill.setAttribute("fill", "rgba(192, 132, 252, 0.2)");
+      customPill.setAttribute("stroke", "rgba(192, 132, 252, 0.5)");
+      customPill.setAttribute("stroke-width", "0.8");
+      g.appendChild(customPill);
+
+      const customText = document.createElementNS("http://www.w3.org/2000/svg", "text");
+      customText.setAttribute("x", "76");
+      customText.setAttribute("y", "18");
+      customText.setAttribute("text-anchor", "middle");
+      customText.setAttribute("fill", "#d8b4fe");
+      customText.setAttribute("font-family", "JetBrains Mono");
+      customText.setAttribute("font-size", "8");
+      customText.setAttribute("font-weight", "700");
+      customText.textContent = "⚡CUSTOM";
+      g.appendChild(customText);
+    }
 
     // Risk Level Badge (Right side of header)
     const riskLevel = (node.task.risk_level || "low").toLowerCase();
