@@ -63,6 +63,7 @@
             <rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/>
           </svg>
           <span>Workflow Studio</span>
+          <span id="workflow-nav-badge" class="badge-pill" style="display: none; background: rgba(59, 130, 246, 0.25); color: #93c5fd; border-color: rgba(59, 130, 246, 0.4);">0</span>
         </button>
 
         <button id="open-schedules-btn" class="header-btn" title="Automated Cron Workflows">
@@ -103,7 +104,10 @@
           </div>
           <div style="display: flex; align-items: center; gap: 10px;">
             <button type="button" id="toggle-workflow-mode-btn" class="mode-toggle-btn" title="Click to customize workflow phases">
-              <span id="workflow-mode-indicator">🤖 Mode: Autonomous Auto-Plan</span>
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/>
+              </svg>
+              <span id="workflow-mode-indicator">Mode: Autonomous Auto-Plan</span>
             </button>
             <div class="agent-select-wrapper" title="Choose which specialized agent executes this workflow">
               <span class="agent-select-label">Active Agent:</span>
@@ -872,16 +876,16 @@
 
   <!-- Workflow Studio Modal -->
   <div id="workflow-builder-modal" class="modal-overlay">
-    <div class="modal-card modal-large" style="max-width: 820px;">
+    <div class="modal-card modal-workflow">
       <div class="modal-header">
-        <div class="brand-icon icon-circle gradient-cyan">
+        <div class="brand-icon icon-circle gradient-blue">
           <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="#fff" stroke-width="2">
             <rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/>
           </svg>
         </div>
         <div style="flex: 1;">
           <div style="display: flex; justify-content: space-between; align-items: center;">
-            <div class="modal-title">Workflow Studio & Pipeline Builder</div>
+            <div class="modal-title">Workflow Studio &amp; Pipeline Builder</div>
             <button id="close-workflow-builder-btn" type="button" class="modal-close-icon" title="Close modal">✕</button>
           </div>
           <div class="modal-subtitle">Build explicit multi-phase workflows or load templates with Supervisor evaluation.</div>
@@ -891,7 +895,13 @@
       <div class="modal-body" style="padding-top: 14px;">
         <!-- Quick Template Selector -->
         <div class="template-selector-bar">
-          <span class="template-label">Load Template:</span>
+          <span class="template-label">
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/>
+              <path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/>
+            </svg>
+            Templates:
+          </span>
           <button type="button" class="template-btn active" id="tpl-soc-btn">
             🚨 5-Phase SOC Pipeline
           </button>
@@ -906,11 +916,12 @@
         <!-- Custom Pipeline Tasks List -->
         <div class="pipeline-tasks-container">
           <div class="pipeline-header-row">
-            <h4 style="font-size: 13px; font-weight: 700; color: #fff;">
-              Pipeline Phases (<span id="pipeline-task-count">5</span>)
-            </h4>
+            <div class="pipeline-header-title">
+              <span>Pipeline Phases</span>
+              <span id="pipeline-task-count" class="badge-pill">5</span>
+            </div>
             <div style="display: flex; gap: 8px;">
-              <button type="button" id="add-phase-btn" class="header-btn" style="padding: 4px 10px; font-size: 11px;">
+              <button type="button" id="add-phase-btn" class="btn-primary-sm">
                 + Add Phase
               </button>
             </div>
@@ -922,10 +933,16 @@
       </div>
 
       <div class="modal-actions" style="justify-content: space-between; margin-top: 16px;">
-        <button id="cancel-workflow-builder-btn" class="btn-reject">Cancel</button>
-        <button id="apply-workflow-btn" class="btn-approve">
-          <span>✔ Use This Custom Workflow</span>
-        </button>
+        <div class="pipeline-summary">
+          <span class="dot dot-running"></span>
+          <span>Explicit DAG execution with Supervisor ReAct evaluation</span>
+        </div>
+        <div style="display: flex; gap: 10px;">
+          <button id="cancel-workflow-builder-btn" class="btn-reject">Cancel</button>
+          <button id="apply-workflow-btn" class="btn-approve">
+            <span>✔ Activate Custom Pipeline</span>
+          </button>
+        </div>
       </div>
     </div>
   </div>

@@ -867,16 +867,24 @@ document.addEventListener("DOMContentLoaded", () => {
     if (workflowBuilderModal) workflowBuilderModal.classList.remove("active");
   }
 
+  const workflowNavBadge = document.getElementById("workflow-nav-badge");
   function updateWorkflowModeUI() {
     if (!toggleWorkflowModeBtn || !workflowModeIndicator) return;
     if (isCustomWorkflowMode && activeCustomDag && activeCustomDag.tasks && activeCustomDag.tasks.length > 0) {
       toggleWorkflowModeBtn.classList.add("active");
-      workflowModeIndicator.textContent = `🛠️ Custom Pipeline (${activeCustomDag.tasks.length} Phases)`;
+      workflowModeIndicator.textContent = `Custom Pipeline (${activeCustomDag.tasks.length} Phases)`;
       toggleWorkflowModeBtn.title = "Custom pipeline active. Click to view or edit phases.";
+      if (workflowNavBadge) {
+        workflowNavBadge.style.display = "inline-flex";
+        workflowNavBadge.textContent = `${activeCustomDag.tasks.length}`;
+      }
     } else {
       toggleWorkflowModeBtn.classList.remove("active");
-      workflowModeIndicator.textContent = `🤖 Mode: Autonomous Auto-Plan`;
+      workflowModeIndicator.textContent = `Mode: Autonomous Auto-Plan`;
       toggleWorkflowModeBtn.title = "Click to configure custom workflow pipeline";
+      if (workflowNavBadge) {
+        workflowNavBadge.style.display = "none";
+      }
     }
   }
 
@@ -916,39 +924,53 @@ document.addEventListener("DOMContentLoaded", () => {
   function renderPipelineEditor(tasks) {
     if (!pipelineTasksList) return;
     pipelineTasksList.innerHTML = "";
-    if (pipelineTaskCount) pipelineTaskCount.textContent = tasks.length;
+    if (pipelineTaskCount) pipelineTaskCount.textContent = (tasks || []).length;
+
+    if (!tasks || tasks.length === 0) {
+      pipelineTasksList.innerHTML = `
+        <div class="pipeline-empty-state">
+          <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+            <rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/>
+          </svg>
+          <div style="font-weight: 600; color: var(--text-main);">No phases in pipeline</div>
+          <div style="font-size: 12px; color: var(--text-dim); max-width: 320px;">Add a new phase or load one of the pre-built templates above.</div>
+        </div>
+      `;
+      return;
+    }
 
     tasks.forEach((task, idx) => {
       const card = document.createElement("div");
       card.className = "phase-card";
       card.dataset.index = idx;
       card.innerHTML = `
-        <div class="phase-header">
-          <div style="display: flex; align-items: center; gap: 8px;">
+        <div class="phase-card-header">
+          <div class="phase-header-left">
             <span class="phase-badge">${escapeHtml(task.id.toUpperCase())}</span>
-            <input type="text" class="phase-input-name prompt-box modal-input" style="font-weight: 700; width: 290px; height: 32px;" value="${escapeHtml(task.name)}" placeholder="Phase Name">
+            <span class="phase-step-num">Phase ${idx + 1}</span>
+            <input type="text" class="phase-input-name" value="${escapeHtml(task.name)}" placeholder="Phase Name" required>
           </div>
-          <div style="display: flex; align-items: center; gap: 8px;">
-            <select class="phase-select-risk prompt-box modal-input" style="width: auto; padding: 4px 8px; font-size: 11px; height: 32px;">
-              <option value="low" ${task.risk_level === "low" ? "selected" : ""}>Risk: Low</option>
-              <option value="medium" ${task.risk_level === "medium" ? "selected" : ""}>Risk: Medium</option>
-              <option value="high" ${task.risk_level === "high" ? "selected" : ""}>Risk: High (HITL Gate)</option>
-              <option value="critical" ${task.risk_level === "critical" ? "selected" : ""}>Risk: Critical (HITL Gate)</option>
+          <div class="phase-header-right">
+            <select class="phase-select-risk" title="Execution Risk Level">
+              <option value="low" ${task.risk_level === "low" ? "selected" : ""}>🟢 Low Risk</option>
+              <option value="medium" ${task.risk_level === "medium" ? "selected" : ""}>🟡 Medium Risk</option>
+              <option value="high" ${task.risk_level === "high" ? "selected" : ""}>🔴 High Risk (HITL Gate)</option>
+              <option value="critical" ${task.risk_level === "critical" ? "selected" : ""}>⛔ Critical (HITL Gate)</option>
             </select>
-            <button type="button" class="delete-phase-btn btn-reject" style="padding: 4px 8px; font-size: 11px;" title="Delete phase">✕</button>
+            <button type="button" class="delete-phase-btn" title="Delete phase">✕</button>
           </div>
         </div>
-        <div style="margin-top: 8px;">
-          <input type="text" class="phase-input-desc prompt-box modal-input" style="font-size: 12px; height: 32px;" value="${escapeHtml(task.description)}" placeholder="Phase objective / instructions for worker LLM">
+        <div class="phase-desc-wrapper">
+          <input type="text" class="phase-input-desc" value="${escapeHtml(task.description)}" placeholder="Phase objective / worker execution instructions">
         </div>
-        <div style="display: grid; grid-template-columns: 2fr 1fr; gap: 10px; margin-top: 8px;">
-          <div>
-            <label class="field-label" style="font-size: 10px; margin-bottom: 2px;">Required Skills (comma-separated)</label>
-            <input type="text" class="phase-input-skills prompt-box modal-input font-mono" style="font-size: 11px; height: 30px;" value="${escapeHtml((task.required_skills || []).join(', '))}" placeholder="e.g. alert_triage, file_reading">
+        <div class="phase-meta-grid">
+          <div class="phase-meta-field">
+            <label class="field-label-sm">Required Skills (comma-separated)</label>
+            <input type="text" class="phase-input-skills phase-meta-input font-mono" value="${escapeHtml((task.required_skills || []).join(', '))}" placeholder="e.g. alert_triage, file_reading">
           </div>
-          <div>
-            <label class="field-label" style="font-size: 10px; margin-bottom: 2px;">Dependencies (e.g. t1)</label>
-            <input type="text" class="phase-input-deps prompt-box modal-input font-mono" style="font-size: 11px; height: 30px;" value="${escapeHtml((task.dependencies || []).join(', '))}" placeholder="None or t1">
+          <div class="phase-meta-field">
+            <label class="field-label-sm">Dependencies (upstream task ID)</label>
+            <input type="text" class="phase-input-deps phase-meta-input font-mono" value="${escapeHtml((task.dependencies || []).join(', '))}" placeholder="None or t1">
           </div>
         </div>
       `;
@@ -960,13 +982,22 @@ document.addEventListener("DOMContentLoaded", () => {
       });
 
       pipelineTasksList.appendChild(card);
+
+      // Render connector line between phases
+      if (idx < tasks.length - 1) {
+        const connector = document.createElement("div");
+        connector.className = "phase-connector";
+        connector.innerHTML = `<span>↓</span>`;
+        pipelineTasksList.appendChild(connector);
+      }
     });
   }
 
   function syncCurrentTasksFromUI() {
     if (!pipelineTasksList) return [];
     const updated = [];
-    Array.from(pipelineTasksList.children).forEach((card, idx) => {
+    const cards = pipelineTasksList.querySelectorAll(".phase-card");
+    cards.forEach((card, idx) => {
       const nameInput = card.querySelector(".phase-input-name");
       const descInput = card.querySelector(".phase-input-desc");
       const riskSelect = card.querySelector(".phase-select-risk");
