@@ -50,6 +50,7 @@ document.addEventListener("DOMContentLoaded", () => {
   let activeCustomDag = null;
   let currentWorkflowTasks = [];
   let workflowTemplates = {};
+  let cachedSkillsList = [];
 
   // Initialize DAG Renderer
   const dagRenderer = new DAGRenderer("dag-svg", (task, status) => {
@@ -113,7 +114,7 @@ document.addEventListener("DOMContentLoaded", () => {
           } catch (_) {
             try {
               errDetail = await res.text();
-            } catch (_) {}
+            } catch (_) { }
           }
           throw new Error(`HTTP ${res.status}: ${errDetail || 'Failed to launch workflow'}`);
         }
@@ -143,7 +144,7 @@ document.addEventListener("DOMContentLoaded", () => {
           } catch (_) {
             try {
               errDetail = await res.text();
-            } catch (_) {}
+            } catch (_) { }
           }
           throw new Error(`HTTP ${res.status}: ${errDetail || 'Execution failed'}`);
         }
@@ -751,6 +752,29 @@ document.addEventListener("DOMContentLoaded", () => {
           }
         });
       });
+
+      // Collect all skills from tools
+      tools.forEach((t) => {
+        (t.skills_provided || []).forEach((s) => {
+          if (s && s.length >= 3 && !cachedSkillsList.includes(s.trim())) {
+            cachedSkillsList.push(s.trim());
+          }
+        });
+      });
+
+      // Wire up tools & skills search
+      const toolsSearchInput = document.getElementById("tools-search-input");
+      if (toolsSearchInput && !toolsSearchInput.dataset.wired) {
+        toolsSearchInput.dataset.wired = "true";
+        toolsSearchInput.addEventListener("input", (e) => {
+          const q = e.target.value.toLowerCase().trim();
+          const cards = toolListEl.querySelectorAll(".tool-card");
+          cards.forEach((card) => {
+            const text = card.textContent.toLowerCase();
+            card.style.display = (!q || text.includes(q)) ? "flex" : "none";
+          });
+        });
+      }
     } catch (e) {
       console.warn("Could not load tools:", e);
     }
@@ -921,6 +945,276 @@ document.addEventListener("DOMContentLoaded", () => {
     if (tplClearBtn) tplClearBtn.classList.toggle("active", activeId === "blank");
   }
 
+  const DEFAULT_SKILLS_LIST = [
+    "alert_triage", "artifact_inspection", "article_reading", "audio_narration",
+    "clarify", "clarify_question", "clawhub", "code_execution", "code_patching",
+    "containment_actions", "containment_playbook", "conversation_search", "cve_database",
+    "database", "delegate_task", "diagram_generation", "directory_listing",
+    "evidence_gathering", "fact_checking", "file_deletion", "file_reading", "file_writing",
+    "firewall_rule", "github", "historical_recall", "hitl_dialog", "image_generate",
+    "image_generation", "image_inspection", "incident_compression", "ioc_extraction",
+    "ioc_lookup", "knowledge_persistence", "log_compression", "log_forensics",
+    "memory", "memory_manager", "milestone_tracking", "ocr", "operator_inquiry",
+    "parallel_execution", "patch", "patch_file", "recurring_workflows", "reputation_check",
+    "research", "schedule_automation", "security_audit", "session_search", "subagent_delegation",
+    "surgical_edit", "system_commands", "task_planning", "text_to_speech", "threat_discovery",
+    "threat_intel", "timeline_synthesis", "todo_list", "triage", "tts_speak",
+    "user_profile", "vision_analyze", "visual_design", "visual_reasoning", "web_extract",
+    "web_scraping", "web_search", "worker_spawn"
+  ];
+
+  function getAllKnownSkills() {
+    const set = new Set([...DEFAULT_SKILLS_LIST, ...(cachedSkillsList || [])]);
+    return Array.from(set).sort((a, b) => a.localeCompare(b));
+  }
+
+  function initSkillsDropdown(card, currentSkills) {
+    const dd = card.querySelector(".phase-skills-dropdown");
+    if (!dd) return;
+    const trigger = dd.querySelector(".dropdown-trigger");
+    const pillsContainer = dd.querySelector(".phase-skills-pills");
+    const optionsList = dd.querySelector(".phase-skills-options");
+    const searchInput = dd.querySelector(".skill-filter-input");
+    const customAdd = dd.querySelector(".dropdown-custom-add");
+    const customAddBtn = dd.querySelector(".dropdown-add-btn");
+    const customVal = dd.querySelector(".custom-val");
+
+    let selected = Array.isArray(currentSkills) ? [...currentSkills] : [];
+
+    function renderPills() {
+      if (!selected.length) {
+        pillsContainer.innerHTML = `<span class="dropdown-placeholder">⚡ Select or search skills...</span>`;
+        return;
+      }
+      pillsContainer.innerHTML = selected.map((s) => `
+        <span class="dropdown-pill pill-skill font-mono" data-value="${escapeHtml(s)}">
+          ${escapeHtml(s)}
+          <span class="pill-remove" data-val="${escapeHtml(s)}" title="Remove skill">✕</span>
+        </span>
+      `).join("");
+
+      pillsContainer.querySelectorAll(".pill-remove").forEach((btn) => {
+        btn.addEventListener("click", (e) => {
+          e.stopPropagation();
+          const val = btn.dataset.val;
+          selected = selected.filter((x) => x !== val);
+          renderPills();
+          renderOptions(searchInput ? searchInput.value : "");
+        });
+      });
+    }
+
+    function renderOptions(filterText = "") {
+      const allSkills = getAllKnownSkills();
+      selected.forEach((s) => {
+        if (!allSkills.includes(s)) allSkills.push(s);
+      });
+      allSkills.sort((a, b) => a.localeCompare(b));
+
+      const q = (filterText || "").toLowerCase().trim();
+      const filtered = q ? allSkills.filter((s) => s.toLowerCase().includes(q)) : allSkills;
+
+      if (!filtered.length) {
+        optionsList.innerHTML = `<div style="padding: 6px 8px; font-size: 11px; color: var(--text-dim); font-style: italic;">No matching skills</div>`;
+      } else {
+        optionsList.innerHTML = filtered.map((skill) => {
+          const isChecked = selected.includes(skill);
+          return `
+            <label class="dropdown-option-item ${isChecked ? 'selected' : ''}" data-name="${escapeHtml(skill.toLowerCase())}">
+              <input type="checkbox" value="${escapeHtml(skill)}" ${isChecked ? 'checked' : ''}>
+              <span class="font-mono">${escapeHtml(skill)}</span>
+            </label>
+          `;
+        }).join("");
+
+        optionsList.querySelectorAll('input[type="checkbox"]').forEach((cb) => {
+          cb.addEventListener("change", () => {
+            const val = cb.value;
+            if (cb.checked) {
+              if (!selected.includes(val)) selected.push(val);
+            } else {
+              selected = selected.filter((x) => x !== val);
+            }
+            renderPills();
+            cb.closest(".dropdown-option-item").classList.toggle("selected", cb.checked);
+          });
+        });
+      }
+
+      if (q && !allSkills.some((s) => s.toLowerCase() === q)) {
+        customAdd.style.display = "block";
+        customVal.textContent = q;
+      } else {
+        customAdd.style.display = "none";
+      }
+    }
+
+    trigger.addEventListener("click", (e) => {
+      e.stopPropagation();
+      const wasActive = dd.classList.contains("active");
+      document.querySelectorAll(".phase-select-dropdown.active").forEach((el) => el.classList.remove("active"));
+      if (!wasActive) {
+        dd.classList.add("active");
+        renderOptions(searchInput ? searchInput.value : "");
+        if (searchInput) {
+          setTimeout(() => searchInput.focus(), 50);
+        }
+      }
+    });
+
+    if (searchInput) {
+      searchInput.addEventListener("input", (e) => {
+        renderOptions(e.target.value);
+      });
+
+      searchInput.addEventListener("keydown", (e) => {
+        if (e.key === "Enter") {
+          e.preventDefault();
+          const q = searchInput.value.trim();
+          if (q) {
+            if (!selected.includes(q)) selected.push(q);
+            searchInput.value = "";
+            renderPills();
+            renderOptions("");
+          }
+        }
+      });
+    }
+
+    if (customAddBtn) {
+      customAddBtn.addEventListener("click", (e) => {
+        e.stopPropagation();
+        const q = searchInput ? searchInput.value.trim() : "";
+        if (q) {
+          if (!selected.includes(q)) selected.push(q);
+          if (searchInput) searchInput.value = "";
+          renderPills();
+          renderOptions("");
+        }
+      });
+    }
+
+    renderPills();
+  }
+
+  function initDepsDropdown(card, currentDeps, idx, allTasks) {
+    const dd = card.querySelector(".phase-deps-dropdown");
+    if (!dd) return;
+    const trigger = dd.querySelector(".dropdown-trigger");
+    const pillsContainer = dd.querySelector(".phase-deps-pills");
+    const optionsList = dd.querySelector(".phase-deps-options");
+    const searchInput = dd.querySelector(".dep-filter-input");
+
+    const previousPhases = (allTasks || []).slice(0, idx).map((t, i) => ({
+      id: t.id || `t${i + 1}`,
+      name: t.name || `Phase ${i + 1}`,
+    }));
+
+    let selected = Array.isArray(currentDeps) ? [...currentDeps] : [];
+
+    function renderPills() {
+      if (idx === 0) {
+        pillsContainer.innerHTML = `<span class="dropdown-placeholder">None (Root Phase — executes first)</span>`;
+        return;
+      }
+      if (!selected.length) {
+        pillsContainer.innerHTML = `<span class="dropdown-placeholder">Select upstream dependencies...</span>`;
+        return;
+      }
+
+      pillsContainer.innerHTML = selected.map((depId) => {
+        const p = previousPhases.find((x) => x.id === depId);
+        const label = p ? `${p.id.toUpperCase()}: ${p.name}` : depId.toUpperCase();
+        return `
+          <span class="dropdown-pill pill-dep" data-value="${escapeHtml(depId)}">
+            ${escapeHtml(label)}
+            <span class="pill-remove" data-val="${escapeHtml(depId)}" title="Remove dependency">✕</span>
+          </span>
+        `;
+      }).join("");
+
+      pillsContainer.querySelectorAll(".pill-remove").forEach((btn) => {
+        btn.addEventListener("click", (e) => {
+          e.stopPropagation();
+          const val = btn.dataset.val;
+          selected = selected.filter((x) => x !== val);
+          renderPills();
+          renderOptions(searchInput ? searchInput.value : "");
+        });
+      });
+    }
+
+    function renderOptions(filterText = "") {
+      if (idx === 0) {
+        optionsList.innerHTML = `<div style="padding: 8px 10px; font-size: 11px; color: var(--text-dim); font-style: italic;">Root phase — executes first without upstream dependencies</div>`;
+        return;
+      }
+
+      const q = (filterText || "").toLowerCase().trim();
+      const filtered = q
+        ? previousPhases.filter((p) => p.id.toLowerCase().includes(q) || p.name.toLowerCase().includes(q))
+        : previousPhases;
+
+      if (!filtered.length) {
+        optionsList.innerHTML = `<div style="padding: 6px 8px; font-size: 11px; color: var(--text-dim); font-style: italic;">No matching phases</div>`;
+        return;
+      }
+
+      optionsList.innerHTML = filtered.map((p) => {
+        const isChecked = selected.includes(p.id);
+        return `
+          <label class="dropdown-option-item ${isChecked ? 'selected' : ''}">
+            <input type="checkbox" value="${escapeHtml(p.id)}" ${isChecked ? 'checked' : ''}>
+            <span><strong>${escapeHtml(p.id.toUpperCase())}:</strong> ${escapeHtml(p.name)}</span>
+          </label>
+        `;
+      }).join("");
+
+      optionsList.querySelectorAll('input[type="checkbox"]').forEach((cb) => {
+        cb.addEventListener("change", () => {
+          const val = cb.value;
+          if (cb.checked) {
+            if (!selected.includes(val)) selected.push(val);
+          } else {
+            selected = selected.filter((x) => x !== val);
+          }
+          renderPills();
+          cb.closest(".dropdown-option-item").classList.toggle("selected", cb.checked);
+        });
+      });
+    }
+
+    trigger.addEventListener("click", (e) => {
+      e.stopPropagation();
+      const wasActive = dd.classList.contains("active");
+      document.querySelectorAll(".phase-select-dropdown.active").forEach((el) => el.classList.remove("active"));
+      if (!wasActive) {
+        dd.classList.add("active");
+        renderOptions(searchInput ? searchInput.value : "");
+        if (searchInput && idx > 0) {
+          setTimeout(() => searchInput.focus(), 50);
+        }
+      }
+    });
+
+    if (searchInput) {
+      searchInput.addEventListener("input", (e) => {
+        renderOptions(e.target.value);
+      });
+    }
+
+    renderPills();
+  }
+
+  // Dismiss any open dropdown when clicking outside
+  document.addEventListener("click", (e) => {
+    if (!e.target.closest(".phase-select-dropdown")) {
+      document.querySelectorAll(".phase-select-dropdown.active").forEach((dd) => {
+        dd.classList.remove("active");
+      });
+    }
+  });
+
   function renderPipelineEditor(tasks) {
     if (!pipelineTasksList) return;
     pipelineTasksList.innerHTML = "";
@@ -965,12 +1259,37 @@ document.addEventListener("DOMContentLoaded", () => {
         </div>
         <div class="phase-meta-grid">
           <div class="phase-meta-field">
-            <label class="field-label-sm">Required Skills (comma-separated)</label>
-            <input type="text" class="phase-input-skills phase-meta-input font-mono" value="${escapeHtml((task.required_skills || []).join(', '))}" placeholder="e.g. alert_triage, file_reading">
+            <label class="field-label-sm">Required Skills (search & select)</label>
+            <div class="phase-select-dropdown phase-skills-dropdown" data-phase-index="${idx}">
+              <div class="dropdown-trigger" tabindex="0">
+                <div class="dropdown-pills-container phase-skills-pills"></div>
+                <span class="dropdown-chevron">▾</span>
+              </div>
+              <div class="dropdown-menu">
+                <div class="dropdown-menu-search">
+                  <input type="text" class="dropdown-search-input skill-filter-input" placeholder="🔍 Search skills...">
+                </div>
+                <div class="dropdown-options-list phase-skills-options"></div>
+                <div class="dropdown-custom-add" style="display: none;">
+                  <button type="button" class="dropdown-add-btn">+ Add custom skill: "<span class="custom-val"></span>"</button>
+                </div>
+              </div>
+            </div>
           </div>
           <div class="phase-meta-field">
-            <label class="field-label-sm">Dependencies (upstream task ID)</label>
-            <input type="text" class="phase-input-deps phase-meta-input font-mono" value="${escapeHtml((task.dependencies || []).join(', '))}" placeholder="None or t1">
+            <label class="field-label-sm">Dependencies (upstream phases)</label>
+            <div class="phase-select-dropdown phase-deps-dropdown" data-phase-index="${idx}">
+              <div class="dropdown-trigger" tabindex="0">
+                <div class="dropdown-pills-container phase-deps-pills"></div>
+                <span class="dropdown-chevron">▾</span>
+              </div>
+              <div class="dropdown-menu">
+                <div class="dropdown-menu-search" ${idx === 0 ? 'style="display:none;"' : ''}>
+                  <input type="text" class="dropdown-search-input dep-filter-input" placeholder="🔍 Filter upstream phases...">
+                </div>
+                <div class="dropdown-options-list phase-deps-options"></div>
+              </div>
+            </div>
           </div>
         </div>
       `;
@@ -982,6 +1301,10 @@ document.addEventListener("DOMContentLoaded", () => {
       });
 
       pipelineTasksList.appendChild(card);
+
+      // Initialize dropdown components
+      initSkillsDropdown(card, task.required_skills || []);
+      initDepsDropdown(card, task.dependencies || [], idx, tasks);
 
       // Render connector line between phases
       if (idx < tasks.length - 1) {
@@ -1001,13 +1324,12 @@ document.addEventListener("DOMContentLoaded", () => {
       const nameInput = card.querySelector(".phase-input-name");
       const descInput = card.querySelector(".phase-input-desc");
       const riskSelect = card.querySelector(".phase-select-risk");
-      const skillsInput = card.querySelector(".phase-input-skills");
-      const depsInput = card.querySelector(".phase-input-deps");
 
-      const skillsRaw = skillsInput ? skillsInput.value.trim() : "";
-      const depsRaw = depsInput ? depsInput.value.trim() : "";
-      const skills = skillsRaw ? skillsRaw.split(",").map(s => s.trim()).filter(Boolean) : [];
-      const deps = depsRaw ? depsRaw.split(",").map(d => d.trim()).filter(Boolean) : [];
+      const skillPills = card.querySelectorAll(".phase-skills-pills .dropdown-pill");
+      const skills = Array.from(skillPills).map((p) => p.dataset.value).filter(Boolean);
+
+      const depPills = card.querySelectorAll(".phase-deps-pills .dropdown-pill");
+      const deps = Array.from(depPills).map((p) => p.dataset.value).filter(Boolean);
 
       updated.push({
         id: `t${idx + 1}`,
@@ -1876,8 +2198,6 @@ document.addEventListener("DOMContentLoaded", () => {
 
   // ── Agent Studio: Reusable Agents & AI Skill Builder ──────────────────
 
-  let cachedSkillsList = [];
-
   const openAgentsBtn = document.getElementById("open-agents-btn");
   const agentsModal = document.getElementById("agents-modal");
   const closeAgentsModalX = document.getElementById("close-agents-modal-x");
@@ -1968,7 +2288,7 @@ document.addEventListener("DOMContentLoaded", () => {
             });
           });
         }
-      } catch (_) {}
+      } catch (_) { }
 
       cachedSkillsList = Array.from(skillSet).sort((a, b) => a.localeCompare(b));
     } catch (e) {
@@ -1982,12 +2302,28 @@ document.addEventListener("DOMContentLoaded", () => {
     picker.innerHTML = cachedSkillsList.map((skill) => {
       const isChecked = selectedSkills.includes(skill) ? "checked" : "";
       return `
-        <label class="skill-picker-item">
+        <label class="skill-picker-item" data-skill="${escapeHtml(skill.toLowerCase())}">
           <input type="checkbox" name="curated_skill" value="${skill}" ${isChecked}>
           <span>${skill}</span>
         </label>
       `;
     }).join("");
+
+    const agentSkillsSearch = document.getElementById("agent-skills-search");
+    if (agentSkillsSearch && !agentSkillsSearch.dataset.wired) {
+      agentSkillsSearch.dataset.wired = "true";
+      agentSkillsSearch.addEventListener("input", (e) => {
+        const q = e.target.value.toLowerCase().trim();
+        const items = picker.querySelectorAll(".skill-picker-item");
+        items.forEach((item) => {
+          const text = item.textContent.toLowerCase();
+          item.style.display = (!q || text.includes(q)) ? "flex" : "none";
+        });
+      });
+    }
+    if (agentSkillsSearch && agentSkillsSearch.value) {
+      agentSkillsSearch.dispatchEvent(new Event("input"));
+    }
   }
 
   // Select / Clear all skills
@@ -2021,7 +2357,7 @@ document.addEventListener("DOMContentLoaded", () => {
       if (cached) {
         try {
           agents = JSON.parse(cached);
-        } catch (_) {}
+        } catch (_) { }
       }
       if (!agents.length) {
         agents = [
@@ -2072,7 +2408,7 @@ document.addEventListener("DOMContentLoaded", () => {
     // Render Library Cards
     if (!agentsList) return;
     if (agents.length === 0) {
-        agentsList.innerHTML = `
+      agentsList.innerHTML = `
           <div style="grid-column: 1 / -1; text-align: center; padding: 36px 16px; background: rgba(15, 23, 42, 0.4); border-radius: var(--radius-md); border: 1px dashed var(--border-subtle);">
             <div style="font-size: 2.2rem; margin-bottom: 8px;">🤖</div>
             <div style="font-weight: 600; color: #fff; font-size: 15px;">No Custom Agents Created Yet</div>
@@ -2084,28 +2420,28 @@ document.addEventListener("DOMContentLoaded", () => {
             </button>
           </div>
         `;
-        const emptyBtn = document.getElementById("btn-empty-create-agent");
-        if (emptyBtn) {
-          emptyBtn.addEventListener("click", () => {
-            resetAgentForm();
-            switchAgentStudioTab(tabBtnAgentBuilder);
-          });
-        }
-        return;
+      const emptyBtn = document.getElementById("btn-empty-create-agent");
+      if (emptyBtn) {
+        emptyBtn.addEventListener("click", () => {
+          resetAgentForm();
+          switchAgentStudioTab(tabBtnAgentBuilder);
+        });
       }
+      return;
+    }
 
-      agentsList.innerHTML = agents.map((agent) => {
-        const skillsCount = agent.curated_skills && agent.curated_skills.length > 0
-          ? `${agent.curated_skills.length} skills`
-          : "All Skills";
-        const skillsChips = (agent.curated_skills && agent.curated_skills.length > 0)
-          ? agent.curated_skills.slice(0, 3).map((s) => `<span class="skill-tag">${s}</span>`).join("") +
-            (agent.curated_skills.length > 3 ? `<span class="skill-tag">+${agent.curated_skills.length - 3}</span>` : "")
-          : `<span class="skill-tag" style="background: rgba(16, 185, 129, 0.15); color: #34d399; border-color: rgba(16, 185, 129, 0.3);">All Tools</span>`;
+    agentsList.innerHTML = agents.map((agent) => {
+      const skillsCount = agent.curated_skills && agent.curated_skills.length > 0
+        ? `${agent.curated_skills.length} skills`
+        : "All Skills";
+      const skillsChips = (agent.curated_skills && agent.curated_skills.length > 0)
+        ? agent.curated_skills.slice(0, 3).map((s) => `<span class="skill-tag">${s}</span>`).join("") +
+        (agent.curated_skills.length > 3 ? `<span class="skill-tag">+${agent.curated_skills.length - 3}</span>` : "")
+        : `<span class="skill-tag" style="background: rgba(16, 185, 129, 0.15); color: #34d399; border-color: rgba(16, 185, 129, 0.3);">All Tools</span>`;
 
-        const isActive = agentSelector && agentSelector.value === agent.id;
+      const isActive = agentSelector && agentSelector.value === agent.id;
 
-        return `
+      return `
           <div class="agent-card ${isActive ? 'active-card' : ''}" data-id="${agent.id}">
             <div class="agent-card-header">
               <div class="agent-card-icon">${agent.icon || "🤖"}</div>
@@ -2127,43 +2463,43 @@ document.addEventListener("DOMContentLoaded", () => {
             </div>
           </div>
         `;
-      }).join("");
+    }).join("");
 
-      // Wire card action buttons
-      document.querySelectorAll(".btn-card-use").forEach((btn) => {
-        btn.addEventListener("click", () => {
-          const id = btn.getAttribute("data-id");
-          const name = btn.getAttribute("data-name");
-          if (agentSelector) agentSelector.value = id;
-          showToast(`Active Agent: ${name}`);
-          closeAgentsModal();
-        });
+    // Wire card action buttons
+    document.querySelectorAll(".btn-card-use").forEach((btn) => {
+      btn.addEventListener("click", () => {
+        const id = btn.getAttribute("data-id");
+        const name = btn.getAttribute("data-name");
+        if (agentSelector) agentSelector.value = id;
+        showToast(`Active Agent: ${name}`);
+        closeAgentsModal();
       });
+    });
 
-      document.querySelectorAll(".edit-agent-btn").forEach((btn) => {
-        btn.addEventListener("click", async () => {
-          const id = btn.getAttribute("data-id");
-          await loadAgentIntoForm(id);
-          switchAgentStudioTab(tabBtnAgentBuilder);
-        });
+    document.querySelectorAll(".edit-agent-btn").forEach((btn) => {
+      btn.addEventListener("click", async () => {
+        const id = btn.getAttribute("data-id");
+        await loadAgentIntoForm(id);
+        switchAgentStudioTab(tabBtnAgentBuilder);
       });
+    });
 
-      document.querySelectorAll(".delete-agent-btn").forEach((btn) => {
-        btn.addEventListener("click", async () => {
-          const id = btn.getAttribute("data-id");
-          const name = btn.getAttribute("data-name");
-          if (!confirm(`Are you sure you want to delete agent '${name}'?`)) return;
-          try {
-            const delRes = await fetch(`/api/agents/${id}`, { method: "DELETE" });
-            if (!delRes.ok) throw new Error("Delete failed");
-            showToast(`Deleted agent '${name}'`);
-            if (agentSelector && agentSelector.value === id) agentSelector.value = "";
-            fetchAgents();
-          } catch (e) {
-            showToast(`Failed to delete agent: ${e.message}`, "error");
-          }
-        });
+    document.querySelectorAll(".delete-agent-btn").forEach((btn) => {
+      btn.addEventListener("click", async () => {
+        const id = btn.getAttribute("data-id");
+        const name = btn.getAttribute("data-name");
+        if (!confirm(`Are you sure you want to delete agent '${name}'?`)) return;
+        try {
+          const delRes = await fetch(`/api/agents/${id}`, { method: "DELETE" });
+          if (!delRes.ok) throw new Error("Delete failed");
+          showToast(`Deleted agent '${name}'`);
+          if (agentSelector && agentSelector.value === id) agentSelector.value = "";
+          fetchAgents();
+        } catch (e) {
+          showToast(`Failed to delete agent: ${e.message}`, "error");
+        }
       });
+    });
   }
 
   // Reset form
@@ -2207,7 +2543,7 @@ document.addEventListener("DOMContentLoaded", () => {
       try {
         const res = await fetch(`/api/agents/${agentId}`);
         if (res.ok) agent = await res.json();
-      } catch (_) {}
+      } catch (_) { }
 
       if (!agent) {
         const cached = JSON.parse(
@@ -2472,7 +2808,7 @@ document.addEventListener("DOMContentLoaded", () => {
             body: JSON.stringify(payload),
           });
           if (res.ok) data = await res.json();
-        } catch (_) {}
+        } catch (_) { }
 
         if (!data) {
           data = {
@@ -3054,7 +3390,7 @@ Integrates with smart home sensors, switches, lighting, and scenes.`
       capInspDesc.textContent = cap.description || "No description provided.";
     }
     if (capInspMeta) {
-      const paramsList = Object.keys(cap.parameters || {}).length > 0 
+      const paramsList = Object.keys(cap.parameters || {}).length > 0
         ? Object.entries(cap.parameters).map(([k, v]) => `  ${k}: ${v.description || v.type || 'string'}`).join("\n")
         : "  (no parameters required)";
       capInspMeta.innerHTML = `name: ${escapeHtml(cap.name)}<br>description: ${escapeHtml(cap.description || '')}<br>parameters:<br><span style="color:#93c5fd; white-space: pre;">${escapeHtml(paramsList)}</span>`;
@@ -3306,7 +3642,7 @@ Integrates with smart home sensors, switches, lighting, and scenes.`
         activeSchedulesBadge.textContent = activeCount;
         activeSchedulesBadge.style.display = activeCount > 0 ? "inline-block" : "none";
       }
-    } catch (_) {}
+    } catch (_) { }
   }
 
   async function fetchSchedules() {

@@ -594,9 +594,12 @@
       </div>
 
       <!-- Tab 0: Installed Tools List -->
-      <div id="tab-content-tools" class="tab-content" style="display: flex;">
+      <div id="tab-content-tools" class="tab-content" style="display: flex; flex-direction: column;">
         <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 4px;">
           <span class="field-tip">Tools available to the Meta-Planner for autonomous execution:</span>
+        </div>
+        <div style="margin-bottom: 10px; width: 100%;">
+          <input type="text" id="tools-search-input" class="prompt-box modal-input" style="height: 34px; font-size: 12px; padding: 6px 12px;" placeholder="🔍 Search installed tools and skills (e.g. alert, forensics, python, mcp)...">
         </div>
         <div id="tool-list" class="tool-list">
           <!-- Populated via fetchTools() -->
@@ -802,6 +805,9 @@
               </div>
             </div>
             <div class="field-tip" style="margin-bottom: 6px;">If no skills are selected, the agent has unrestricted access to all tools.</div>
+            <div style="margin-bottom: 8px; width: 100%;">
+              <input type="text" id="agent-skills-search" class="prompt-box modal-input" style="height: 32px; font-size: 12px; padding: 6px 10px;" placeholder="🔍 Search curated skills (e.g. forensics, web, code, alert)...">
+            </div>
             <div id="agent-skills-picker" class="skills-picker-grid">
               <!-- Dynamically populated from registry skills -->
             </div>
