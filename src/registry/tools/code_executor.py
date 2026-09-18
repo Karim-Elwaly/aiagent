@@ -14,6 +14,7 @@ import tempfile
 from pathlib import Path
 
 from src.core.models import RiskLevel
+from src.core.text_utils import smart_truncate
 from src.registry.tool_registry import ToolSpec
 
 logger = logging.getLogger(__name__)
@@ -61,12 +62,7 @@ async def execute_python(code: str) -> str:
             )
 
         output = "\n".join(output_parts) if output_parts else "(no output)"
-
-        # Cap output size to prevent context overflow
-        if len(output) > MAX_OUTPUT_CHARS:
-            output = output[:MAX_OUTPUT_CHARS] + "\n[...output truncated]"
-
-        return output
+        return smart_truncate(output, max_chars=MAX_OUTPUT_CHARS)
 
     except subprocess.TimeoutExpired:
         return f"Error: Code execution timed out after {MAX_EXECUTION_SECONDS}s"

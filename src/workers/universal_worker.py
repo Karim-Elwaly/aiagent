@@ -31,6 +31,7 @@ from typing import Any
 
 from src.core.llm_client import LocalLLMClient
 from src.core.models import Task, TaskResult, TaskStatus
+from src.core.text_utils import smart_truncate
 from src.registry.tool_registry import ToolSpec
 
 logger = logging.getLogger(__name__)
@@ -367,18 +368,16 @@ class UniversalWorkerAgent:
 
             try:
                 import inspect
-                if inspect.iscoroutinefunction(tool_spec.function):
+                if hasattr(tool_spec, "invoke"):
+                    result = await tool_spec.invoke(**tool_args)
+                elif inspect.iscoroutinefunction(tool_spec.function):
                     result = await tool_spec.function(**tool_args)
                 else:
                     result = await asyncio.to_thread(tool_spec.function, **tool_args)
                 result_str = str(result)
 
-                # Guardrail 3: Cap output size
-                if len(result_str) > self.max_output_chars:
-                    result_str = (
-                        result_str[: self.max_output_chars]
-                        + "\n[...output truncated]"
-                    )
+                # Guardrail 3: Cap output size via Head-Tail Smart Truncation
+                result_str = smart_truncate(result_str, max_chars=self.max_output_chars)
 
                 tool_calls_made.append(tool_name)
 

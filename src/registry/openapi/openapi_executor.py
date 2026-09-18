@@ -15,6 +15,7 @@ from typing import Any
 import httpx
 
 from src.core.exceptions import ToolExecutionError
+from src.core.text_utils import smart_truncate
 
 logger = logging.getLogger(__name__)
 
@@ -98,8 +99,7 @@ async def execute_openapi_request(
                 res_body = response.text
 
             # Cap output to avoid context window explosion
-            if len(res_body) > MAX_OUTPUT_CHARS:
-                res_body = res_body[:MAX_OUTPUT_CHARS] + f"\n... [Truncated: output was {len(res_body)} characters]"
+            res_body = smart_truncate(res_body, max_chars=MAX_OUTPUT_CHARS)
 
             status_str = f"HTTP {response.status_code} {response.reason_phrase}"
             if response.status_code >= 400:

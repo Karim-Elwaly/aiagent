@@ -14,8 +14,10 @@ Architecture:
 
 from __future__ import annotations
 
+import asyncio
+import inspect
 import logging
-from collections.abc import Callable, Coroutine
+from collections.abc import Callable
 from dataclasses import dataclass
 from typing import Any
 
@@ -39,10 +41,24 @@ class ToolSpec:
     description: str  # human-readable, shown to LLM in worker prompt
     skills_provided: list[str]  # abstract skill names this tool satisfies
     parameters: dict[str, Any]  # JSON schema for function parameters
-    function: Callable[..., Coroutine]  # the actual async function to call
+    function: Callable[..., Any]  # the async or sync callable to run
     risk_level: RiskLevel = RiskLevel.LOW
     source_type: str = "native"  # "native" | "mcp" | "openapi"
     server_or_host: str = ""  # origin identifier (e.g., mcp server command, API base URL)
+
+    async def invoke(self, **kwargs) -> Any:
+        """Universal invocation helper handling both sync and async functions.
+
+        If the function is a coroutine (async def), it is awaited directly.
+        If it is a synchronous function (def), it is dispatched to a worker
+        thread via asyncio.to_thread to avoid blocking the event loop.
+        """
+        func = self.function
+        if inspect.iscoroutinefunction(func):
+            return await func(**kwargs)
+        if hasattr(func, "__call__") and inspect.iscoroutinefunction(getattr(func, "__call__", None)):
+            return await func(**kwargs)
+        return await asyncio.to_thread(func, **kwargs)
 
 
 class ToolRegistry:

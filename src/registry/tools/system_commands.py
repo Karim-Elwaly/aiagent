@@ -13,6 +13,7 @@ import subprocess
 from typing import Any
 
 from src.core.models import RiskLevel
+from src.core.text_utils import smart_truncate
 from src.registry.tool_registry import ToolSpec
 
 logger = logging.getLogger(__name__)
@@ -24,19 +25,20 @@ MAX_OUTPUT_CHARS = 4000
 async def execute_command(
     command: str | None = None,
     cmd: str | None = None,
-    **kwargs: Any,
+    args: str | None = None,
+    **extra_kwargs: Any,
 ) -> str:
-    """Execute a system terminal command (PowerShell on Windows, Bash on Unix) and return stdout/stderr."""
-    raw_cmd = command or cmd or kwargs.get("input") or kwargs.get("script") or ""
-    clean_cmd = str(raw_cmd).strip().strip('"').strip("'")
-    if not clean_cmd:
-        return "Error: Empty command provided."
+    """Run a system command and capture stdout/stderr safely."""
+    clean_cmd = command or cmd or args or ""
+    if not clean_cmd.strip():
+        return "Error: No command specified to execute."
 
+    # Decide interpreter based on host OS
     is_windows = platform.system() == "Windows"
     if is_windows:
         cmd_args = ["powershell", "-NoProfile", "-NonInteractive", "-Command", clean_cmd]
     else:
-        cmd_args = ["/bin/bash", "-c", clean_cmd]
+        cmd_args = ["bash", "-c", clean_cmd]
 
     try:
         result = subprocess.run(
@@ -55,9 +57,7 @@ async def execute_command(
             out_parts.append(f"(Command exited with code {result.returncode})")
 
         output = "\n".join(out_parts) if out_parts else "(No output returned)"
-        if len(output) > MAX_OUTPUT_CHARS:
-            output = output[:MAX_OUTPUT_CHARS] + "\n[...output truncated]"
-        return output
+        return smart_truncate(output, max_chars=MAX_OUTPUT_CHARS)
     except subprocess.TimeoutExpired:
         return f"Error: Command timed out after {MAX_COMMAND_SECONDS} seconds."
     except Exception as e:
