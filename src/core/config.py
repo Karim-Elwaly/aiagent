@@ -35,8 +35,8 @@ class Settings(BaseSettings):
 
     # ── Worker Configuration ─────────────────────────────
     worker_max_iterations: int = 8  # ReAct loop iteration limit
-    worker_max_output_chars: int = 2000  # cap tool output per call
-    worker_max_context_chars: int = 3000  # cap upstream context in persona
+    worker_max_output_chars: int = 8000  # cap tool output per call (increased for forensic log dumps)
+    worker_max_context_chars: int = 12000  # cap upstream context in persona (increased for multi-phase correlation)
 
     # ── Planner Configuration ────────────────────────────
     planner_max_retries: int = 3  # retries on JSON parse failure
@@ -64,14 +64,16 @@ def get_settings() -> Settings:
         _settings = Settings()
 
     # Dynamic overlay from runtime_settings.json
-    if CONFIG_FILE.exists():
-        try:
+    try:
+        if CONFIG_FILE.exists():
             with open(CONFIG_FILE, "r", encoding="utf-8") as f:
                 data = json.load(f)
             for k, v in data.items():
                 if hasattr(_settings, k) and v is not None:
                     setattr(_settings, k, v)
-        except Exception as e:
+    except Exception as e:
+        # Ignore sandbox restriction if called from within a Temporal workflow
+        if "Cannot access" not in str(e):
             logger.warning("Failed to load runtime settings from %s: %s", CONFIG_FILE, e)
 
     return _settings

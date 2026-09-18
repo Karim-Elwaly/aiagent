@@ -17,6 +17,7 @@ from pathlib import Path
 from typing import Any
 
 from src.core.models import RiskLevel
+from src.core.path_utils import resolve_target_path
 from src.registry.tool_registry import ToolSpec
 
 logger = logging.getLogger(__name__)
@@ -47,8 +48,8 @@ async def read_file(
     Large files are truncated to prevent context window overflow.
     """
     raw_path = file_path or path or kwargs.get("filepath") or kwargs.get("file") or ""
-    clean_path = str(raw_path).strip().strip('"').strip("'")
-    target = Path(clean_path)
+    target = resolve_target_path(raw_path)
+    clean_path = str(target)
 
     if not target.exists():
         return f"Error: File not found: {clean_path}"
@@ -85,8 +86,8 @@ async def write_file(
     """Write content to a file. Creates parent directories if needed."""
     raw_path = file_path or path or kwargs.get("filepath") or kwargs.get("file") or ""
     raw_content = content or kwargs.get("text") or kwargs.get("data") or ""
-    clean_path = str(raw_path).strip().strip('"').strip("'")
-    target = Path(clean_path)
+    target = resolve_target_path(raw_path)
+    clean_path = str(target)
 
     try:
         target.parent.mkdir(parents=True, exist_ok=True)
@@ -113,13 +114,8 @@ async def list_directory(
     a structured tree. Shows file names, human-readable sizes, and subdirectory item counts.
     """
     raw_path = directory_path or path or dir_path or kwargs.get("directory") or kwargs.get("folder") or "D:\\"
-    clean_path = str(raw_path).strip().strip('"').strip("'")
-    if not clean_path or clean_path.startswith("<") or clean_path.endswith(">"):
-        clean_path = "D:\\"
-    if len(clean_path) == 2 and clean_path[1] == ":":
-        clean_path += "\\"
-
-    target = Path(clean_path)
+    target = resolve_target_path(raw_path)
+    clean_path = str(target)
 
     if not target.exists():
         anchor_path = Path(target.anchor) if target.anchor else Path("D:\\")
@@ -257,8 +253,8 @@ async def delete_file(
 ) -> str:
     """Delete a file from the filesystem. THIS IS IRREVERSIBLE."""
     raw_path = file_path or path or kwargs.get("filepath") or kwargs.get("file") or ""
-    clean_path = str(raw_path).strip().strip('"').strip("'")
-    target = Path(clean_path)
+    target = resolve_target_path(raw_path)
+    clean_path = str(target)
 
     if not target.exists():
         return f"Error: File not found: {clean_path}"
@@ -320,13 +316,9 @@ async def get_disk_usage(
     and percentage of used space.
     """
     raw_path = path or directory_path or drive or kwargs.get("directory") or kwargs.get("folder") or "D:\\"
-    clean_path = str(raw_path).strip().strip('"').strip("'")
-    if not clean_path or clean_path.startswith("<") or clean_path.endswith(">"):
-        clean_path = "D:\\"
-    if len(clean_path) == 2 and clean_path[1] == ":":
-        clean_path += "\\"
+    target = resolve_target_path(raw_path)
+    clean_path = str(target)
 
-    target = Path(clean_path)
     drive_fallback_msg = ""
     if not target.exists():
         anchor = Path(target.anchor) if target.anchor else Path("D:\\")

@@ -123,6 +123,23 @@ def main():
     env = os.environ.copy()
     env["PYTHONPATH"] = os.getcwd()
 
+    def get_max_src_mtime() -> float:
+        max_m = 0.0
+        src_path = os.path.join(os.getcwd(), "src")
+        if not os.path.exists(src_path):
+            return 0.0
+        for root, _, files in os.walk(src_path):
+            for f in files:
+                if f.endswith(".py"):
+                    try:
+                        m = os.path.getmtime(os.path.join(root, f))
+                        if m > max_m:
+                            max_m = m
+                    except OSError:
+                        pass
+        return max_m
+
+    last_src_mtime = get_max_src_mtime()
     processes = []
 
     try:
@@ -152,6 +169,24 @@ def main():
 
         # Keep services running, auto-restarting child processes if they exit
         while True:
+            # Check for source code changes to auto-reload worker
+            current_src_mtime = get_max_src_mtime()
+            if current_src_mtime > last_src_mtime:
+                last_src_mtime = current_src_mtime
+                print("\n[*] Detected code change in src/. Reloading Temporal Worker...")
+                if worker_proc.poll() is None:
+                    worker_proc.terminate()
+                    try:
+                        worker_proc.wait(timeout=2)
+                    except subprocess.TimeoutExpired:
+                        worker_proc.kill()
+                time.sleep(1.0)
+                worker_proc = subprocess.Popen(
+                    [sys.executable, "-m", "src.orchestrator.worker_runner"],
+                    env=env,
+                )
+                processes[0] = worker_proc
+
             if worker_proc.poll() is not None:
                 ret = worker_proc.poll()
                 print(f"\n[!] Worker Runner exited with code {ret}. Auto-restarting in 2s...")
@@ -160,6 +195,7 @@ def main():
                     [sys.executable, "-m", "src.orchestrator.worker_runner"],
                     env=env,
                 )
+                processes[0] = worker_proc
 
             if api_proc.poll() is not None:
                 ret = api_proc.poll()
@@ -179,6 +215,7 @@ def main():
                     ],
                     env=env,
                 )
+                processes[1] = api_proc
 
             time.sleep(1.0)
 

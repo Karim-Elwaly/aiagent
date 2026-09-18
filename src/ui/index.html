@@ -43,6 +43,13 @@
         <div class="divider-v"></div>
 
         <!-- Action Buttons -->
+        <button id="open-clarification-preview-btn" class="header-btn" title="Preview Operator Clarification Dialogue" style="border-color: rgba(6, 182, 212, 0.4); background: rgba(6, 182, 212, 0.1); color: #38bdf8;">
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/>
+          </svg>
+          <span>Clarify Dialogue</span>
+        </button>
+
         <button id="open-llm-settings-btn" class="header-btn" title="Configure Local LLM">
           <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
             <circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"/>
@@ -390,6 +397,69 @@
           </svg>
           <span>Apply to Plan</span>
         </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Interactive Operator Clarification Dialogue Modal -->
+  <div id="clarification-modal" class="modal-overlay">
+    <div class="modal-card modal-clarification">
+      <div class="modal-header">
+        <div class="clarification-icon">
+          <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/>
+            <circle cx="12" cy="11" r="1"/>
+            <path d="M12 7v2"/>
+          </svg>
+        </div>
+        <div style="flex: 1;">
+          <div style="display: flex; justify-content: space-between; align-items: center;">
+            <div style="display: flex; align-items: center; gap: 8px;">
+              <span id="clarification-task-badge" class="phase-badge">TASK</span>
+              <div class="modal-title">Clarification Required</div>
+            </div>
+            <div style="display: flex; align-items: center; gap: 8px;">
+              <span class="node-badge badge-clarifying">OPERATOR DIALOGUE</span>
+              <button id="close-clarification-modal-btn" type="button" class="modal-close-icon" title="Close modal">✕</button>
+            </div>
+          </div>
+          <div style="display: flex; justify-content: space-between; align-items: center; margin-top: 4px;">
+            <div class="modal-subtitle">The agent requires your decision or guidance to proceed</div>
+            <div id="clarification-countdown" class="approval-countdown">
+              ⏳ Timeout in <span id="clarification-timer-text">10:00</span>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="modal-task-detail">
+        <div style="font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.05em; color: var(--accent-cyan); margin-bottom: 4px;">Agent Inquiry:</div>
+        <div id="clarification-question-text" class="clarification-question-text">Question prompt from the agent...</div>
+      </div>
+
+      <!-- Multiple Choice Options Grid -->
+      <div id="clarification-choices-wrapper" style="display: flex; flex-direction: column; gap: 8px;">
+        <label style="font-size: 12px; font-weight: 600; color: var(--text-main); display: flex; align-items: center; justify-content: space-between;">
+          <span>🎯 Select Preferred Option</span>
+          <span style="font-size: 11px; color: var(--text-muted); font-weight: 400;">Click to select</span>
+        </label>
+        <div id="clarification-choices-container" class="clarification-choices-grid">
+          <!-- Dynamic choice pills injected here -->
+        </div>
+      </div>
+
+      <!-- Custom Write-in Answer -->
+      <div style="display: flex; flex-direction: column; gap: 6px;">
+        <label style="font-size: 12px; font-weight: 600; color: var(--text-main); display: flex; align-items: center; justify-content: space-between;">
+          <span>✍️ Custom Instructions / Clarification (Optional)</span>
+          <span style="font-size: 11px; color: var(--accent-cyan); font-weight: 400;">Overrides selected choice if entered</span>
+        </label>
+        <textarea id="clarification-custom-input" class="prompt-box modal-input" placeholder="Type specific instructions or custom guidance..."></textarea>
+      </div>
+
+      <div class="modal-actions">
+        <button id="modal-clarify-skip-btn" class="btn-reject" type="button">Skip & Use Default</button>
+        <button id="modal-clarify-submit-btn" class="btn-approve" type="button">Submit Decision & Resume</button>
       </div>
     </div>
   </div>

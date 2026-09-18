@@ -11,8 +11,10 @@ The persona + tools make it specialized. This is where the
 
 from __future__ import annotations
 
+import asyncio
 import json
 import logging
+from typing import Any
 
 from temporalio import activity
 
@@ -178,139 +180,172 @@ async def execute_task(
     Returns:
         TaskResult as a plain dict.
     """
-    task = Task.model_validate(task_dict)
-    logger.info(
-        "Executing task '%s' (%s), skills: %s (agent_id: %s)",
-        task.name,
-        task.id,
-        task.required_skills,
-        agent_id or "default",
-    )
-
-    registry = _get_registry()
-    settings = get_settings()
-    worker_llm = _get_worker_llm()
-
-    # Load agent profile if specified
-    profile = None
-    if agent_id:
-        try:
-            from src.core.agent_store import AgentStore
-
-            store = AgentStore()
-            profile = store.load(agent_id)
-            if profile:
-                logger.info(
-                    "Applying AgentProfile '%s' (%s) for task '%s'",
-                    profile.name,
-                    profile.id,
-                    task.id,
-                )
-        except Exception as e:
-            logger.warning("Failed to load AgentProfile '%s': %s", agent_id, e)
-
-    # Component 2: Skill/Tool Injector — resolve abstract skills to tools
-    if profile and profile.curated_skills:
-        effective_skills = [
-            s for s in task.required_skills if s in profile.curated_skills
-        ]
-        tools = registry.resolve(effective_skills)
-    else:
-        tools = registry.resolve(task.required_skills)
-
-    if not tools and task.required_skills != ["general_reasoning"]:
-        logger.warning(
-            "No tools resolved for skills %s. "
-            "Worker will operate without tools.",
-            task.required_skills,
-        )
-
-    # Component 3: Persona Synthesizer — generate system prompt
-    synthesizer = PersonaSynthesizer(
-        max_context_chars=settings.worker_max_context_chars
-    )
-    if profile:
-        persona = synthesizer.synthesize_from_profile(
-            profile=profile,
-            task=task,
-            tools=tools,
-            upstream_context=upstream_outputs if upstream_outputs else None,
-        )
-    else:
-        persona = synthesizer.synthesize(
-            task=task,
-            tools=tools,
-            upstream_context=upstream_outputs if upstream_outputs else None,
-        )
-
-    # Component 4: Universal Worker Agent — execute with ReAct loop
-    worker = UniversalWorkerAgent(
-        llm=worker_llm,
-        max_iterations=settings.worker_max_iterations,
-        max_output_chars=settings.worker_max_output_chars,
-    )
-
-    # Temporal Native Heartbeat Checkpointing
-    resume_checkpoint = None
+    task_id = task_dict.get("id", "unknown")
     try:
-        details = activity.info().heartbeat_details
-        if details and isinstance(details[0], dict) and "messages" in details[0]:
-            resume_checkpoint = details[0]
-            logger.info(
-                "Temporal Activity '%s' restoring state from server heartbeat details (step %s)",
-                task.id,
-                resume_checkpoint.get("step", 0),
+        task = Task.model_validate(task_dict)
+        logger.info(
+            "Executing task '%s' (%s), skills: %s (agent_id: %s)",
+            task.name,
+            task.id,
+            task.required_skills,
+            agent_id or "default",
+        )
+
+        registry = _get_registry()
+        settings = get_settings()
+        worker_llm = _get_worker_llm()
+
+        # Load agent profile if specified
+        profile = None
+        if agent_id:
+            try:
+                from src.core.agent_store import AgentStore
+
+                store = AgentStore()
+                profile = store.load(agent_id)
+                if profile:
+                    logger.info(
+                        "Applying AgentProfile '%s' (%s) for task '%s'",
+                        profile.name,
+                        profile.id,
+                        task.id,
+                    )
+            except Exception as e:
+                logger.warning("Failed to load AgentProfile '%s': %s", agent_id, e)
+
+        # Component 2: Skill/Tool Injector — resolve abstract skills to tools
+        if profile and profile.curated_skills:
+            effective_skills = [
+                s for s in task.required_skills if s in profile.curated_skills
+            ]
+            tools = registry.resolve(effective_skills)
+        else:
+            tools = registry.resolve(task.required_skills)
+
+        if not tools and task.required_skills != ["general_reasoning"]:
+            logger.warning(
+                "No tools resolved for skills %s. "
+                "Worker will operate without tools.",
+                task.required_skills,
             )
-    except Exception:
-        pass
 
-    # Connect streaming event bus
-    bus = get_event_bus()
-    wf_id = task_dict.get("_workflow_id")
-    if not wf_id:
+        # Component 3: Persona Synthesizer — generate system prompt
+        synthesizer = PersonaSynthesizer(
+            max_context_chars=settings.worker_max_context_chars
+        )
+        if profile:
+            persona = synthesizer.synthesize_from_profile(
+                profile=profile,
+                task=task,
+                tools=tools,
+                upstream_context=upstream_outputs if upstream_outputs else None,
+            )
+        else:
+            persona = synthesizer.synthesize(
+                task=task,
+                tools=tools,
+                upstream_context=upstream_outputs if upstream_outputs else None,
+            )
+
+        # Component 4: Universal Worker Agent — execute with ReAct loop
+        worker = UniversalWorkerAgent(
+            llm=worker_llm,
+            max_iterations=settings.worker_max_iterations,
+            max_output_chars=settings.worker_max_output_chars,
+        )
+
+        # Temporal Native Heartbeat Checkpointing
+        resume_checkpoint = None
         try:
-            wf_id = activity.info().workflow_id
-        except Exception:
-            wf_id = "default"
-
-    def handle_token(token: str) -> None:
-        bus.publish(wf_id, {"type": "token", "task_id": task.id, "content": token})
-
-    def handle_event(ev: dict) -> None:
-        bus.publish(wf_id, ev)
-
-    def handle_heartbeat(checkpoint_data: dict[str, Any] | None = None) -> None:
-        try:
-            if checkpoint_data:
-                activity.heartbeat(checkpoint_data)
-            else:
-                activity.heartbeat("react_step", task.id)
+            details = activity.info().heartbeat_details
+            if details and isinstance(details[0], dict) and "messages" in details[0]:
+                resume_checkpoint = details[0]
+                logger.info(
+                    "Temporal Activity '%s' restoring state from server heartbeat details (step %s)",
+                    task.id,
+                    resume_checkpoint.get("step", 0),
+                )
         except Exception:
             pass
 
-    user_query = task_dict.get("_user_query", "")
+        # Connect streaming event bus
+        bus = get_event_bus()
+        wf_id = task_dict.get("_workflow_id")
+        if not wf_id:
+            try:
+                wf_id = activity.info().workflow_id
+            except Exception:
+                wf_id = "default"
 
-    result = await worker.execute(
-        task=task,
-        persona=persona,
-        tools=tools,
-        upstream_context=upstream_outputs if upstream_outputs else None,
-        user_query=user_query,
-        on_token=handle_token,
-        on_event=handle_event,
-        on_heartbeat=handle_heartbeat,
-        resume_checkpoint=resume_checkpoint,
-    )
+        def handle_token(token: str) -> None:
+            bus.publish(wf_id, {"type": "token", "task_id": task.id, "content": token})
 
-    logger.info(
-        "Task '%s' result: status=%s, tools_used=%s, time=%dms",
-        task.id,
-        result.status.value,
-        result.tool_calls_made,
-        result.execution_time_ms or 0,
-    )
+        def handle_event(ev: dict) -> None:
+            bus.publish(wf_id, ev)
 
-    return result.to_serializable()
+        def handle_heartbeat(checkpoint_data: dict[str, Any] | None = None) -> None:
+            try:
+                if checkpoint_data:
+                    activity.heartbeat(checkpoint_data)
+                else:
+                    activity.heartbeat("react_step", task.id)
+            except Exception:
+                pass
+
+        user_query = task_dict.get("_user_query", "")
+
+        # Continuous background heartbeat to protect against LLM latency timeouts
+        heartbeat_stop = asyncio.Event()
+
+        async def _periodic_heartbeat() -> None:
+            while not heartbeat_stop.is_set():
+                try:
+                    await asyncio.sleep(5.0)
+                    activity.heartbeat("keepalive", task.id)
+                except asyncio.CancelledError:
+                    break
+                except Exception:
+                    pass
+
+        hb_task = asyncio.create_task(_periodic_heartbeat())
+
+        try:
+            result = await worker.execute(
+                task=task,
+                persona=persona,
+                tools=tools,
+                upstream_context=upstream_outputs if upstream_outputs else None,
+                user_query=user_query,
+                on_token=handle_token,
+                on_event=handle_event,
+                on_heartbeat=handle_heartbeat,
+                resume_checkpoint=resume_checkpoint,
+                workflow_id=wf_id,
+            )
+        finally:
+            heartbeat_stop.set()
+            hb_task.cancel()
+
+        logger.info(
+            "Task '%s' result: status=%s, tools_used=%s, time=%dms",
+            task.id,
+            result.status.value,
+            result.tool_calls_made,
+            result.execution_time_ms or 0,
+        )
+
+        return result.to_serializable()
+
+    except Exception as exc:
+        logger.exception("Task '%s' execution crashed with exception: %s", task_id, exc)
+        return {
+            "task_id": task_id,
+            "status": "failed",
+            "output": "",
+            "error": f"Task execution error ({type(exc).__name__}): {exc}",
+            "tool_calls_made": [],
+            "execution_time_ms": 0,
+        }
 
 
 @activity.defn

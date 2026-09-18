@@ -1,0 +1,151 @@
+"""
+AgentHub Universal Path Healing & Resolution Utility
+
+Provides cross-platform path resolution, repairing Python AST escape artifacts
+(e.g., \\a -> 0x07 Bell, \\r -> CR, \\t -> Tab) that occur when Windows paths with single
+backslashes are evaluated, and sanitizing unescaped Windows paths in JSON strings.
+"""
+
+from __future__ import annotations
+
+import os
+import re
+from pathlib import Path
+
+
+_ESCAPE_REPLACEMENTS = [
+    ("\a", r"\a"),
+    ("\b", r"\b"),
+    ("\f", r"\f"),
+    ("\n", r"\n"),
+    ("\r", r"\r"),
+    ("\t", r"\t"),
+    ("\v", r"\v"),
+]
+
+
+def resolve_target_path(path_input: str | Path) -> Path:
+    """Resolve and heal raw, escaped, or mangled filesystem paths across platforms.
+    
+    Handles:
+      - Path objects and string paths
+      - Single backslash escape artifacts (\\a -> 0x07, \\r -> 0x0d, \\t -> 0x09)
+      - Trailing punctuation and surrounding quotes
+      - Forward-slash and backslash normalization
+      - Relative to absolute resolution
+    """
+    if isinstance(path_input, Path):
+        raw_str = str(path_input)
+    else:
+        raw_str = str(path_input or "").strip().strip('"\'')
+
+    if not raw_str:
+        return Path(os.getcwd())
+
+    # 1. Direct check
+    candidate = Path(raw_str)
+    try:
+        if candidate.exists():
+            return candidate.resolve()
+    except Exception:
+        pass
+
+    # 2. Heal escape artifacts from AST/Python evaluation (\a -> 0x07, \r -> 0x0d, etc.)
+    healed_str = raw_str
+    for esc_char, replacement in _ESCAPE_REPLACEMENTS:
+        if esc_char in healed_str:
+            healed_str = healed_str.replace(esc_char, replacement)
+
+    candidate_healed = Path(healed_str)
+    try:
+        if candidate_healed.exists():
+            return candidate_healed.resolve()
+    except Exception:
+        pass
+
+    # 3. Clean trailing punctuation from regex captures (e.g. "path/to/dir.")
+    stripped = healed_str.rstrip(",;.:)]}")
+    candidate_stripped = Path(stripped)
+    try:
+        if candidate_stripped.exists():
+            return candidate_stripped.resolve()
+    except Exception:
+        pass
+
+    # 4. Try forward-slash normalization
+    fwd_str = stripped.replace("\\", "/")
+    candidate_fwd = Path(fwd_str)
+    try:
+        if candidate_fwd.exists():
+            return candidate_fwd.resolve()
+    except Exception:
+        pass
+
+    # 5. Check if Windows drive letter is missing colon e.g. "D\folder" -> "D:\folder"
+    if re.match(r"^[a-zA-Z][\\/]", stripped):
+        with_colon = f"{stripped[0]}:{stripped[1:]}"
+        candidate_colon = Path(with_colon)
+        try:
+            if candidate_colon.exists():
+                return candidate_colon.resolve()
+        except Exception:
+            pass
+
+    # Fallback to candidate_stripped or original candidate
+    return candidate_stripped if candidate_stripped.is_absolute() else candidate_stripped.resolve()
+
+
+def extract_target_path(text: str) -> str | None:
+    """Extract and heal a target filesystem path from a user query or prompt string.
+    
+    Looks for:
+      - Windows paths (e.g. D:\\Security-logs-test\\..., C:\\Logs, D:/...)
+      - Unix absolute paths (e.g. /var/log/..., /tmp/...)
+    """
+    if not text:
+        return None
+
+    # First heal escape artifacts in text before regex matching
+    healed_text = text
+    for esc_char, replacement in _ESCAPE_REPLACEMENTS:
+        if esc_char in healed_text:
+            healed_text = healed_text.replace(esc_char, replacement)
+
+    # Windows drive path with backslashes or forward slashes
+    m_win = re.search(r'([a-zA-Z]:[\\/][^"\'\n\r\t<>|]+)', healed_text)
+    if m_win:
+        raw_p = m_win.group(1).rstrip(",;.:)]}")
+        resolved = resolve_target_path(raw_p)
+        return str(resolved)
+
+    # Unix absolute path
+    m_unix = re.search(r'(/(?:[a-zA-Z0-9._-]+/)+[a-zA-Z0-9._-]+)', healed_text)
+    if m_unix:
+        raw_u = m_unix.group(1).rstrip(",;.:)]}")
+        resolved = resolve_target_path(raw_u)
+        return str(resolved)
+
+    return None
+
+
+def sanitize_json_string_backslashes(text: str) -> str:
+    """Sanitize raw or unescaped backslashes inside JSON strings.
+    
+    Ensures Windows paths like "D:\\Security-logs-test\\attack-cases" can be parsed
+    by standard json.loads without failing or falling back to ast.literal_eval.
+    """
+    def _fix_quoted_str(match: re.Match) -> str:
+        content = match.group(0)
+        inner = content[1:-1]
+        
+        # If string contains a Windows drive or path separators
+        if re.search(r'[a-zA-Z]:[\\/]', inner) or "\\" in inner:
+            # Replace single backslash not followed by another backslash or quote
+            fixed = re.sub(r'\\(?![\\"])', r'\\\\', inner)
+            return f'"{fixed}"'
+        
+        # General JSON escape fix
+        fixed = re.sub(r'\\(?!["\\/bfnrt]|u[0-9a-fA-F]{4})', r'\\\\', inner)
+        return f'"{fixed}"'
+
+    return re.sub(r'"(?:[^"\\]|\\.)*"', _fix_quoted_str, text)

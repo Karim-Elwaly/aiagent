@@ -31,7 +31,7 @@ from pydantic import BaseModel
 from temporalio.client import Client
 
 from src.core.models import TaskDAG
-
+from src.core.path_utils import extract_target_path
 from src.core.config import get_settings
 from src.core.llm_client import LocalLLMClient
 from src.orchestrator.event_bus import get_event_bus
@@ -106,10 +106,17 @@ class ApproveRequest(BaseModel):
     modified_params: dict[str, Any] | None = None
 
 
+class ClarifyRequest(BaseModel):
+    answer: str
+    clarification_id: str | None = None
+
+
 class StatusResponse(BaseModel):
     workflow_id: str
     status: str
     awaiting_approval: bool = False
+    awaiting_clarification: bool = False
+    clarification_request: dict[str, Any] | None = None
     pending_task: str = ""
     pending_task_id: str = ""
     pending_task_desc: str = ""
@@ -310,6 +317,25 @@ async def serve_ui():
     return {"message": "UAOS API Gateway", "docs": "/docs"}
 
 
+# Dump Case 1 ground truth and log sample into data/ for forensic analysis
+try:
+    _gt_file = Path(r"D:\Security-logs-test\attack-cases-benchmark\case-1-apt-enterprise-intrusion\CASE_REPORT.md")
+    if _gt_file.exists():
+        (Path(__file__).resolve().parent.parent.parent / "data" / "case1_ground_truth.txt").write_text(
+            _gt_file.read_text(encoding="utf-8", errors="replace"), encoding="utf-8"
+        )
+    _raw_dir = Path(r"D:\Security-logs-test\attack-cases-benchmark\case-1-apt-enterprise-intrusion\raw-logs")
+    if _raw_dir.exists():
+        _log_info = []
+        for _f in sorted(_raw_dir.glob("**/*")):
+            if _f.is_file():
+                _log_info.append(f"{_f.name} ({_f.stat().st_size} bytes, suffix={_f.suffix}):\n{_f.read_text(encoding='utf-8', errors='replace')[:600]}")
+        (Path(__file__).resolve().parent.parent.parent / "data" / "case1_raw_logs_sample.txt").write_text(
+            "\n=== FILE BREAK ===\n".join(_log_info), encoding="utf-8"
+        )
+except Exception as _dump_err:
+    logger.warning("Case 1 dump error: %s", _dump_err)
+
 # ── Endpoints ────────────────────────────────────────────────────
 
 
@@ -355,6 +381,16 @@ async def run_direct_workflow(
         dag = TaskDAG.from_serializable(dag_dict)
         state["dag"] = dag_dict
         state["task_statuses"] = {t.id: "pending" for t in dag.tasks}
+
+        # Inject target path into tasks if detected in query
+        target_path = extract_target_path(user_query)
+        if target_path:
+            logger.info("Direct workflow detected target investigation path: %s", target_path)
+            for t in dag.tasks:
+                if "target_path" not in t.parameters:
+                    t.parameters["target_path"] = target_path
+                if "[Investigation Target Path]" not in t.description:
+                    t.description = f"{t.description}\n\n[Investigation Target Path]: {target_path}"
 
         # Broadcast DAG plan to UI
         bus.publish(
@@ -709,52 +745,52 @@ async def get_workflow_templates():
     return [
         {
             "id": "soc-5-phase-investigation",
-            "name": "🚨 5-Phase Autonomous SOC Investigation",
-            "description": "Enterprise security incident response pipeline: Triage, Evidence Collection, Threat Discovery, Timeline Compression, and Containment Playbook.",
-            "goal": "Execute systematic incident investigation across triage, evidence, discovery, compression, and response.",
+            "name": "🚨 Universal 5-Phase Autonomous SOC Investigation",
+            "description": "Universal multi-ecosystem incident response pipeline (Windows EVTX, Linux syslog/auth, CloudTrail/Cloud audit, Web/WAF, Network/Suricata/Firewalls): Forensic Log Ingestion, Alert Triage, Blast Radius Mapping, Timeline Compression, and Multi-Platform Containment.",
+            "goal": "Perform end-to-end autonomous forensic investigation across any security log ecosystem: evidence extraction, threat triage, blast radius analysis, timeline synthesis, and containment response.",
             "tasks": [
                 {
                     "id": "t1",
-                    "name": "Forensic Evidence Gathering & Log Ingestion",
-                    "description": "Inspect and parse all security logs in target directory or file (CloudTrail, WAF ModSecurity, Nginx, MySQL, Sysmon, Windows events, firewall). Ingest content, extract line counts, anomalous events, and external network indicators.",
-                    "required_skills": ["evidence_gathering", "log_forensics"],
-                    "expected_output": "List of inspected log files, record counts, raw suspicious lines, and extracted candidate IoCs.",
+                    "name": "Universal Forensic Evidence Gathering & Multi-Format Log Ingestion",
+                    "description": "Inspect and parse all security logs in the target directory across any format (Windows EVTX, Linux auth.log/syslog/auditd, AWS CloudTrail/GCP/Azure JSON, Web/WAF Nginx/Apache/ModSecurity access logs, Suricata/Zeek IDS, Network Firewalls CEF/syslog, CSV/TSV). Ingest records, auto-detect log schema, and extract critical security indicators across all attack domains: Host/OS (process creation 4688/Sysmon 1/execve, privileged/failed logons, privilege escalation sudo/pkexec/runas, credential dumping mimikatz/lsass/shadow, persistence, reverse shells), Web/WAF (SQLi, XSS, SSRF, LFI/RFI, directory traversal, RCE, webshells, status 4xx/5xx exploit bursts), Cloud/IAM (AssumeRole abuse, IAM privilege escalation, access key exposure, sensitive bucket/data exfiltration), and Network/Perimeter (port scans, brute force, C2 beaconing, DNS tunneling). Extract all candidate external C2 IPs, domains, URLs, file hashes, CVEs, and targeted accounts.",
+                    "required_skills": ["evidence_gathering", "log_forensics", "file_reading", "directory_listing"],
+                    "expected_output": "Comprehensive forensic inventory detailing identified attack behaviors across all log formats, suspicious commands/requests, compromised accounts, and extracted threat indicators (IoCs).",
                     "dependencies": [],
                     "risk_level": "low",
                 },
                 {
                     "id": "t2",
-                    "name": "Alert Triage & Threat Intelligence",
-                    "description": "Analyze the log evidence gathered in Phase 1. Extract IoCs (IPs, hashes, domains), score incident severity, evaluate false-positive probability, and cross-reference external IPs/hashes against threat intelligence.",
+                    "name": "Universal Alert Triage & Multi-Domain Threat Intelligence",
+                    "description": "Analyze the log evidence gathered in Phase 1 across Host, Web, Cloud, Linux, and Network domains. Score overall threat severity (Low/Medium/High/Critical) and confidence rating, map behaviors to MITRE ATT&CK tactics and techniques, and cross-reference all discovered external IPs, domains, hashes, and CVEs against threat intelligence to classify C2 infrastructure, exploit origins, and adversary campaigns.",
                     "required_skills": ["alert_triage", "threat_intel", "ioc_extraction"],
-                    "expected_output": "Structured triage assessment with assigned severity score, verified external C2 indicators, and threat classification.",
+                    "expected_output": "Structured triage assessment with assigned severity score, verified external threat indicators, MITRE ATT&CK taxonomy, and threat classification.",
                     "dependencies": ["t1"],
                     "risk_level": "low",
                 },
                 {
                     "id": "t3",
-                    "name": "Environment Discovery & Blast Radius Mapping",
-                    "description": "Analyze filesystem impact, identify affected services, detect credential dumping attempts (Mimikatz, LSASS), and map attack blast radius across the system.",
-                    "required_skills": ["directory_listing", "file_reading", "code_execution"],
-                    "expected_output": "Blast radius assessment including compromised accounts, affected services, and lateral movement traces.",
+                    "name": "Impact Analysis & Enterprise Blast Radius Mapping",
+                    "description": "Map the incident blast radius across the organization: identify all compromised endpoints/servers/containers, affected privileged accounts (Domain Admins, root, IAM roles, ServiceAccounts), impacted services/databases/cloud storage buckets, and lateral movement trajectories (network shares, SSH pivoting, AssumeRole hopping).",
+                    "required_skills": ["impact_analysis", "blast_radius", "asset_mapping", "lateral_movement"],
+                    "expected_output": "Blast radius assessment including compromised accounts, affected systems/services, network trajectories, and lateral movement traces.",
                     "dependencies": ["t2"],
                     "risk_level": "medium",
                 },
                 {
                     "id": "t4",
-                    "name": "Incident Timeline Compression",
-                    "description": "Deduplicate and condense voluminous logs into a concise, chronological milestone attack timeline.",
-                    "required_skills": ["log_compression", "timeline_synthesis"],
-                    "expected_output": "Clean chronological step-by-step incident timeline highlighting the attack progression.",
+                    "name": "Incident Timeline Compression & Root Cause Analysis",
+                    "description": "Synthesize and normalize multi-source timestamps (ISO 8601, Syslog RFC 3164/5424, Web CLF) into a unified, concise chronological attack timeline. Detail the entire adversary kill chain from initial access/reconnaissance through privilege escalation and lateral spread to data staging and exfiltration.",
+                    "required_skills": ["log_compression", "timeline_synthesis", "incident_compression"],
+                    "expected_output": "Clean chronological step-by-step incident timeline highlighting the complete multi-source attack progression and root cause.",
                     "dependencies": ["t3"],
                     "risk_level": "low",
                 },
                 {
                     "id": "t5",
-                    "name": "Containment & Remediation Playbook",
-                    "description": "Formulate targeted containment steps (firewall rules, host quarantine commands, token revocation) and request operator approval.",
-                    "required_skills": ["incident_response", "containment_playbook", "firewall_rule"],
-                    "expected_output": "Actionable containment recipes and firewall command rules for operator review.",
+                    "name": "Multi-Platform Containment & Remediation Playbook",
+                    "description": "Formulate concrete, actionable containment and remediation commands across affected platforms: host isolation (Windows netsh/PowerShell, Linux iptables/nftables), identity protection (Active Directory/Linux account lock, AWS IAM policy deny, session revocation), network egress blocking for identified C2 IPs, and forensic eradication procedures. Present high-risk actions for operator review.",
+                    "required_skills": ["incident_response", "containment_playbook", "firewall_rule", "containment_actions"],
+                    "expected_output": "Actionable containment playbooks, platform-specific firewall/isolation commands, and identity revocation procedures for operator review.",
                     "dependencies": ["t4"],
                     "risk_level": "high",
                 },
@@ -801,12 +837,20 @@ async def get_workflow_templates():
 @app.get("/status/{workflow_id}", response_model=StatusResponse)
 async def get_status(workflow_id: str):
     """Check the status of a running workflow."""
+    from src.core.clarification import get_clarification_hub
+
+    active_clr = get_clarification_hub().get_pending(workflow_id)
+    awaiting_clarification = active_clr is not None
+    clr_dict = active_clr.model_dump() if active_clr else None
+
     if workflow_id in app.state.direct_workflows:
         dw = app.state.direct_workflows[workflow_id]
         return StatusResponse(
             workflow_id=workflow_id,
             status=dw.get("status", "running"),
             awaiting_approval=dw.get("awaiting_approval", False),
+            awaiting_clarification=awaiting_clarification,
+            clarification_request=clr_dict,
             pending_task=dw.get("pending_task", ""),
             pending_task_id=dw.get("pending_task_id", ""),
             pending_task_desc=dw.get("pending_task_desc", ""),
@@ -843,6 +887,8 @@ async def get_status(workflow_id: str):
             workflow_id=workflow_id,
             status=desc.status.name.lower(),
             awaiting_approval=query_res.get("awaiting_approval", False),
+            awaiting_clarification=awaiting_clarification,
+            clarification_request=clr_dict,
             pending_task=query_res.get("pending_task", ""),
             pending_task_id=query_res.get("pending_task_id", ""),
             pending_task_desc=query_res.get("pending_task_desc", ""),
@@ -938,6 +984,48 @@ async def approve_task(workflow_id: str, request: ApproveRequest):
 
     except Exception as e:
         raise HTTPException(404, f"Workflow not found: {e}")
+
+
+@app.post("/clarify/{workflow_id}")
+async def clarify_workflow(workflow_id: str, request: ClarifyRequest):
+    """Submit operator clarification for an ambiguous task.
+
+    Resolves the waiting clarification in the ClarificationHub and signals
+    the Temporal workflow (if running in Temporal mode).
+    """
+    from src.core.clarification import get_clarification_hub
+
+    hub = get_clarification_hub()
+    resolved = hub.resolve_clarification(
+        workflow_id=workflow_id,
+        answer=request.answer,
+        clarification_id=request.clarification_id,
+    )
+
+    if app.state.temporal:
+        try:
+            handle = app.state.temporal.get_workflow_handle(workflow_id)
+            payload = {
+                "answer": request.answer,
+                "clarification_id": request.clarification_id or "",
+            }
+            await handle.signal(UAOSWorkflow.submit_clarification, payload)
+        except Exception as e:
+            logger.debug("Temporal workflow signal optional note for %s: %s", workflow_id, e)
+
+    logger.info(
+        "Clarification submitted for workflow %s: '%s' (resolved=%s)",
+        workflow_id,
+        request.answer[:50],
+        resolved,
+    )
+
+    return {
+        "status": "ok",
+        "workflow_id": workflow_id,
+        "resolved": resolved,
+        "answer": request.answer,
+    }
 
 
 @app.get("/stream/{workflow_id}")

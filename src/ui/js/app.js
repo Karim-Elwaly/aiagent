@@ -5,15 +5,37 @@
  */
 
 document.addEventListener("DOMContentLoaded", () => {
-  // Support file:// and HTTP origins transparently
-  const API_BASE = window.location.protocol.startsWith("http")
-    ? ""
-    : "http://127.0.0.1:8000";
+  // Candidate backend API base URLs in priority order
+  const candidateBases = [
+    window.location.protocol.startsWith("http") ? "" : null,
+    "http://127.0.0.1:8001",
+    "http://127.0.0.1:8000",
+    "http://localhost:8001",
+    "http://localhost:8000",
+  ].filter((b) => b !== null);
+
+  let activeApiBase = candidateBases[0] || "";
 
   const originalFetch = window.fetch;
-  window.fetch = function (resource, init) {
-    if (typeof resource === "string" && resource.startsWith("/") && API_BASE) {
-      resource = API_BASE + resource;
+  window.fetch = async function (resource, init) {
+    if (typeof resource === "string" && resource.startsWith("/")) {
+      const url = (activeApiBase ? activeApiBase : "") + resource;
+      try {
+        return await originalFetch.call(this, url, init);
+      } catch (netErr) {
+        // Automatically probe alternate candidate ports on connection failure
+        for (const altBase of candidateBases) {
+          if (altBase === activeApiBase) continue;
+          try {
+            const altUrl = (altBase ? altBase : "") + resource;
+            const altRes = await originalFetch.call(this, altUrl, init);
+            activeApiBase = altBase;
+            console.log(`[AgentHub API] Switched active base to ${altBase}`);
+            return altRes;
+          } catch (_) {}
+        }
+        throw netErr;
+      }
     }
     return originalFetch.call(this, resource, init);
   };
@@ -40,12 +62,30 @@ document.addEventListener("DOMContentLoaded", () => {
   const approveBtn = document.getElementById("modal-approve-btn");
   const rejectBtn = document.getElementById("modal-reject-btn");
 
+  // ── Operator Clarification Modal Elements ──
+  const clarificationModal = document.getElementById("clarification-modal");
+  const clarificationTaskBadge = document.getElementById("clarification-task-badge");
+  const clarificationTimerText = document.getElementById("clarification-timer-text");
+  const clarificationQuestionText = document.getElementById("clarification-question-text");
+  const clarificationChoicesContainer = document.getElementById("clarification-choices-container");
+  const clarificationCustomInput = document.getElementById("clarification-custom-input");
+  const modalClarifySubmitBtn = document.getElementById("modal-clarify-submit-btn");
+  const modalClarifySkipBtn = document.getElementById("modal-clarify-skip-btn");
+  const closeClarificationModalBtn = document.getElementById("close-clarification-modal-btn");
+  let currentClarificationId = null;
+  let currentClarificationQuestion = null;
+  let selectedClarificationChoice = null;
+  let clarificationTimerInterval = null;
+  let clarificationTargetTimestamp = null;
+
   // State
   let currentWorkflowId = null;
   let pollInterval = null;
   let activeDag = null;
   let activeEventSource = null;
+  let activeApprovalTaskName = null;
   let approvalTimerInterval = null;
+  let approvalTargetTimestamp = null;
   let isCustomWorkflowMode = false;
   let activeCustomDag = null;
   let currentWorkflowTasks = [];
@@ -525,6 +565,22 @@ document.addEventListener("DOMContentLoaded", () => {
         );
         break;
 
+      case "clarification_required": {
+        const question = ev.question || "Clarification required to proceed with task.";
+        const choices = ev.choices || [];
+        const taskId = ev.task_id || "TASK";
+        const timeoutSec = ev.timeout_seconds || 600;
+        const clarificationId = ev.clarification_id || null;
+        showClarificationModal(taskId, question, choices, timeoutSec, clarificationId);
+        showToast("💬 Operator Clarification Required", "info");
+        break;
+      }
+
+      case "clarification_resolved":
+        hideClarificationModal();
+        showToast(`✔ Clarification recorded: "${ev.answer || 'Response submitted'}"`, "info");
+        break;
+
       case "escalation_triggered":
         showToast(`🚨 Approval timed out after 15m! Escalated to administrator.`, "error");
         if (approvalTimerText) {
@@ -677,8 +733,27 @@ document.addEventListener("DOMContentLoaded", () => {
             status.pending_task_desc,
             status.pending_task_risk,
             status.pending_task_params,
-            900
+            900,
+            false
           );
+        } else if (approvalModal.classList.contains("active") && activeApprovalTaskName && !activeApprovalTaskName.includes("CVE-2024-3094")) {
+          // Task was approved/rejected or workflow advanced
+          hideApprovalModal();
+        }
+
+        // 3b. Check if clarification required
+        if (status.awaiting_clarification && status.clarification_request) {
+          const req = status.clarification_request;
+          showClarificationModal(
+            req.task_id || status.pending_task_id || "TASK",
+            req.question || "",
+            req.choices || [],
+            req.timeout_seconds || 600,
+            req.id || null,
+            false
+          );
+        } else if (clarificationModal && clarificationModal.classList.contains("active") && currentClarificationId && !currentClarificationId.startsWith("preview-")) {
+          hideClarificationModal();
         }
 
         // 4. If completed or failed
@@ -737,7 +812,8 @@ document.addEventListener("DOMContentLoaded", () => {
         "action": "downgrade_and_isolate",
         "dry_run": false
       },
-      895
+      895,
+      true
     );
     showToast("Interactive HITL Approval Gate preview activated", "info");
   };
@@ -783,14 +859,35 @@ document.addEventListener("DOMContentLoaded", () => {
         modified_params: modifiedParams,
       };
 
-      const res = await fetch(`/approve/${currentWorkflowId}`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(payload),
-      });
+      // Probe candidate endpoints if primary fetch fails
+      const candidateEndpoints = [
+        `/approve/${currentWorkflowId}`,
+        `http://127.0.0.1:8001/approve/${currentWorkflowId}`,
+        `http://127.0.0.1:8000/approve/${currentWorkflowId}`,
+        `http://localhost:8001/approve/${currentWorkflowId}`,
+        `http://localhost:8000/approve/${currentWorkflowId}`,
+      ];
 
-      if (!res.ok) {
-        throw new Error(`HTTP ${res.status}`);
+      let res = null;
+      let lastError = null;
+
+      for (const endpoint of candidateEndpoints) {
+        try {
+          res = await originalFetch(endpoint, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(payload),
+          });
+          if (res && res.ok) {
+            break;
+          }
+        } catch (err) {
+          lastError = err;
+        }
+      }
+
+      if (!res || !res.ok) {
+        throw lastError || new Error(`HTTP ${res ? res.status : 'Service unavailable'}`);
       }
 
       showToast(
@@ -804,8 +901,16 @@ document.addEventListener("DOMContentLoaded", () => {
     }
   }
 
-  function showApprovalModal(taskName, taskDesc, riskLevel = "critical", taskParams = null, timeoutSec = 900) {
-    approvalTaskName.textContent = taskName || "High-Risk Operation";
+  function showApprovalModal(taskName, taskDesc, riskLevel = "critical", taskParams = null, timeoutSec = 900, force = false) {
+    const currentName = taskName || "High-Risk Operation";
+
+    // Deduplication guard: if modal is already open for this task, DO NOT reset timer or wipe user input!
+    if (!force && approvalModal.classList.contains("active") && activeApprovalTaskName === currentName) {
+      return;
+    }
+
+    activeApprovalTaskName = currentName;
+    approvalTaskName.textContent = currentName;
     approvalTaskDesc.textContent =
       taskDesc ||
       "A worker agent is paused at an approval gate. This task has been classified as high-risk and requires explicit confirmation before execution.";
@@ -827,28 +932,35 @@ document.addEventListener("DOMContentLoaded", () => {
       approvalGuidanceInput.value = "";
     }
 
+    approvalTargetTimestamp = Date.now() + ((timeoutSec || 900) * 1000);
     startApprovalCountdown(timeoutSec);
     approvalModal.classList.add("active");
   }
 
   function startApprovalCountdown(seconds) {
-    if (approvalTimerInterval) clearInterval(approvalTimerInterval);
-    let remaining = seconds || 900;
-    updateTimerDisplay(remaining);
+    if (approvalTimerInterval) {
+      clearInterval(approvalTimerInterval);
+      approvalTimerInterval = null;
+    }
+    if (!approvalTargetTimestamp) {
+      approvalTargetTimestamp = Date.now() + ((seconds || 900) * 1000);
+    }
 
-    approvalTimerInterval = setInterval(() => {
-      remaining--;
-      if (remaining <= 0) {
+    const tick = () => {
+      const remainingSec = Math.max(0, Math.round((approvalTargetTimestamp - Date.now()) / 1000));
+      updateTimerDisplay(remainingSec);
+      if (remainingSec <= 0) {
         clearInterval(approvalTimerInterval);
         approvalTimerInterval = null;
         if (approvalTimerText) {
           approvalTimerText.textContent = "00:00 (ESCALATED)";
           approvalTimerText.style.color = "#ef4444";
         }
-      } else {
-        updateTimerDisplay(remaining);
       }
-    }, 1000);
+    };
+
+    tick();
+    approvalTimerInterval = setInterval(tick, 1000);
   }
 
   function updateTimerDisplay(remainingSec) {
@@ -864,8 +976,174 @@ document.addEventListener("DOMContentLoaded", () => {
       clearInterval(approvalTimerInterval);
       approvalTimerInterval = null;
     }
+    approvalTargetTimestamp = null;
+    activeApprovalTaskName = null;
     approvalModal.classList.remove("active");
   }
+
+  // ── Operator Clarification Modal Actions & Handlers ──
+  const openClarificationPreviewBtn = document.getElementById("open-clarification-preview-btn");
+  if (openClarificationPreviewBtn) {
+    openClarificationPreviewBtn.addEventListener("click", () => {
+      showClarificationModal(
+        "T3",
+        "Which caching tier should be configured for high-throughput gateway traffic?",
+        ["Redis Cluster (High Availability)", "Standalone Redis Sentinel", "In-Memory LRU Cache"],
+        600,
+        "preview-t3",
+        true
+      );
+    });
+  }
+
+  if (closeClarificationModalBtn) {
+    closeClarificationModalBtn.addEventListener("click", () => hideClarificationModal());
+  }
+  if (modalClarifySkipBtn) {
+    modalClarifySkipBtn.addEventListener("click", () => {
+      sendClarificationSignal("Proceed with default options and safest judgment.");
+    });
+  }
+  if (modalClarifySubmitBtn) {
+    modalClarifySubmitBtn.addEventListener("click", () => {
+      const customVal = clarificationCustomInput ? clarificationCustomInput.value.trim() : "";
+      const chosen = customVal || selectedClarificationChoice || "Confirmed";
+      sendClarificationSignal(chosen);
+    });
+  }
+
+  async function sendClarificationSignal(answer) {
+    if (!currentWorkflowId) {
+      showToast(`Clarification recorded: "${answer}" (Preview mode)`, "info");
+      hideClarificationModal();
+      return;
+    }
+    try {
+      showToast("Submitting operator decision...", "info");
+      const res = await fetch(`/clarify/${currentWorkflowId}`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          answer: answer,
+          clarification_id: currentClarificationId,
+        }),
+      });
+      if (!res.ok) {
+        const errData = await res.json().catch(() => ({}));
+        throw new Error(errData.detail || `Server returned ${res.status}`);
+      }
+      hideClarificationModal();
+      showToast(`Clarification received! Agent resuming...`, "info");
+    } catch (e) {
+      showToast(`Failed to send clarification: ${e.message}`, "error");
+    }
+  }
+
+  function showClarificationModal(taskId, question, choices = [], timeoutSec = 600, clarificationId = null, force = false) {
+    if (!clarificationModal) return;
+
+    // Deduplication guard: if modal is already open for this question/id, DO NOT reset countdown or wipe input!
+    const isSameClarification = (clarificationId && currentClarificationId === clarificationId) ||
+                                (!clarificationId && currentClarificationQuestion === question);
+    if (!force && clarificationModal.classList.contains("active") && isSameClarification) {
+      return;
+    }
+
+    currentClarificationId = clarificationId;
+    currentClarificationQuestion = question;
+    selectedClarificationChoice = null;
+
+    if (clarificationTaskBadge) {
+      clarificationTaskBadge.textContent = taskId || "TASK";
+    }
+    if (clarificationQuestionText) {
+      clarificationQuestionText.textContent = question || "Clarification needed to proceed.";
+    }
+    if (clarificationCustomInput) {
+      clarificationCustomInput.value = "";
+    }
+
+    if (clarificationChoicesContainer) {
+      clarificationChoicesContainer.innerHTML = "";
+      if (choices && choices.length > 0) {
+        choices.forEach((c, idx) => {
+          const pill = document.createElement("button");
+          pill.type = "button";
+          pill.className = "choice-pill" + (idx === 0 ? " selected" : "");
+          if (idx === 0) selectedClarificationChoice = c;
+          pill.innerHTML = `<span class="choice-pill-indicator"></span><span>${escapeHtml(c)}</span>`;
+          pill.addEventListener("click", () => {
+            clarificationChoicesContainer.querySelectorAll(".choice-pill").forEach(p => p.classList.remove("selected"));
+            pill.classList.add("selected");
+            selectedClarificationChoice = c;
+          });
+          clarificationChoicesContainer.appendChild(pill);
+        });
+      } else {
+        const emptyHint = document.createElement("div");
+        emptyHint.style.fontSize = "12px";
+        emptyHint.style.color = "var(--text-dim)";
+        emptyHint.style.fontStyle = "italic";
+        emptyHint.textContent = "No predefined choices provided. Please type your response below.";
+        clarificationChoicesContainer.appendChild(emptyHint);
+      }
+    }
+
+    clarificationTargetTimestamp = Date.now() + ((timeoutSec || 600) * 1000);
+    startClarificationCountdown(timeoutSec || 600);
+    clarificationModal.classList.add("active");
+  }
+
+  function hideClarificationModal() {
+    if (!clarificationModal) return;
+    clarificationModal.classList.remove("active");
+    if (clarificationTimerInterval) {
+      clearInterval(clarificationTimerInterval);
+      clarificationTimerInterval = null;
+    }
+    clarificationTargetTimestamp = null;
+    currentClarificationId = null;
+    currentClarificationQuestion = null;
+  }
+
+  function startClarificationCountdown(seconds) {
+    if (clarificationTimerInterval) {
+      clearInterval(clarificationTimerInterval);
+      clarificationTimerInterval = null;
+    }
+    if (!clarificationTargetTimestamp) {
+      clarificationTargetTimestamp = Date.now() + ((seconds || 600) * 1000);
+    }
+
+    const tick = () => {
+      const remainingSec = Math.max(0, Math.round((clarificationTargetTimestamp - Date.now()) / 1000));
+      updateClarificationTimerDisplay(remainingSec);
+      if (remainingSec <= 0) {
+        clearInterval(clarificationTimerInterval);
+        clarificationTimerInterval = null;
+        if (clarificationTimerText) {
+          clarificationTimerText.textContent = "00:00 (TIMED OUT)";
+          clarificationTimerText.style.color = "#ef4444";
+        }
+      }
+    };
+
+    tick();
+    clarificationTimerInterval = setInterval(tick, 1000);
+  }
+
+  function updateClarificationTimerDisplay(remainingSec) {
+    if (!clarificationTimerText) return;
+    const mins = Math.floor(remainingSec / 60);
+    const secs = remainingSec % 60;
+    clarificationTimerText.textContent = `${String(mins).padStart(2, "0")}:${String(secs).padStart(2, "0")}`;
+    clarificationTimerText.style.color = remainingSec < 60 ? "#ef4444" : "#38bdf8";
+  }
+
+  // Expose preview trigger on window for testing
+  window.showClarificationPreview = function(taskId = "T2", question = "Which database environment should be targeted for the benchmark migration?", choices = ["Staging DB (Recommended)", "Production Read-Replica", "Ephemeral SQLite Sandbox"]) {
+    showClarificationModal(taskId, question, choices, 595, "preview-1", true);
+  };
 
   const closeApprovalModalBtn = document.getElementById("close-approval-modal-btn");
   if (closeApprovalModalBtn) {
@@ -1057,46 +1335,46 @@ document.addEventListener("DOMContentLoaded", () => {
 
   const BUILTIN_WORKFLOW_TEMPLATES = {
     "soc-5-phase-investigation": {
-      name: "5-Phase SOC Autonomous Investigation Pipeline",
-      description: "Enterprise security triage, forensic evidence gathering, blast radius discovery, timeline compression, and containment response.",
+      name: "🚨 Universal 5-Phase Autonomous SOC Investigation",
+      description: "Universal multi-ecosystem incident response pipeline (Windows EVTX, Linux syslog/auth, CloudTrail/Cloud audit, Web/WAF, Network/Suricata/Firewalls): Forensic Log Ingestion, Alert Triage, Blast Radius Mapping, Timeline Compression, and Multi-Platform Containment.",
       tasks: [
         {
           id: "t1",
-          name: "Forensic Evidence Gathering & Log Ingestion",
-          description: "Inspect and parse all security logs in target directory or file (CloudTrail, WAF ModSecurity, Nginx, MySQL, Sysmon, Windows events, firewall). Ingest content, extract line counts, anomalous events, and external network indicators.",
-          required_skills: ["evidence_gathering", "log_forensics"],
+          name: "Universal Forensic Evidence Gathering & Multi-Format Log Ingestion",
+          description: "Inspect and parse all security logs in the target directory across any format (Windows EVTX, Linux auth.log/syslog/auditd, AWS CloudTrail/GCP/Azure JSON, Web/WAF Nginx/Apache/ModSecurity access logs, Suricata/Zeek IDS, Network Firewalls CEF/syslog, CSV/TSV). Ingest records, auto-detect log schema, and extract critical security indicators across all attack domains: Host/OS (process creation 4688/Sysmon 1/execve, privileged/failed logons, privilege escalation sudo/pkexec/runas, credential dumping mimikatz/lsass/shadow, persistence, reverse shells), Web/WAF (SQLi, XSS, SSRF, LFI/RFI, directory traversal, RCE, webshells, status 4xx/5xx exploit bursts), Cloud/IAM (AssumeRole abuse, IAM privilege escalation, access key exposure, sensitive bucket/data exfiltration), and Network/Perimeter (port scans, brute force, C2 beaconing, DNS tunneling). Extract all candidate external C2 IPs, domains, URLs, file hashes, CVEs, and targeted accounts.",
+          required_skills: ["evidence_gathering", "log_forensics", "file_reading", "directory_listing"],
           dependencies: [],
           risk_level: "low",
         },
         {
           id: "t2",
-          name: "Alert Triage & Threat Intelligence",
-          description: "Analyze the log evidence gathered in Phase 1. Extract IoCs (IPs, hashes, domains), score incident severity, evaluate false-positive probability, and cross-reference external IPs/hashes against threat intelligence.",
+          name: "Universal Alert Triage & Multi-Domain Threat Intelligence",
+          description: "Analyze the log evidence gathered in Phase 1 across Host, Web, Cloud, Linux, and Network domains. Score overall threat severity (Low/Medium/High/Critical) and confidence rating, map behaviors to MITRE ATT&CK tactics and techniques, and cross-reference all discovered external IPs, domains, hashes, and CVEs against threat intelligence to classify C2 infrastructure, exploit origins, and adversary campaigns.",
           required_skills: ["alert_triage", "threat_intel", "ioc_extraction"],
           dependencies: ["t1"],
           risk_level: "low",
         },
         {
           id: "t3",
-          name: "Environment Discovery & Blast Radius Mapping",
-          description: "Analyze filesystem impact, identify affected services, detect credential dumping attempts (Mimikatz, LSASS), and map attack blast radius across the system.",
-          required_skills: ["directory_listing", "file_reading", "code_execution"],
+          name: "Impact Analysis & Enterprise Blast Radius Mapping",
+          description: "Map the incident blast radius across the organization: identify all compromised endpoints/servers/containers, affected privileged accounts (Domain Admins, root, IAM roles, ServiceAccounts), impacted services/databases/cloud storage buckets, and lateral movement trajectories (network shares, SSH pivoting, AssumeRole hopping).",
+          required_skills: ["impact_analysis", "blast_radius", "asset_mapping", "lateral_movement"],
           dependencies: ["t2"],
           risk_level: "medium",
         },
         {
           id: "t4",
-          name: "Timeline Compression & MITRE ATT&CK RCA",
-          description: "Synthesize gathered forensic events into a chronological timeline and correlate with MITRE ATT&CK tactics.",
-          required_skills: ["timeline_synthesis", "log_compression", "incident_compression"],
+          name: "Incident Timeline Compression & Root Cause Analysis",
+          description: "Synthesize and normalize multi-source timestamps (ISO 8601, Syslog RFC 3164/5424, Web CLF) into a unified, concise chronological attack timeline. Detail the entire adversary kill chain from initial access/reconnaissance through privilege escalation and lateral spread to data staging and exfiltration.",
+          required_skills: ["log_compression", "timeline_synthesis", "incident_compression"],
           dependencies: ["t3"],
           risk_level: "low",
         },
         {
           id: "t5",
-          name: "Response Action & Containment Rules",
-          description: "Generate firewall isolation rules, IP blocklists, and immediate remediation steps for administrator approval.",
-          required_skills: ["containment_playbook", "firewall_rule", "containment_actions"],
+          name: "Multi-Platform Containment & Remediation Playbook",
+          description: "Formulate concrete, actionable containment and remediation commands across affected platforms: host isolation (Windows netsh/PowerShell, Linux iptables/nftables), identity protection (Active Directory/Linux account lock, AWS IAM policy deny, session revocation), network egress blocking for identified C2 IPs, and forensic eradication procedures. Present high-risk actions for operator review.",
+          required_skills: ["incident_response", "containment_playbook", "firewall_rule", "containment_actions"],
           dependencies: ["t4"],
           risk_level: "high",
         },
@@ -1819,10 +2097,8 @@ document.addEventListener("DOMContentLoaded", () => {
       activeEventSource.close();
       activeEventSource = null;
     }
-    if (approvalTimerInterval) {
-      clearInterval(approvalTimerInterval);
-      approvalTimerInterval = null;
-    }
+    hideApprovalModal();
+    hideClarificationModal();
     activeDag = null;
     if (dagInteractiveHint) {
       dagInteractiveHint.style.display = "none";

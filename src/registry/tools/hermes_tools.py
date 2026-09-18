@@ -446,12 +446,18 @@ async def clarify_question(question: str, choices: list[str] | None = None) -> s
         choices: Optional list of predefined multiple-choice options.
     """
     logger.info("Agent requesting clarification: %s (choices: %s)", question, choices)
-    choices_str = f"\nOptions:\n" + "\n".join(f"- {c}" for c in choices) if choices else ""
-    return (
-        f"=== Operator Clarification Requested ===\n"
-        f"Question: {question}{choices_str}\n"
-        f"Status: Prompt logged for operator review."
-    )
+    try:
+        from src.core.clarification import get_clarification_hub
+        hub = get_clarification_hub()
+        return await hub.request_clarification(question=question, choices=choices)
+    except Exception as e:
+        logger.warning("ClarificationHub fallback on error (%s): returning default notice", e)
+        choices_str = f"\nOptions:\n" + "\n".join(f"- {c}" for c in choices) if choices else ""
+        return (
+            f"=== Operator Clarification Requested ===\n"
+            f"Question: {question}{choices_str}\n"
+            f"Status: Prompt logged for operator review."
+        )
 
 
 CLARIFY_QUESTION_SPEC = ToolSpec(

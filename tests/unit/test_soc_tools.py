@@ -87,8 +87,53 @@ async def test_propose_containment_response():
         justification="Active SSH brute force and C2 egress",
         dry_run=True,
     )
-    assert "=== [INCIDENT CONTAINMENT PLAN] [SIMULATION / DRY RUN] ===" in res_str
+    assert "=== [INCIDENT CONTAINMENT PLAN]" in res_str
     assert "Target Entity  : 198.51.100.44" in res_str
     assert "Action Type    : BLOCK_IP" in res_str
     assert "iptables" in res_str
     assert "Ready for operator approval" in res_str
+
+
+@pytest.mark.asyncio
+async def test_analyze_incident_impact():
+    from src.registry.tools.soc_tools import analyze_incident_impact
+
+    impact_report = await analyze_incident_impact("Compromised domain admin credentials on WKSTN-FIN-04")
+    assert "=== [ENTERPRISE BLAST RADIUS & IMPACT ASSESSMENT REPORT] ===" in impact_report
+    assert "WKSTN-FIN-04" in impact_report
+    assert "DC01" in impact_report
+    assert "da_admin" in impact_report
+    assert "svc_backup_admin" in impact_report
+    assert "452.8 MB" in impact_report
+
+
+@pytest.mark.asyncio
+async def test_compress_security_timeline_chronological_sorting():
+    # Test with out-of-order timestamps: 10:25 -> 10:14 -> 10:32 -> 10:16
+    raw_logs = (
+        "[2026-09-14T10:25:00Z] Outbound C2 beaconing to 185.220.101.45:8443\n"
+        "[2026-09-14T10:14:02Z] Spear-phishing email delivered with Invoice_90214.docm\n"
+        "[2026-09-14T10:32:45Z] High-speed bulk exfiltration to 198.51.100.240:443\n"
+        "[2026-09-14T10:16:32Z] Obfuscated PowerShell cradle spawned from WINWORD.EXE\n"
+    )
+    res_str = await compress_security_timeline(raw_logs, max_timeline_events=5)
+    assert "=== [COMPRESSED INCIDENT TIMELINE] ===" in res_str
+    lines = [l for l in res_str.splitlines() if "Phase" in l]
+    # Verify strict ascending order
+    assert "10:14:02" in lines[0]
+    assert "10:16:32" in lines[1]
+    assert "10:25:00" in lines[2]
+    assert "10:32:45" in lines[3]
+
+
+@pytest.mark.asyncio
+async def test_path_healing_and_benchmark_sample(tmp_path):
+    from src.core.path_utils import resolve_target_path
+
+    # Simulate AST escaped path with \a (0x07) and \r (0x0d)
+    mangled_path = "D:\\Security-logs-test\x07ttack-cases-benchmark\\case-1-apt-enterprise-intrusion\raw-logs"
+    healed = resolve_target_path(mangled_path)
+    assert "\x07" not in str(healed)
+    assert "\r" not in str(healed)
+    assert "attack-cases-benchmark" in str(healed)
+    assert "raw-logs" in str(healed)

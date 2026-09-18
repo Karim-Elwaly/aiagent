@@ -31,6 +31,7 @@ from typing import Any
 
 from src.core.llm_client import LocalLLMClient
 from src.core.models import Task, TaskResult, TaskStatus
+from src.core.path_utils import extract_target_path, resolve_target_path, sanitize_json_string_backslashes
 from src.core.text_utils import smart_truncate
 from src.registry.tool_registry import ToolSpec
 
@@ -80,6 +81,7 @@ class UniversalWorkerAgent:
         on_event: Callable[[dict[str, Any]], None] | None = None,
         on_heartbeat: Callable[..., None] | None = None,
         resume_checkpoint: dict[str, Any] | None = None,
+        workflow_id: str = "",
     ) -> TaskResult:
         """Execute a single task via the guarded ReAct loop.
 
@@ -92,6 +94,8 @@ class UniversalWorkerAgent:
             on_token: Optional callback for streaming tokens.
             on_event: Optional callback for tool/task lifecycle events.
             on_heartbeat: Optional callback to pulse liveness/heartbeat to orchestrator.
+            resume_checkpoint: Checkpoint data from Temporal activity heartbeat.
+            workflow_id: Optional ID of the parent workflow.
 
         Returns:
             TaskResult with status, output, and metadata.
@@ -99,6 +103,16 @@ class UniversalWorkerAgent:
         start_time = time.monotonic()
         tool_map = {t.name: t for t in tools}
         tool_calls_made: list[str] = []
+
+        # Set execution contextvars for clarification dialogue
+        try:
+            from src.core.clarification import current_workflow_id, current_task_id
+            if workflow_id:
+                current_workflow_id.set(workflow_id)
+            if task and task.id:
+                current_task_id.set(task.id)
+        except Exception:
+            pass
 
         # Construct clear user message containing task instructions, target context, and upstream context
         user_parts = []
@@ -556,23 +570,21 @@ class UniversalWorkerAgent:
 
     def _extract_task_path_or_default(self, task: Task, user_query: str = "") -> str:
         """Extract a filesystem path mentioned in the task or user_query, defaulting to current working directory."""
+        # 1. Direct parameter lookup
+        params = getattr(task, "parameters", None) or {}
+        if isinstance(params, dict):
+            for pkey in ("target_path", "directory", "dir_path", "path", "folder", "target_dir"):
+                pval = params.get(pkey)
+                if pval and str(pval).strip():
+                    return str(resolve_target_path(str(pval).strip()))
+
+        # 2. Extract from combined text (task name, description, user_query)
         combined_text = f"{task.name} {task.description} {user_query}"
-        # Match Windows drive path e.g. "D:\Security-logs-test\...", "D:\ai_gpu", D:\
-        m = re.search(r'([a-zA-Z]:\\[^"\'\s<>*?|]*)', combined_text)
-        if m:
-            clean = m.group(1).rstrip(",;.:)").strip('"').strip("'")
-            if clean:
-                return clean
-        # Match Unix style path /path/to/logs
-        m_unix = re.search(r'(/(?:[a-zA-Z0-9._-]+/)+[a-zA-Z0-9._-]+)', combined_text)
-        if m_unix:
-            clean_u = m_unix.group(1).rstrip(",;.:)").strip('"').strip("'")
-            if clean_u:
-                return clean_u
-        m_drive = re.search(r'([a-zA-Z]:)', combined_text)
-        if m_drive:
-            return f"{m_drive.group(1)}\\"
-        # Fallback to current working directory (cross-platform) instead of hardcoding D:\
+        extracted = extract_target_path(combined_text)
+        if extracted:
+            return extracted
+
+        # Fallback to current working directory (cross-platform)
         return os.getcwd()
 
     def _build_tool_steering_message(self, task: Task, tools: list[ToolSpec], user_query: str = "") -> str:
@@ -630,7 +642,7 @@ class UniversalWorkerAgent:
         if code_block_match:
             candidate = code_block_match.group(1)
             try:
-                parsed = json.loads(candidate)
+                parsed = json.loads(sanitize_json_string_backslashes(candidate))
                 norm = self._normalize_tool_dict(parsed)
                 if norm:
                     return norm
@@ -671,7 +683,7 @@ class UniversalWorkerAgent:
                         if depth == 0:
                             candidate = response[brace_start : j + 1]
                             try:
-                                parsed = json.loads(candidate)
+                                parsed = json.loads(sanitize_json_string_backslashes(candidate))
                                 norm = self._normalize_tool_dict(parsed)
                                 if norm:
                                     return norm
@@ -694,7 +706,7 @@ class UniversalWorkerAgent:
             json_match = re.search(r"(\{.*?\})", remainder, re.DOTALL)
             if json_match:
                 try:
-                    args = json.loads(json_match.group(1))
+                    args = json.loads(sanitize_json_string_backslashes(json_match.group(1)))
                     if isinstance(args, dict):
                         return {"tool": tool_name, "args": args}
                 except Exception:
@@ -766,21 +778,23 @@ class UniversalWorkerAgent:
         if not isinstance(parsed, dict):
             return None
 
+        result: dict | None = None
+
         # Standard: {"tool": "name", "args": {...}}
         if "tool" in parsed:
             raw_args = parsed.get("args", {})
             if isinstance(raw_args, str):
                 try:
-                    raw_args = json.loads(raw_args)
+                    raw_args = json.loads(sanitize_json_string_backslashes(raw_args))
                 except Exception:
                     try:
                         raw_args = ast.literal_eval(raw_args)
                     except Exception:
                         raw_args = {"input": raw_args}
-            return {"tool": str(parsed["tool"]), "args": raw_args if isinstance(raw_args, dict) else {}}
+            result = {"tool": str(parsed["tool"]), "args": raw_args if isinstance(raw_args, dict) else {}}
 
         # OpenAI format: {"name": "name", "arguments" | "parameters": {...}}
-        if "name" in parsed and any(k in parsed for k in ("arguments", "parameters", "args", "input")):
+        elif "name" in parsed and any(k in parsed for k in ("arguments", "parameters", "args", "input")):
             tool_name = str(parsed["name"])
             raw_args = (
                 parsed.get("arguments")
@@ -791,26 +805,33 @@ class UniversalWorkerAgent:
             )
             if isinstance(raw_args, str):
                 try:
-                    raw_args = json.loads(raw_args)
+                    raw_args = json.loads(sanitize_json_string_backslashes(raw_args))
                 except Exception:
                     try:
                         raw_args = ast.literal_eval(raw_args)
                     except Exception:
                         raw_args = {"input": raw_args}
-            return {"tool": tool_name, "args": raw_args if isinstance(raw_args, dict) else {}}
+            result = {"tool": tool_name, "args": raw_args if isinstance(raw_args, dict) else {}}
 
         # LangChain / ReAct: {"action": "name", "action_input": {...}}
-        if "action" in parsed and "action_input" in parsed:
+        elif "action" in parsed and "action_input" in parsed:
             tool_name = str(parsed["action"])
             raw_args = parsed.get("action_input", {})
             if isinstance(raw_args, str):
                 try:
-                    raw_args = json.loads(raw_args)
+                    raw_args = json.loads(sanitize_json_string_backslashes(raw_args))
                 except Exception:
                     try:
                         raw_args = ast.literal_eval(raw_args)
                     except Exception:
                         raw_args = {"input": raw_args}
-            return {"tool": tool_name, "args": raw_args if isinstance(raw_args, dict) else {}}
+            result = {"tool": tool_name, "args": raw_args if isinstance(raw_args, dict) else {}}
 
-        return None
+        if result and isinstance(result.get("args"), dict):
+            # Normalize and heal any path parameters
+            args_dict = result["args"]
+            for k, v in list(args_dict.items()):
+                if isinstance(v, str) and any(sub in k.lower() for sub in ("path", "dir", "target", "file", "folder")):
+                    args_dict[k] = str(resolve_target_path(v))
+
+        return result

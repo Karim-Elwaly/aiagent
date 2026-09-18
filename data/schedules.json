@@ -20,9 +20,9 @@
     "agent_id": null,
     "enabled": true,
     "created_at": "2026-09-17T12:00:00Z",
-    "last_run": "2026-09-18T17:00:03.160152+00:00",
+    "last_run": "2026-09-18T21:00:40.254643+00:00",
     "next_run": "2026-09-17T19:00:00Z",
-    "run_count": 10,
-    "last_status": "dispatched (uaos-e5b52a11304c)"
+    "run_count": 14,
+    "last_status": "dispatched (uaos-08ce696e1f7f)"
   }
 ]

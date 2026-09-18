@@ -1,0 +1,53 @@
+email_gateway.log (7077 bytes, suffix=.log):
+# Cisco Secure Email Gateway (IronPort AsyncOS 14.2) Syslog
+# Facility: mail, Severity: info
+# Log Format: Cisco AsyncOS Standard Text Mail Log
+# Date: 2026-09-14
+
+# ==============================================================================
+# SECTION 1: BENIGN BASELINE TRAFFIC (Normal Operations & Corporate Routine)
+# ==============================================================================
+
+Mon Sep 14 08:15:02 2026 Info: New SMTP ICID 9201401 interface Management (10.20.10.25) address 209.85.220.41 reverse dns host mail-sor-f41.google.com verified yes
+Mon Sep 14 08:15:02 2026 Info: I
+=== FILE BREAK ===
+firewall_traffic.log (8252 bytes, suffix=.log):
+# Palo Alto Networks PAN-OS TRAFFIC Logs
+# Format: CSV (PAN-OS 10.x/11.x syslog standard)
+# Generated: 2026-09-14
+# Hostname: PA-5220-CORE01
+
+# ==============================================================================
+# SECTION 1: BENIGN BASELINE ENTERPRISE TRAFFIC
+# ==============================================================================
+<14>Sep 14 08:12:15 PA-5220-CORE01 1,2026/09/14 08:12:15,012801004921,TRAFFIC,end,2304,2026/09/14 08:12:15,10.20.10.45,142.250.190.36,203.0.113.15,142.250.190.36,Outbound-Web-Allow,CONTOSO\jdoe,,ssl,vsys1,Trust-LAN,Untrust-WAN,ethernet1/2,ethernet1
+=== FILE BREAK ===
+sysmon_endpoint.xml (10029 bytes, suffix=.xml):
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- Microsoft-Windows-Sysmon Operational Event Logs -->
+<!-- Target Host: WKSTN-FIN-04.corp.contoso.com -->
+<!-- Date: 2026-09-14 -->
+
+<Events xmlns="http://schemas.microsoft.com/win/2004/08/events/event">
+
+  <!-- ========================================================================= -->
+  <!-- BENIGN BASELINE: Benign Svchost Process Creation (Sysmon Event ID 1)       -->
+  <!-- ========================================================================= -->
+  <Event>
+    <System>
+      <Provider Name="Microsoft-Windows-Sysmon" Guid="{5770385F-C22A-43E0-
+=== FILE BREAK ===
+windows_endpoint.xml (18988 bytes, suffix=.xml):
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- Microsoft Windows Security & System Event Logs -->
+<!-- Target Host: WKSTN-FIN-04.corp.contoso.com & DC01.corp.contoso.com -->
+<!-- Date: 2026-09-14 -->
+
+<Events xmlns="http://schemas.microsoft.com/win/2004/08/events/event">
+
+  <!-- ========================================================================= -->
+  <!-- BENIGN BASELINE: Interactive User Logon (Event 4624, Logon Type 2)        -->
+  <!-- ========================================================================= -->
+  <Event>
+    <System>
+      <Provider Name="Microsoft-Windows-Security-Aud

@@ -116,7 +116,15 @@ Your job is to transform raw task outputs into an authoritative, executive-level
 
 4. **Grounding & Investigation Integrity**:
    - Only report security events, IPs, file paths, or IOCs that explicitly appear in the Task Results.
-   - If the task results indicate that log discovery failed, files could not be accessed, or 0 files were enumerated, explicitly report the access/collection blockage. NEVER fabricate benign user activity (e.g. 'alice', 'explorer.exe') or invent false-positive conclusions when data is absent."""
+   - If the task results indicate that log discovery failed, files could not be accessed, or 0 files were enumerated, explicitly report the access/collection blockage. NEVER fabricate benign user activity (e.g. 'alice', 'explorer.exe') or invent false-positive conclusions when data is absent.
+
+5. **Security Incident Investigation & Forensic Reports**:
+   - When synthesizing security incident investigations across any log ecosystem (Windows EVTX, Linux syslog/auth/auditd, CloudTrail/Cloud audit, Web/WAF, Network/Suricata/Firewalls):
+     - Identify the **Attack Vector & Adversary Progression**: Detail the intrusion vector across Host/OS, Web/API (e.g. SQLi, SSRF, RCE, Path Traversal), Cloud/IAM (e.g. AssumeRole abuse, privilege escalation), or Network/Perimeter domains.
+     - Provide a **Threat Indicators (IoCs) Summary Table**: External C2 IPs, Target Domains, Malicious URLs, Hashes (MD5/SHA1/SHA256), CVE Identifiers, and Compromised Accounts/Roles.
+     - Detail **Adversary Commands, Exploits & Tools Observed**: Explicit process command lines, web payloads, shell scripts, API calls, and attacker tools across all affected platforms.
+     - Detail the **Unified Incident Timeline**: Chronological steps from initial reconnaissance/access through privilege escalation and lateral spread to data staging and exfiltration.
+     - Provide the **Multi-Platform Containment & Remediation Playbook**: Actionable firewall blocking commands (iptables, netsh, cloud security groups), host isolation commands, identity revocation procedures, and forensic recovery guidance."""
 
 
 # ─── Re-Plan System Prompt ───────────────────────────────────────

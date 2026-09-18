@@ -28,6 +28,7 @@ from temporalio.common import RetryPolicy
 # Activity stubs — imported at runtime to avoid sandbox issues
 with workflow.unsafe.imports_passed_through():
     from src.core.config import get_settings
+    from src.core.path_utils import extract_target_path
     from src.orchestrator.activities import (
         assemble_response,
         escalate_approval,
@@ -117,6 +118,19 @@ class UAOSWorkflow:
                 target_tid or self._pending_task_name,
             )
 
+    @workflow.signal
+    async def submit_clarification(self, payload: dict[str, Any]) -> None:
+        """Receive operator clarification response for ambiguous task context."""
+        cid = payload.get("clarification_id", "default")
+        try:
+            workflow.logger.info(
+                "Received clarification signal for %s: %s",
+                cid,
+                payload.get("answer", "")[:50],
+            )
+        except Exception:
+            logger.info("Received clarification signal for %s", cid)
+
     @workflow.query
     def get_status(self) -> dict[str, Any]:
         """Query current workflow status (available via Temporal API)."""
@@ -180,6 +194,16 @@ class UAOSWorkflow:
                     backoff_coefficient=2.0,
                 ),
             )
+
+        target_path = extract_target_path(user_query)
+        if target_path:
+            workflow.logger.info("Detected target investigation path: %s", target_path)
+            for t in dag_dict.get("tasks", []):
+                params = t.setdefault("parameters", {})
+                if "target_path" not in params:
+                    params["target_path"] = target_path
+                if "[Investigation Target Path]" not in t.get("description", ""):
+                    t["description"] = f"{t.get('description', '')}\n\n[Investigation Target Path]: {target_path}"
 
         self._dag_dict = dag_dict
         self._task_statuses = {t["id"]: "pending" for t in dag_dict.get("tasks", [])}
@@ -411,6 +435,12 @@ class UAOSWorkflow:
                 return False
 
         # ── Execution Phase ──────────────────────────────
+        task_dict["_user_query"] = user_query
+        try:
+            task_dict["_workflow_id"] = workflow.info().workflow_id
+        except Exception:
+            task_dict["_workflow_id"] = f"workflow-{task_id}"
+
         self._task_statuses[task_id] = "running"
         workflow.logger.info(
             "Executing task '%s' (%s), risk: %s",
@@ -429,12 +459,15 @@ class UAOSWorkflow:
                     initial_interval=timedelta(seconds=2),
                     backoff_coefficient=2.0,
                 ),
-                heartbeat_timeout=timedelta(seconds=30),
+                heartbeat_timeout=timedelta(seconds=120),
             )
         except Exception as exc:
-            workflow.logger.error("Activity execute_task failed for '%s': %s", task_name, exc)
+            err_msg = str(exc)
+            if hasattr(exc, "cause") and exc.cause:
+                err_msg = f"{exc.cause}"
+            workflow.logger.error("Activity execute_task failed for '%s': %s", task_name, err_msg)
             self._task_statuses[task_id] = "failed"
-            failed[task_id] = str(exc)
+            failed[task_id] = err_msg
             return False
 
         # ── Supervisor Evaluation & Retry Phase ───────────
@@ -484,7 +517,7 @@ class UAOSWorkflow:
                                 initial_interval=timedelta(seconds=2),
                                 backoff_coefficient=2.0,
                             ),
-                            heartbeat_timeout=timedelta(seconds=30),
+                            heartbeat_timeout=timedelta(seconds=120),
                         )
                         if retry_result.get("status") == "completed":
                             task_output = retry_result.get("output", "")
