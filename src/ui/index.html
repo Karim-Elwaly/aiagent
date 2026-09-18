@@ -6,7 +6,7 @@
   <title>AgentHub — Intelligent Workspace</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600;700&family=Outfit:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600;700&family=Outfit:wght@300;400;500;600;700;800&family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="./css/style.css">
 </head>
 <body>
@@ -21,7 +21,10 @@
           </svg>
         </div>
         <div>
-          <div class="brand-title">AgentHub</div>
+          <div style="display: flex; align-items: center; gap: 8px;">
+            <div class="brand-title">AgentHub</div>
+            <span class="version-badge">v2.6</span>
+          </div>
           <div class="brand-subtitle">Intelligent Workspace</div>
         </div>
       </div>
@@ -169,15 +172,20 @@
             <span class="legend-item"><span class="dot dot-pending"></span> Pending</span>
             <span class="legend-item"><span class="dot dot-running"></span> Running</span>
             <span class="legend-item"><span class="dot dot-completed"></span> Completed</span>
+            <span class="legend-item"><span class="dot dot-approval"></span> Approval Gate</span>
           </div>
         </div>
 
         <div class="dag-container">
           <div id="dag-empty" class="dag-empty-state">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
-              <circle cx="12" cy="12" r="10"/><path d="M16 12l-4-4-4 4M12 16V9"/>
-            </svg>
-            <span>Task workflow and dependencies will appear here when an agent is running.</span>
+            <div class="dag-empty-icon">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+                <rect x="3" y="3" width="6" height="6" rx="2"/><rect x="15" y="3" width="6" height="6" rx="2"/><rect x="9" y="15" width="6" height="6" rx="2"/>
+                <path d="M6 9v3a3 3 0 0 0 3 3h3m6-6v3a3 3 0 0 1-3 3"/>
+              </svg>
+            </div>
+            <div class="dag-empty-title">Dynamic Autonomous Execution Plan</div>
+            <div class="dag-empty-subtitle">Task breakdown, topological dependencies, and real-time execution flow will stream here.</div>
           </div>
           <svg id="dag-svg"></svg>
         </div>

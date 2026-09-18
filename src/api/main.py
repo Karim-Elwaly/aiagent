@@ -119,6 +119,7 @@ class StatusResponse(BaseModel):
     task_statuses: dict[str, str] = {}
     supervisor_evaluations: list[dict[str, Any]] = []
     result: dict[str, Any] | None = None
+    error: str | None = None
 
 
 class HealthResponse(BaseModel):
@@ -361,7 +362,7 @@ async def run_direct_workflow(
             {
                 "type": "dag_planned",
                 "tasks": [t.model_dump() for t in dag.tasks],
-                "estimated_time": dag.estimated_completion_seconds,
+                "estimated_time": getattr(dag, "estimated_completion_seconds", len(dag.tasks) * 15),
             },
         )
 
@@ -559,22 +560,25 @@ async def run_direct_workflow(
 
     except Exception as e:
         logger.exception("Direct in-process workflow failed: %s", e)
+        err_res = {
+            "response": f"Workflow execution error: {e}",
+            "tasks_completed": sum(1 for s in state.get("task_statuses", {}).values() if s == "completed"),
+            "tasks_failed": max(1, sum(1 for s in state.get("task_statuses", {}).values() if s == "failed")),
+            "replans": 0,
+            "supervisor_evaluations": state.get("supervisor_evaluations", []),
+        }
         state["status"] = "failed"
         state["error"] = str(e)
+        state["result"] = err_res
         bus.publish(
             workflow_id,
             {
                 "type": "workflow_failed",
                 "error": str(e),
+                "result": err_res,
             },
         )
-        return {
-            "response": f"Workflow execution error: {e}",
-            "tasks_completed": 0,
-            "tasks_failed": 1,
-            "replans": 0,
-            "supervisor_evaluations": [],
-        }
+        return err_res
 
 
 @app.post("/solve", response_model=SolveResponse)
@@ -812,6 +816,7 @@ async def get_status(workflow_id: str):
             task_statuses=dw.get("task_statuses", {}),
             supervisor_evaluations=dw.get("supervisor_evaluations", []),
             result=dw.get("result"),
+            error=dw.get("error"),
         )
 
     if not app.state.temporal:

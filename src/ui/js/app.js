@@ -213,6 +213,60 @@ document.addEventListener("DOMContentLoaded", () => {
         console.log(`[SSE] Stream ready for workflow: ${ev.workflow_id}`);
         break;
 
+      case "dag_planned": {
+        const tasks = ev.tasks || [];
+        const dagObj = {
+          goal: ev.goal || promptInput.value.trim(),
+          tasks: tasks,
+          estimated_completion_seconds: ev.estimated_time || (tasks.length * 15),
+        };
+        activeDag = dagObj;
+        dagRenderer.render(dagObj);
+        tasks.forEach((t) => {
+          let stepEl = document.getElementById(`step-${t.id}`);
+          if (!stepEl) {
+            addTimelineStep(t.id, t.name || `Task ${t.id}`, t.description || "", "pending");
+          }
+        });
+        showToast(`Workflow plan rendered (${tasks.length} phases)`, "info");
+        break;
+      }
+
+      case "task_started": {
+        const taskId = ev.task_id;
+        const taskName = ev.task_name || `Task ${taskId}`;
+        let stepEl = document.getElementById(`step-${taskId}`);
+        if (!stepEl) {
+          addTimelineStep(taskId, taskName, "Executing task...", "running");
+        } else {
+          updateTimelineStep(taskId, "Executing task...", "running");
+        }
+        if (activeDag) dagRenderer.updateNodeStatus(taskId, "running");
+        break;
+      }
+
+      case "task_completed": {
+        const taskId = ev.task_id;
+        const output = ev.output || "Task completed successfully.";
+        const tools = ev.tools_used || [];
+        updateTimelineStep(taskId, output, "completed", tools);
+        if (ev.execution_time_ms) {
+          const duration = document.getElementById(`duration-${taskId}`);
+          if (duration) duration.textContent = `${ev.execution_time_ms}ms`;
+        }
+        if (activeDag) dagRenderer.updateNodeStatus(taskId, "completed");
+        break;
+      }
+
+      case "task_failed": {
+        const taskId = ev.task_id;
+        const err = ev.error || "Task failed";
+        updateTimelineStep(taskId, err, "failed");
+        if (activeDag) dagRenderer.updateNodeStatus(taskId, "failed");
+        showToast(`Task ${taskId} failed: ${err.slice(0, 50)}`, "error");
+        break;
+      }
+
       case "token": {
         // Real-time token streaming from worker ReAct loop
         const taskId = ev.task_id;
@@ -368,6 +422,20 @@ document.addEventListener("DOMContentLoaded", () => {
       case "workflow_completed":
       case "workflow_failed":
         setRunningState(false);
+        if (evType === "workflow_failed") {
+          const errMsg = ev.error || "Workflow execution failed";
+          showToast(`Workflow failed: ${errMsg}`, "error");
+          if (solutionBody) {
+            solutionBody.innerHTML = `
+              <div style="padding: 16px; background: rgba(244, 63, 94, 0.08); border: 1px solid rgba(244, 63, 94, 0.3); border-radius: 8px; color: var(--accent-rose); font-size: 13px; line-height: 1.5;">
+                <div style="font-weight: 700; display: flex; align-items: center; gap: 8px; margin-bottom: 6px;">
+                  <span>⚠️</span> Workflow Error
+                </div>
+                <div style="font-family: var(--font-mono); font-size: 12px; opacity: 0.9;">${escapeHtml(errMsg)}</div>
+              </div>
+            `;
+          }
+        }
         if (activeEventSource) {
           activeEventSource.close();
           activeEventSource = null;
@@ -440,7 +508,7 @@ document.addEventListener("DOMContentLoaded", () => {
           clearInterval(pollInterval);
           pollInterval = null;
           setRunningState(false);
-          if (status.result) {
+          if (status.result && status.result.response && status.status === "completed") {
             renderFinalSolution(status.result.response, status.result.tasks_completed, status.result.tasks_failed);
             if (status.result.supervisor_evaluations && Array.isArray(status.result.supervisor_evaluations)) {
               renderSupervisorEvaluationsList(status.result.supervisor_evaluations);
@@ -448,6 +516,18 @@ document.addEventListener("DOMContentLoaded", () => {
             const solutionCard = document.querySelector(".solution-card");
             if (solutionCard) {
               solutionCard.scrollIntoView({ behavior: "smooth", block: "start" });
+            }
+          } else if (status.status === "failed") {
+            const errMsg = status.error || (status.result && status.result.response) || "Workflow execution failed";
+            if (solutionBody) {
+              solutionBody.innerHTML = `
+                <div style="padding: 16px; background: rgba(244, 63, 94, 0.08); border: 1px solid rgba(244, 63, 94, 0.3); border-radius: 8px; color: var(--accent-rose); font-size: 13px; line-height: 1.5;">
+                  <div style="font-weight: 700; display: flex; align-items: center; gap: 8px; margin-bottom: 6px;">
+                    <span>⚠️</span> Execution Failed
+                  </div>
+                  <div style="font-family: var(--font-mono); font-size: 12px; opacity: 0.9;">${escapeHtml(errMsg)}</div>
+                </div>
+              `;
             }
           }
           if (activeEventSource) {
@@ -1488,18 +1568,37 @@ document.addEventListener("DOMContentLoaded", () => {
     });
   }
 
-  function addTimelineStep(id, title, desc, status) {
+  function addTimelineStep(id, title, desc, status = "pending") {
+    const notice = timelineList.querySelector(".empty-timeline-notice");
+    if (notice) notice.remove();
+
+    const normalizedStatus = (status || "pending").toLowerCase();
+    const isRunning = normalizedStatus === "running";
+    const isDone = normalizedStatus === "completed";
+    const isFailed = normalizedStatus === "failed";
+
+    let stepClass = "timeline-step";
+    if (isRunning) stepClass += " active";
+    else if (isDone) stepClass += " completed";
+    else if (isFailed) stepClass += " failed";
+
+    let markerClass = "step-marker";
+    if (isRunning) markerClass += " running";
+    else if (isDone) markerClass += " done";
+    else if (isFailed) markerClass += " failed";
+    else markerClass += " pending";
+
     const el = document.createElement("div");
     el.id = `step-${id}`;
-    el.className = `timeline-step active`;
+    el.className = stepClass;
     el.innerHTML = `
-      <div class="step-marker" id="marker-${id}">${id.toUpperCase()}</div>
+      <div class="${markerClass}" id="marker-${id}">${id.toUpperCase()}</div>
       <div class="step-content">
         <div class="step-title-row">
-          <span class="step-title">${title}</span>
-          <span class="step-duration" id="duration-${id}">RUNNING</span>
+          <span class="step-title">${escapeHtml(title)}</span>
+          <span class="step-duration status-${normalizedStatus}" id="duration-${id}">${normalizedStatus.toUpperCase()}</span>
         </div>
-        <div class="step-desc" id="desc-${id}">${desc}</div>
+        <div class="step-desc" id="desc-${id}">${escapeHtml(desc)}</div>
         <div class="step-tools" id="tools-${id}"></div>
       </div>
     `;
@@ -1507,19 +1606,33 @@ document.addEventListener("DOMContentLoaded", () => {
     timelineList.scrollTop = timelineList.scrollHeight;
   }
 
-  function updateTimelineStep(id, desc, status, tools = []) {
+  function updateTimelineStep(id, desc, status = "completed", tools = []) {
     const el = document.getElementById(`step-${id}`);
     const marker = document.getElementById(`marker-${id}`);
     const duration = document.getElementById(`duration-${id}`);
     const descEl = document.getElementById(`desc-${id}`);
     const toolsEl = document.getElementById(`tools-${id}`);
 
-    if (el) el.className = `timeline-step`;
-    if (marker) marker.className = `step-marker done`;
-    if (duration) duration.textContent = "COMPLETED";
-    if (descEl) descEl.textContent = desc;
+    const normalizedStatus = (status || "completed").toLowerCase();
+    const isRunning = normalizedStatus === "running";
+    const isDone = normalizedStatus === "completed";
+    const isFailed = normalizedStatus === "failed";
+
+    if (el) {
+      el.className = `timeline-step ${isRunning ? "active" : isDone ? "completed" : isFailed ? "failed" : ""}`;
+    }
+    if (marker) {
+      marker.className = `step-marker ${isRunning ? "running" : isDone ? "done" : isFailed ? "failed" : "pending"}`;
+    }
+    if (duration) {
+      duration.className = `step-duration status-${normalizedStatus}`;
+      duration.textContent = normalizedStatus.toUpperCase();
+    }
+    if (descEl && desc) {
+      descEl.textContent = desc;
+    }
     if (toolsEl && tools.length > 0) {
-      toolsEl.innerHTML = `Tools: ${tools.map(t => `<span class="skill-tag">${t}</span>`).join(" ")}`;
+      toolsEl.innerHTML = `Tools: ${tools.map(t => `<span class="skill-tag">${escapeHtml(t)}</span>`).join(" ")}`;
     }
   }
 
@@ -3913,5 +4026,22 @@ Integrates with smart home sensors, switches, lighting, and scenes.`
       }
     });
   }
+
+  // Global Keyboard Shortcuts (2026 Pro Experience)
+  window.addEventListener("keydown", (e) => {
+    // 1. Cmd/Ctrl + Enter to trigger task solve
+    if ((e.metaKey || e.ctrlKey) && e.key === "Enter") {
+      e.preventDefault();
+      if (solveBtn && !solveBtn.disabled) {
+        solveBtn.click();
+      }
+    }
+    // 2. Escape to close any open modal
+    if (e.key === "Escape") {
+      document.querySelectorAll(".modal-overlay.active").forEach((m) => {
+        m.classList.remove("active");
+      });
+    }
+  });
 });
 

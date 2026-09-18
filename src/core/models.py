@@ -94,6 +94,33 @@ class TaskDAG(BaseModel):
     goal: str = Field(description="The user's objective, restated clearly")
     reasoning: str = Field(description="Why this decomposition was chosen")
     tasks: list[Task]
+    estimated_completion_seconds: int = Field(
+        default=60,
+        description="Estimated total run time in seconds",
+    )
+
+    def topological_sort(self) -> list[Task]:
+        """Return tasks in topological dependency order (Kahn's algorithm)."""
+        in_degree = {t.id: len(t.dependencies) for t in self.tasks}
+        queue = [t for t in self.tasks if in_degree[t.id] == 0]
+        order: list[Task] = []
+
+        while queue:
+            current = queue.pop(0)
+            order.append(current)
+            for t in self.tasks:
+                if current.id in t.dependencies:
+                    in_degree[t.id] -= 1
+                    if in_degree[t.id] == 0:
+                        queue.append(t)
+
+        if len(order) != len(self.tasks):
+            visited_ids = {t.id for t in order}
+            for t in self.tasks:
+                if t.id not in visited_ids:
+                    order.append(t)
+
+        return order
 
     def get_ready_tasks(
         self, completed: set[str], failed: set[str]
