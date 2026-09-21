@@ -73,6 +73,20 @@ class Settings(BaseSettings):
     transfer_outlier_sigma: float = 3.0
     transfer_min_bytes: int = 10_000_000  # ignore small transfers regardless of sigma
 
+    # DNS pattern analytics. Tunneling encodes payloads inside query labels,
+    # which drives label length and character entropy far beyond human-chosen
+    # names; DGAs generate many high-entropy names that mostly fail to resolve.
+    # All thresholds describe generic statistical properties of the encoding,
+    # never any particular domain.
+    dns_min_queries_per_domain: int = 4  # fewer samples cannot establish a pattern
+    dns_tunnel_min_unique_subdomains: int = 4  # payload chunking yields unique labels
+    dns_tunnel_min_label_length: float = 20.0  # human labels are short; encodings are not
+    dns_tunnel_min_entropy: float = 3.0  # bits/char; english words sit near 2
+    dns_hex_label_ratio: float = 0.5  # majority hex-only labels = byte encoding
+    dns_dga_min_domains: int = 4  # a DGA burns through many domains
+    dns_dga_min_nxdomain_ratio: float = 0.5  # most DGA candidates never resolve
+    dns_dga_min_entropy: float = 2.8  # bits/char of the registered label
+
     # ── API Configuration ────────────────────────────────
     api_host: str = "0.0.0.0"
     api_port: int = 8000

@@ -910,8 +910,8 @@ document.addEventListener("DOMContentLoaded", () => {
         {
           id: "t4",
           name: "Network Behaviour Analysis",
-          description: "Run analyze_traffic_patterns to detect periodic beaconing and outbound volume outliers, and detect_lolbin_activity to find dual-use system binaries and abuse idioms. Report the largest outbound transfers explicitly — data leaving the environment is the highest-impact finding and is routinely overlooked. Cite EV ids.",
-          required_skills: ["traffic_analysis", "exfiltration_analysis", "lolbin_detection"],
+          description: "Run analyze_traffic_patterns to detect periodic beaconing and outbound volume outliers, analyze_dns_patterns to detect DNS tunneling, hex-encoded exfiltration and DGA activity when any DNS telemetry was ingested, and detect_lolbin_activity to find dual-use system binaries and abuse idioms. Report the largest outbound transfers explicitly — data leaving the environment is the highest-impact finding and is routinely overlooked. Weigh each flow's app-id, account, policy rule and destination context before classifying it: a sanctioned backup job and an exfiltration can move similar volumes. Cite EV ids.",
+          required_skills: ["traffic_analysis", "exfiltration_analysis", "dns_analysis", "lolbin_detection"],
           dependencies: ["t3"],
           risk_level: "low",
         },

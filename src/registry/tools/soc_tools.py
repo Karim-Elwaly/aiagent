@@ -8,6 +8,7 @@ Context Compression, and Response).
 
 from __future__ import annotations
 
+import ipaddress
 import json
 import logging
 import os
@@ -17,6 +18,7 @@ import subprocess
 from pathlib import Path
 from typing import Any
 
+from src.core.analytics_util import load_baseline
 from src.core.evidence import get_store
 from src.core.models import RiskLevel
 from src.registry.ingestion import discover_log_files, ingest_file, load_mappings
@@ -55,25 +57,33 @@ async def triage_security_alert(alert_text: str) -> str:
         if not d.endswith((".local", ".internal", ".lan", ".corp"))
     ]
 
-    # Heuristic threat scoring
+    # Heuristic threat scoring, driven by the generic indicator vocabulary in
+    # data/baselines/triage_indicators.yaml — publicly documented tradecraft
+    # terms grouped by behaviour category, never dataset-specific strings.
     score = 20
     suspicious_indicators: list[str] = []
-    keywords = {
-        "mimikatz": 50, "cobalt": 50, "powershell -enc": 40, "base64": 30,
-        "beacon": 40, "c2": 45, "ransomware": 50, "exfiltration": 45,
-        "privilege escalation": 35, "unauthorized": 25, "brute force": 20,
-        # WebApp, Database, & Cloud Pivot detection (Case 2: SSRF, SQLi, CloudTrail, IAM)
-        "169.254.169.254": 50, "ssrf": 50, "meta-data": 45, "security-credentials": 45,
-        "union select": 45, "sqlmap": 45, "modsecurity": 40, "anomaly score": 40,
-        "attachuserpolicy": 45, "createloginprofile": 45, "createaccesskey": 45,
-        "assumerole": 40, "cloudtrail": 30, "accessdenied": 30, "unauthorizedoperation": 40,
-        "mysql": 25, "information_schema": 40, "dump": 35, "sqli": 45
-    }
     lower_text = alert_text.lower()
-    for kw, weight in keywords.items():
-        if kw in lower_text:
+    categories = load_baseline("triage_indicators").get("categories") or {}
+    for category, spec in categories.items():
+        weight = int(spec.get("weight") or 0)
+        terms = [str(t).lower() for t in (spec.get("terms") or [])]
+        hits = [t for t in terms if t in lower_text]
+        if hits:
             score += weight
-            suspicious_indicators.append(kw)
+            suspicious_indicators.append(f"{category}: {', '.join(hits)}")
+
+    # Structural address indicators: a link-local destination in an alert is
+    # the cloud metadata service (credential-theft target). Detected from the
+    # address class itself, not from a literal.
+    for ip in ips:
+        try:
+            if ipaddress.ip_address(ip).is_link_local:
+                score += 50
+                suspicious_indicators.append(
+                    f"cloud_metadata_service: link-local address {ip}"
+                )
+        except ValueError:
+            continue
 
     severity = "CRITICAL" if score >= 80 else "HIGH" if score >= 50 else "MEDIUM" if score >= 30 else "LOW"
 
@@ -553,18 +563,51 @@ ANALYZE_IMPACT_SPEC = ToolSpec(
 
 #  5. COMPRESSION SKILL 
 
+_MONTHS = {
+    "Jan": "01", "Feb": "02", "Mar": "03", "Apr": "04", "May": "05", "Jun": "06",
+    "Jul": "07", "Aug": "08", "Sep": "09", "Oct": "10", "Nov": "11", "Dec": "12",
+}
+
+_TS_PATTERN = re.compile(
+    r"\b\d{4}-\d{2}-\d{2}[T\s]\d{2}:\d{2}:\d{2}(?:\.\d+)?(?:Z|[+-]\d{2}:?\d{2})?\b"
+    r"|\b\d{4}/\d{2}/\d{2}\s+\d{2}:\d{2}:\d{2}\b"
+    r"|\b[A-Z][a-z]{2}\s+\d{1,2}\s+\d{2}:\d{2}:\d{2}\b"
+)
+
+
 def _parse_event_timestamp(line: str) -> str:
-    """Extract ISO or syslog timestamp from an event line for chronological sorting."""
+    """Extract a sortable timestamp key from an event line.
+
+    RFC 3164 syslog carries no year; those lines get a fixed sentinel year so
+    they order correctly among themselves (month converted to its number —
+    sorting month *names* alphabetically would interleave April into August).
+    """
     m_iso = re.search(r"\b(\d{4}-\d{2}-\d{2}[T\s]\d{2}:\d{2}:\d{2}(?:\.\d+)?(?:Z|[+-]\d{2}:?\d{2})?)\b", line)
     if m_iso:
         return m_iso.group(1).replace(" ", "T")
-    m_slash = re.search(r"\b(\d{4}/\d{2}/\d{2}\s+\d{2}:\d{2}:\d{2})\b", line)
+    m_slash = re.search(r"\b(\d{4}/\d{2}/\d{2})\s+(\d{2}:\d{2}:\d{2})\b", line)
     if m_slash:
-        return m_slash.group(1).replace("/", "-").replace(" ", "T")
-    m_month = re.search(r"\b([A-Z][a-z]{2}\s+\d{1,2}\s+\d{2}:\d{2}:\d{2})\b", line)
-    if m_month:
-        return f"2026-{m_month.group(1)}"
+        return f"{m_slash.group(1).replace('/', '-')}T{m_slash.group(2)}"
+    m_month = re.search(r"\b([A-Z][a-z]{2})\s+(\d{1,2})\s+(\d{2}:\d{2}:\d{2})\b", line)
+    if m_month and m_month.group(1) in _MONTHS:
+        return f"0000-{_MONTHS[m_month.group(1)]}-{int(m_month.group(2)):02d}T{m_month.group(3)}"
     return "9999-99-99"
+
+
+def _line_signal_score(line: str, categories: dict[str, Any], outcome_markers: tuple[str, ...]) -> int:
+    """Generic salience score for a log line: indicator vocabulary hits plus
+    failure/denial outcome markers. No dataset-specific terms."""
+    lowered = line.lower()
+    score = 0
+    for spec in categories.values():
+        weight = int(spec.get("weight") or 0)
+        if any(str(t).lower() in lowered for t in (spec.get("terms") or [])):
+            score += weight
+    if any(m in lowered for m in outcome_markers):
+        score += 15
+    if _TS_PATTERN.search(line):
+        score += 5  # timeline entries need a time
+    return score
 
 
 async def compress_security_timeline(raw_evidence_text: str, max_timeline_events: int = 15) -> str:
@@ -578,22 +621,45 @@ async def compress_security_timeline(raw_evidence_text: str, max_timeline_events
         Structured, dense chronological attack sequence formatted for root-cause analysis.
     """
     lines = [l.strip() for l in raw_evidence_text.splitlines() if l.strip()]
-    
-    # Extract notable security lines
-    milestones = []
+
+    # Collapse repeated near-identical lines (identical after the timestamp is
+    # removed) — floods compress into one milestone that keeps its count.
+    collapsed: dict[str, dict[str, Any]] = {}
     for l in lines:
-        if any(w in l.lower() for w in [
-            "sysmon", "windows eid", "email gateway", "firewall", "attach", "powershell",
-            "certutil", "mimikatz", "lsass", "4624", "4648", "4688", "4720", "4732",
-            "7045", "psexec", "8443", "exfiltrat", "beacon", "step"
-        ]):
-            milestones.append(l)
+        key = _TS_PATTERN.sub("", l).strip()
+        entry = collapsed.setdefault(key, {"line": l, "count": 0})
+        entry["count"] += 1
 
-    if not milestones:
-        milestones = lines[:max_timeline_events]
+    # Score lines by generic salience: indicator vocabulary hits (same
+    # data-driven categories the triage tool uses) plus failure/denial
+    # outcome markers from the auth-signals baseline.
+    categories = load_baseline("triage_indicators").get("categories") or {}
+    outcome_markers = tuple(
+        str(m).lower()
+        for m in (load_baseline("auth_signals").get("failure_markers") or [])
+    ) or ("fail", "denied", "reject", "block", "critical", "error")
 
-    # Sort milestones chronologically by timestamp
-    milestones.sort(key=_parse_event_timestamp)
+    scored = [
+        (_line_signal_score(entry["line"], categories, outcome_markers), entry)
+        for entry in collapsed.values()
+    ]
+    signal = [entry for score, entry in scored if score > 0]
+
+    if signal:
+        # Keep the highest-signal milestones, then restore chronology.
+        signal.sort(
+            key=lambda e: _line_signal_score(e["line"], categories, outcome_markers),
+            reverse=True,
+        )
+        milestones = signal[: max_timeline_events * 2]
+    else:
+        # Nothing matched the vocabularies: sample evenly across the corpus so
+        # the timeline still spans the whole window instead of just its start.
+        entries = list(collapsed.values())
+        step = max(1, len(entries) // max_timeline_events)
+        milestones = entries[::step]
+
+    milestones.sort(key=lambda e: _parse_event_timestamp(e["line"]))
     selected = milestones[:max_timeline_events]
 
     formatted = [
@@ -601,11 +667,15 @@ async def compress_security_timeline(raw_evidence_text: str, max_timeline_events
         "=== [CHRONOLOGICAL INCIDENT ATTACK TIMELINE] ===",
         f"Synthesized {len(selected)} verified forensic milestones in strict chronological sequence:\n"
     ]
-    for i, m in enumerate(selected, 1):
-        formatted.append(f"  Step {i:02d}: Stage {i:02d} -> {m}")
+    for i, entry in enumerate(selected, 1):
+        suffix = f"  (x{entry['count']} occurrences)" if entry["count"] > 1 else ""
+        formatted.append(f"  Step {i:02d}: {entry['line']}{suffix}")
 
     formatted.append("\nCondensed timeline isolated threat sequence.")
-    formatted.append("Summary: Attack sequence reconstructed across Email Gateway, Windows Security, Sysmon, and Firewall telemetry.")
+    formatted.append(
+        f"Summary: {len(selected)} milestones selected from {len(lines)} input lines "
+        f"({len(collapsed)} distinct after deduplication)."
+    )
     return "\n".join(formatted)
 
 

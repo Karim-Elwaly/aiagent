@@ -1,0 +1,49 @@
+# Alert-triage indicator vocabulary.
+#
+# Publicly documented attack tooling names, technique idioms and telemetry
+# markers, grouped by behaviour category with a triage weight. This is a
+# generic vocabulary in the same spirit as data/mitre/technique_signatures.yaml
+# — it describes well-known adversary tradecraft, and must never be tuned to
+# make a specific dataset or benchmark score better (charter R2).
+#
+# No addresses appear here. Address-class indicators (for example the cloud
+# metadata service living on a link-local address) are detected structurally
+# in code from the properties of the address itself, not from literals.
+
+categories:
+  credential_theft_tooling:
+    weight: 50
+    terms: [mimikatz, sekurlsa, "lsass", "ntds.dit", hashdump, kerberoast]
+  offensive_frameworks:
+    weight: 50
+    terms: [cobalt, metasploit, meterpreter, "empire agent", sliver]
+  ransomware:
+    weight: 50
+    terms: [ransomware, "files encrypted", "shadow copy deleted", vssadmin delete]
+  command_and_control:
+    weight: 45
+    terms: [c2, "command and control", beacon, "callback interval"]
+  exfiltration:
+    weight: 45
+    terms: [exfiltration, exfiltrate, "data staged", "dns tunnel"]
+  obfuscated_execution:
+    weight: 40
+    terms: ["powershell -enc", encodedcommand, frombase64string, base64]
+  web_exploitation:
+    weight: 45
+    terms: [ssrf, sqlmap, "union select", sqli, "information_schema", log4j, jndi, deserialization]
+  cloud_credential_abuse:
+    weight: 45
+    terms: ["meta-data", security-credentials, attachuserpolicy, createloginprofile, createaccesskey, assumerole]
+  waf_and_ids_signals:
+    weight: 40
+    terms: [modsecurity, "anomaly score", "ips signature", "attack signature"]
+  privilege_escalation:
+    weight: 35
+    terms: ["privilege escalation", "token manipulation", "setuid"]
+  authorization_failures:
+    weight: 30
+    terms: [accessdenied, unauthorizedoperation, unauthorized, "brute force", cloudtrail]
+  database_access:
+    weight: 25
+    terms: ["database dump", "mysqldump"]

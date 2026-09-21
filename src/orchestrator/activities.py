@@ -782,6 +782,25 @@ _ANALYTICS_GATE_FAMILIES: list[dict] = [
             "patterns that must be checked by the deterministic detectors"
         ),
     },
+    {
+        "family": "dns telemetry",
+        "task_skills": {
+            "dns_analysis",
+            "network_analysis",
+            "traffic_analysis",
+            "exfiltration_analysis",
+            "threat_hunting",
+            "log_analysis",
+            "anomaly_detection",
+        },
+        "event_actions": {"dns_query"},
+        "tools": {"analyze_dns_patterns"},
+        "why": (
+            "DNS query events are present in the evidence store; tunneling, "
+            "hex-encoded exfiltration and DGA activity are label-geometry and "
+            "entropy statistics that must be computed, not read"
+        ),
+    },
 ]
 
 
