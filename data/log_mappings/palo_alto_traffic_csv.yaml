@@ -91,7 +91,10 @@ fields:
   bytes_received: [bytes_received, Bytes Received, bytes_from_server]
   session_duration: [elapsed_time, Elapsed Time, duration]
   user: [srcuser, source_user, Source User]
-  host: [device_name, Device Name]
+  # device_name identifies the REPORTING SENSOR (the firewall appliance), not
+  # a host participating in the traffic. Mapping it to `host` conflated the
+  # log source with an endpoint and produced "isolate the firewall" advice.
+  extra.sensor: [device_name, Device Name]
   geo.country: [dstloc, Destination Location]
   extra.source_zone: [from, source_zone, Source Zone]
   extra.destination_zone: [to, destination_zone, Destination Zone]

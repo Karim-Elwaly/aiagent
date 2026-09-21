@@ -382,14 +382,41 @@ async def evidence_coverage_report(_run_id: str = "") -> str:
             "installation, privilege changes) are routinely the highest-signal "
             "records in a corpus and the ones most often missed.",
             "",
-            "| Action | Event code | Count | Example evidence ids |",
-            "| :--- | :--- | ---: | :--- |",
+            "| Action | Event code | Status | Count | Example evidence ids |",
+            "| :--- | :--- | :--- | ---: | :--- |",
         ]
         for row in inventory:
             examples = ", ".join(row["example_ids"])
             lines.append(
                 f"| {row['action'] or '(none)'} | {row['event_code'] or '(none)'} "
-                f"| {row['count']} | {examples} |"
+                f"| {row.get('status') or '(none)'} | {row['count']} | {examples} |"
+            )
+
+    flows = stats.get("top_flows_by_bytes") or []
+    if flows:
+        lines += [
+            "",
+            "## Network flows by transfer volume (authoritative byte counts)",
+            "",
+            "These totals come directly from the ingested records. Transfer volume "
+            "IS quantifiable for these flows — never report byte counts as "
+            "unavailable when this table is present. Large asymmetric outbound "
+            "totals (sent >> received) to external destinations demand analysis. "
+            "The app, account and policy-rule columns are how a sanctioned bulk "
+            "transfer (e.g. a backup job under a backup rule) is distinguished "
+            "from exfiltration — weigh them before classifying.",
+            "",
+            "| Source | Destination | Port | App | User | Rule | Geo | Sessions | Bytes sent | Bytes received | Example ids |",
+            "| :--- | :--- | :--- | :--- | :--- | :--- | :--- | ---: | ---: | ---: | :--- |",
+        ]
+        for flow in flows:
+            examples = ", ".join(flow["example_ids"])
+            lines.append(
+                f"| {flow['src_ip'] or '(none)'} | {flow['dst_ip']} | {flow['dst_port'] or '-'} "
+                f"| {flow.get('app_id') or '-'} | {flow.get('user') or '-'} "
+                f"| {flow.get('rule') or '-'} | {flow.get('geo') or '-'} "
+                f"| {flow['sessions']} | {flow['bytes_sent']:,} | {flow['bytes_received']:,} "
+                f"| {examples} |"
             )
 
     spans = stats.get("time_span_by_source_file") or {}

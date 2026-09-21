@@ -26,7 +26,7 @@ from __future__ import annotations
 import logging
 import re
 from dataclasses import dataclass, field
-from typing import Iterable
+from typing import Any, Iterable
 
 from src.core.evidence import EVIDENCE_ID_PATTERN, EvidenceStore, get_store
 
@@ -196,6 +196,7 @@ def verify_report(
     _check_citations(report, valid_ids, result)
     remediation_lines = _remediation_line_numbers(report)
     _check_entities(report, known, remediation_lines, result)
+    _check_citation_consistency(report, evidence, result)
     _check_coverage(report, min_citation_coverage, result)
 
     result.annotated_report = _annotate(report, result)
@@ -206,12 +207,14 @@ def verify_report(
 # ── Individual checks ────────────────────────────────────
 
 
-def _known_entities(store: EvidenceStore) -> dict[str, set[str]]:
+def _known_entities(store: EvidenceStore) -> dict[str, Any]:
     """Collect every entity literal the evidence actually contains."""
     ips: set[str] = set()
     hashes: set[str] = set()
     accounts: set[str] = set()
     hosts: set[str] = set()
+    processes: set[str] = set()
+    corpus_parts: list[str] = []
 
     for event in store.iter_events():
         for value in (event.src_ip, event.dst_ip):
@@ -224,14 +227,35 @@ def _known_entities(store: EvidenceStore) -> dict[str, set[str]]:
             accounts.add(event.user.lower())
         if event.host:
             hosts.add(event.host.lower())
+        for value in (event.process, event.parent_process):
+            if value:
+                lowered = value.lower()
+                processes.add(lowered)
+                # Also index the basename: evidence stores full paths while
+                # reports name the binary.
+                base = lowered.replace("\\", "/").rsplit("/", 1)[-1]
+                if base:
+                    processes.add(base)
         # Raw text is authoritative too: an address mentioned inside a log line
         # is genuinely present in the source data even if no field captured it.
-        for match in IPV4.findall(event.raw_excerpt or ""):
+        raw = event.raw_excerpt or ""
+        for match in IPV4.findall(raw):
             ips.add(match)
-        for match in HASH.findall(event.raw_excerpt or ""):
+        for match in HASH.findall(raw):
             hashes.add(match.lower())
+        if raw:
+            corpus_parts.append(raw.lower())
+        if event.command_line:
+            corpus_parts.append(event.command_line.lower())
 
-    return {"ips": ips, "hashes": hashes, "accounts": accounts, "hosts": hosts}
+    return {
+        "ips": ips,
+        "hashes": hashes,
+        "accounts": accounts,
+        "hosts": hosts,
+        "processes": processes,
+        "corpus": "\n".join(corpus_parts),
+    }
 
 
 def _check_citations(report: str, valid_ids: set[str], result: VerificationResult) -> None:
@@ -297,19 +321,64 @@ def _entity_name_forms(value: str) -> set[str]:
     return {f for f in forms if f}
 
 
-def _is_known_principal(value: str, known: dict[str, set[str]]) -> bool:
-    """True when any comparable form of the value matches a known account/host."""
+# Structural address literals used by firewall/routing syntax (any-address
+# masks, broadcast). They denote scope in a command, not a target system, so
+# grounding them against the evidence is a category error.
+_WILDCARD_IPS = {"0.0.0.0", "255.255.255.255"}
+
+# The pipeline's own containment action vocabulary (propose_containment_response
+# action types). Reports legitimately quote these tokens in action columns;
+# they are verbs, not entities.
+_ACTION_VOCABULARY = {
+    "block_ip",
+    "isolate_endpoint",
+    "revoke_tokens",
+    "quarantine_file",
+    "disable_account",
+    "reset_password",
+    "block_domain",
+    "kill_process",
+}
+
+
+def _is_known_principal(value: str, known: dict[str, Any]) -> bool:
+    """True when any comparable form of the value matches a known entity."""
     candidate_forms = _entity_name_forms(value)
-    for pool_name in ("accounts", "hosts"):
-        for entity in known[pool_name]:
+    for pool_name in ("accounts", "hosts", "processes"):
+        for entity in known.get(pool_name) or set():
             if _entity_name_forms(entity) & candidate_forms:
                 return True
+    # Raw text is authoritative: a file or binary named verbatim inside an
+    # ingested log line is genuinely present in the source data even when no
+    # structured field captured it (e.g. a binary inside a command line).
+    lowered = value.strip().lower()
+    if len(lowered) >= 4 and lowered in (known.get("corpus") or ""):
+        return True
+    return False
+
+
+def _contains_grounded_entity(value: str, known: dict[str, Any]) -> bool:
+    """True when the identifier embeds an entity the evidence contains.
+
+    Reports synthesize labels around grounded entities — firewall rule names
+    like ``Block-<addr>`` or ``Isolate-<host>``. The label is derived from the
+    evidence, not a claim about a new system, so it must not be flagged.
+    """
+    lowered = value.lower()
+    for ip in known["ips"]:
+        if ip and ip in lowered:
+            return True
+    for pool_name in ("accounts", "hosts", "processes"):
+        for entity in known.get(pool_name) or set():
+            for form in _entity_name_forms(entity):
+                if len(form) >= 4 and form in lowered:
+                    return True
     return False
 
 
 def _check_entities(
     report: str,
-    known: dict[str, set[str]],
+    known: dict[str, Any],
     remediation_lines: set[int],
     result: VerificationResult,
 ) -> None:
@@ -318,6 +387,8 @@ def _check_entities(
         in_remediation = index in remediation_lines
 
         for ip in set(IPV4.findall(line)):
+            if ip in _WILDCARD_IPS:
+                continue
             if _NOT_AN_IP_CONTEXT.search(line) and ip not in known["ips"]:
                 continue
             if ip in known["ips"]:
@@ -356,7 +427,27 @@ def _check_entities(
             for account in _quoted_or_backticked(line):
                 if not _looks_like_identifier(account):
                     continue
+                # Action verbs from the pipeline's own containment vocabulary
+                # are not entities.
+                if account.strip().lower() in _ACTION_VOCABULARY:
+                    continue
+                # IP-shaped identifiers are validated by the address check
+                # above against known["ips"] (which includes dst_ip and raw
+                # excerpts). Re-checking them against the accounts/hosts
+                # pools would falsely flag a grounded destination address
+                # as an ungrounded remediation target.
+                if IPV4.fullmatch(account.strip()):
+                    if account.strip() in known["ips"]:
+                        continue
+                    # Not in evidence either — already reported as
+                    # ungrounded_ip by the address check; don't double-flag.
+                    continue
                 if _is_known_principal(account, known):
+                    continue
+                # Labels constructed around grounded entities (rule names such
+                # as Block-<addr>) are derived from the evidence, not new
+                # targets.
+                if _contains_grounded_entity(account, known):
                     continue
                 result.issues.append(
                     Issue(
@@ -383,6 +474,86 @@ def _looks_like_identifier(value: str) -> bool:
     if " " in candidate or len(candidate) < 3:
         return False
     return bool(re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9._\\\-]{2,63}", candidate))
+
+
+_EMAIL = re.compile(r"\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}\b")
+
+
+def _event_literal_pool(event) -> str:
+    """Every comparable literal of one event, lowercased, for containment tests."""
+    parts = [
+        event.raw_excerpt,
+        event.user,
+        event.host,
+        event.src_ip,
+        event.dst_ip,
+        event.process,
+        event.parent_process,
+        event.command_line,
+        event.account_domain,
+    ]
+    parts.extend(str(v) for v in event.extra.values())
+    parts.extend(event.hashes.values())
+    return " ".join(p for p in parts if p).lower()
+
+
+def _check_citation_consistency(
+    report: str, store: EvidenceStore, result: VerificationResult
+) -> None:
+    """A line that cites events must be describing those events.
+
+    Referential integrity alone lets a report bind a real entity to the wrong
+    real event — e.g. attributing user X to a citation whose record names
+    neither X nor anything like it. For every line carrying both citations and
+    unambiguous entity literals (addresses, e-mail style principals), at least
+    one cited event must actually contain each entity. Violations are warnings:
+    prose legitimately juxtaposes entities from different sentences.
+    """
+    by_id = {e.ev_id: e for e in store.iter_events() if e.ev_id}
+    pools: dict[str, str] = {}
+    mismatches = 0
+
+    for index, line in enumerate(report.splitlines()):
+        ids = set(EVIDENCE_ID_PATTERN.findall(line))
+        if not ids:
+            continue
+        cited = [by_id[ev_id] for ev_id in ids if ev_id in by_id]
+        if not cited:
+            continue
+        entities = set(IPV4.findall(line)) | set(_EMAIL.findall(line))
+        if not entities:
+            continue
+
+        for entity in entities:
+            low = entity.lower()
+            found = False
+            for event in cited:
+                pool = pools.get(event.ev_id)
+                if pool is None:
+                    pool = _event_literal_pool(event)
+                    pools[event.ev_id] = pool
+                if low in pool:
+                    found = True
+                    break
+            if not found:
+                mismatches += 1
+                if mismatches > 20:
+                    return
+                cited_ids = ", ".join(sorted(ids))
+                result.issues.append(
+                    Issue(
+                        "citation_mismatch",
+                        "warn",
+                        entity,
+                        (
+                            f"'{entity}' is attributed to citation(s) {cited_ids}, but "
+                            "none of those events contain it. The entity may be real "
+                            "elsewhere in the evidence — cite the event that actually "
+                            "names it."
+                        ),
+                        index + 1,
+                    )
+                )
 
 
 def _check_coverage(report: str, minimum: float, result: VerificationResult) -> None:
@@ -442,7 +613,11 @@ def _annotate(report: str, result: VerificationResult) -> str:
     annotated = report
     for value in sorted(flagged, key=len, reverse=True):
         pattern = re.compile(rf"(?<!\[UNVERIFIED: ){re.escape(value)}")
-        annotated = pattern.sub(f"{value} [UNVERIFIED: not in evidence]", annotated)
+        # A callable replacement avoids re-interpreting backslashes in the
+        # flagged value (e.g. DOMAIN\user) as group references.
+        annotated = pattern.sub(
+            lambda m: f"{m.group(0)} [UNVERIFIED: not in evidence]", annotated
+        )
     return annotated
 
 

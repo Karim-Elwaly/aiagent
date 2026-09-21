@@ -1,0 +1,46 @@
+id: zeek_dns_tsv
+description: >
+  Zeek (Bro) dns.log in native TSV form. Carries the query name, record type,
+  response code and answers — the fields needed for DNS tunneling, DGA and
+  covert-exfiltration analysis.
+format: tsv
+priority: 1
+
+match:
+  filename_patterns:
+    - "*zeek*.tsv"
+    - "*dns*.tsv"
+    - "*bro*.tsv"
+    - "*.tsv"
+  content_patterns:
+    - "#separator"
+    - "#fields"
+    - "qtype_name"
+
+fields:
+  timestamp: ts
+  src_ip: id.orig_h
+  dst_ip: id.resp_h
+  src_port: id.orig_p
+  dst_port: id.resp_p
+  protocol: proto
+  # The record type is the discriminating outcome dimension for DNS telemetry
+  # (TXT bursts = tunneling, A floods = exfil chunks).
+  event_code: qtype_name
+  status: rcode_name
+  extra.query: query
+  extra.rcode: rcode_name
+  extra.answers: answers
+  extra.uid: uid
+  extra.rejected: rejected
+
+constants:
+  action: dns_query
+
+value_maps:
+  status:
+    "NOERROR": success
+    "NXDOMAIN": failure
+    "SERVFAIL": failure
+    "REFUSED": failure
+    "*": info

@@ -23,12 +23,16 @@ record_pattern: >-
   (?P<ts>\w{3}\s+\d{1,2}\s+\d{4}\s+\d{2}:\d{2}:\d{2}|\d{4}-\d{2}-\d{2}[T ]\d{2}:\d{2}:\d{2}|\w{3}\s+\d{1,2}\s+\d{2}:\d{2}:\d{2})?
   .*?(?P<code>%ASA-\d+-\d+):\s*(?P<message>.*)$
 
-constants:
-  action: vpn_auth
+constants: {}
 
 fields:
   timestamp: ts
   event_code: code
+
+  # The message id also carries the event's semantic class. Labelling ACL
+  # denies or connection-limit floods as authentication events would bury
+  # scans and DDoS state exhaustion inside the identity telemetry.
+  action: code
 
   # ASA emits two interchangeable field dialects:
   #   AAA messages:     "user = jsmith : user IP = <addr>"
@@ -40,7 +44,17 @@ fields:
 
   src_ip:
     paths: [message]
-    regex: "(?:IP|address|from)\\s*(?:[:=]\\s*|<)?((?:\\d{1,3}\\.){3}\\d{1,3})"
+    regex: "(?:user\\s+IP|IP|address|from|src\\s+\\S+?:)\\s*(?:[:=]\\s*|<)?((?:\\d{1,3}\\.){3}\\d{1,3})"
+
+  # Destination appears either zone-qualified ("dst inside:<addr>/<port>") or
+  # bare ("to <addr>/<port>" in connection-limit messages); both must parse.
+  dst_ip:
+    paths: [message]
+    regex: "(?:dst|to)\\s+(?:\\S+?[:\\s])?((?:\\d{1,3}\\.){3}\\d{1,3})"
+
+  dst_port:
+    paths: [message]
+    regex: "(?:dst|to)\\s+(?:\\S+?[:\\s])?(?:\\d{1,3}\\.){3}\\d{1,3}/(\\d+)"
 
   extra.assigned_ip:
     paths: [message]
@@ -66,4 +80,20 @@ value_maps:
     "%ASA-6-113039": success
     "%ASA-6-302013": success
     "%ASA-4-722051": success
+    "%ASA-4-106023": failure
+    "%ASA-2-106001": failure
+    "%ASA-3-201011": failure
     "*": info
+  action:
+    "%ASA-6-113015": vpn_auth
+    "%ASA-6-113005": vpn_auth
+    "%ASA-6-113004": vpn_auth
+    "%ASA-6-113012": vpn_auth
+    "%ASA-6-113039": vpn_auth
+    "%ASA-4-722051": vpn_session
+    "%ASA-6-302013": connection_built
+    "%ASA-6-302014": connection_teardown
+    "%ASA-4-106023": acl_deny
+    "%ASA-2-106001": connection_denied
+    "%ASA-3-201011": connection_limit_exceeded
+    "*": firewall_event

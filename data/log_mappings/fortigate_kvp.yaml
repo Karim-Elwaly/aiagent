@@ -1,0 +1,131 @@
+id: fortigate_kvp
+description: >
+  Fortinet FortiOS key-value-pair syslog (traffic, IPS and anomaly logs).
+  Carries source/destination, action, byte counters, IPS signatures and DoS
+  anomaly detections.
+format: syslog
+priority: 1
+
+match:
+  filename_patterns:
+    - "*fortigate*.log"
+    - "*fortios*.log"
+    - "*fgt*.log"
+  content_patterns:
+    - "devname="
+    - "logid="
+    - "subtype="
+
+# One KVP record per line, optionally preceded by a syslog priority tag.
+record_pattern: '^(?:<\d+>)?(?P<message>date=.*)$'
+
+fields:
+  # eventtime is epoch nanoseconds on FortiOS 7.x.
+  timestamp:
+    paths: [message]
+    regex: "eventtime=(\\d{9,19})"
+
+  event_code:
+    paths: [message]
+    regex: "subtype=\"?([A-Za-z0-9_-]+)"
+
+  action:
+    paths: [message]
+    regex: "action=\"?([A-Za-z0-9_-]+)"
+
+  status:
+    paths: [message]
+    regex: "action=\"?([A-Za-z0-9_-]+)"
+
+  src_ip:
+    paths: [message]
+    regex: "srcip=\"?((?:\\d{1,3}\\.){3}\\d{1,3})"
+
+  src_port:
+    paths: [message]
+    regex: "srcport=(\\d+)"
+
+  dst_ip:
+    paths: [message]
+    regex: "dstip=\"?((?:\\d{1,3}\\.){3}\\d{1,3})"
+
+  dst_port:
+    paths: [message]
+    regex: "dstport=(\\d+)"
+
+  protocol:
+    paths: [message]
+    regex: "proto=(\\d+)"
+
+  app_id:
+    paths: [message]
+    regex: "service=\"([^\"]+)\""
+
+  bytes_sent:
+    paths: [message]
+    regex: "sentbyte=(\\d+)"
+
+  bytes_received:
+    paths: [message]
+    regex: "rcvdbyte=(\\d+)"
+
+  session_duration:
+    paths: [message]
+    regex: "duration=(\\d+)"
+
+  country:
+    paths: [message]
+    regex: "dstcountry=\"([^\"]+)\""
+
+  # IPS signature name and DoS anomaly details are the decisive fields for
+  # exploit and flood detection.
+  extra.attack:
+    paths: [message]
+    regex: "attack=\"([^\"]+)\""
+
+  extra.attack_id:
+    paths: [message]
+    regex: "attackid=(\\d+)"
+
+  extra.count:
+    paths: [message]
+    regex: "\\bcount=(\\d+)"
+
+  extra.threshold:
+    paths: [message]
+    regex: "threshold[= ](\\d+)"
+
+  extra.level:
+    paths: [message]
+    regex: "level=\"?([A-Za-z]+)"
+
+  extra.policy_id:
+    paths: [message]
+    regex: "policyid=(\\d+)"
+
+  extra.log_type:
+    paths: [message]
+    regex: "\\btype=\"?([A-Za-z]+)"
+
+  extra.sensor:
+    paths: [message]
+    regex: "devname=\"([^\"]+)\""
+
+  extra.msg:
+    paths: [message]
+    regex: "msg=\"([^\"]+)\""
+
+value_maps:
+  status:
+    "accept": success
+    "pass": success
+    "close": success
+    "deny": failure
+    "denied": failure
+    "drop": failure
+    "dropped": failure
+    "block": failure
+    "blocked": failure
+    "detected": failure
+    "clear_session": failure
+    "*": info

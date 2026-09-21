@@ -29,6 +29,7 @@ from fastapi.responses import FileResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 from temporalio.client import Client
+from temporalio.exceptions import ApplicationError
 
 from src.core.models import TaskDAG
 
@@ -318,6 +319,44 @@ async def serve_ui():
 # ── Endpoints ────────────────────────────────────────────────────
 
 
+async def _execute_task_with_retries(
+    task_dict: dict[str, Any],
+    completed: dict[str, str],
+    agent_id: str,
+) -> dict[str, Any]:
+    """Direct-mode analogue of Temporal's RetryPolicy for execute_task.
+
+    execute_task raises ApplicationError(type='TransientWorkerError') on
+    transient LLM failures (timeouts, connection drops) so Temporal can
+    retry durably. Without Temporal, this helper provides the equivalent
+    bounded retry with backoff; on exhaustion it returns a failed result
+    dict so the run continues (dependency cascade handles downstream).
+    """
+    max_attempts = int(task_dict.get("max_retries", 2)) + 1
+    backoff = 5.0
+    last_error = ""
+    for attempt in range(1, max_attempts + 1):
+        try:
+            return await execute_task(task_dict, completed, agent_id)
+        except ApplicationError as err:
+            last_error = str(err)
+            logger.warning(
+                "Transient failure on task '%s' (attempt %d/%d): %s",
+                task_dict.get("id", "?"),
+                attempt,
+                max_attempts,
+                err,
+            )
+            if attempt < max_attempts:
+                await asyncio.sleep(min(backoff, 30.0))
+                backoff *= 2
+    return {
+        "status": "failed",
+        "output": "",
+        "error": f"Task failed after {max_attempts} attempts: {last_error}",
+    }
+
+
 async def run_direct_workflow(
     workflow_id: str,
     user_query: str,
@@ -506,7 +545,7 @@ async def run_direct_workflow(
                 },
             )
 
-            result_dict = await execute_task(task_dict, completed, agent_id)
+            result_dict = await _execute_task_with_retries(task_dict, completed, agent_id)
 
             if result_dict.get("status") == "completed":
                 task_output = result_dict.get("output", "")
@@ -514,7 +553,11 @@ async def run_direct_workflow(
                 # Supervisor ReAct evaluation
                 try:
                     supervisor_eval = await evaluate_task_output(
-                        task_dict, task_output, user_query, completed
+                        task_dict,
+                        task_output,
+                        user_query,
+                        completed,
+                        result_dict.get("tool_calls_made", []),
                     )
                     if supervisor_eval:
                         decision = supervisor_eval.get("decision", "pass")
@@ -531,7 +574,9 @@ async def run_direct_workflow(
                                 f"{task_dict.get('description', '')}\n\n"
                                 f"[SUPERVISOR EVALUATION FEEDBACK - PLEASE GATHER MORE INFO]: {feedback}"
                             )
-                            retry_result = await execute_task(task_dict, completed, agent_id)
+                            retry_result = await _execute_task_with_retries(
+                                task_dict, completed, agent_id
+                            )
                             if retry_result.get("status") == "completed":
                                 task_output = retry_result.get("output", "")
                                 result_dict = retry_result
@@ -540,7 +585,11 @@ async def run_direct_workflow(
                             # any re-inspection, which defeated the gate.
                             try:
                                 re_eval = await evaluate_task_output(
-                                    task_dict, task_output, user_query, completed
+                                    task_dict,
+                                    task_output,
+                                    user_query,
+                                    completed,
+                                    result_dict.get("tool_calls_made", []),
                                 )
                             except Exception as re_err:
                                 logger.warning(

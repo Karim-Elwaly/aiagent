@@ -90,6 +90,23 @@ class GeoContext(BaseModel):
     isp: str = ""
 
 
+# Extra keys that carry decisive analytical signal when present. Rendered in
+# event summaries so the model sees them without needing full-detail JSON.
+_SALIENT_EXTRA_KEYS = (
+    "query",
+    "target_server",
+    "risk_detail",
+    "risk_level",
+    "reason",
+    "assigned_ip",
+    "service_name",
+    "group_name",
+    "sender",
+    "attachment",
+    "rule",
+)
+
+
 class EvidenceEvent(BaseModel):
     """A single normalized event extracted from a log source.
 
@@ -141,8 +158,14 @@ class EvidenceEvent(BaseModel):
     geo: GeoContext = Field(default_factory=GeoContext)
     extra: dict[str, Any] = Field(default_factory=dict)
 
-    def summary(self, max_chars: int = 220) -> str:
-        """One-line human/LLM readable summary prefixed with the citation id."""
+    def summary(self, max_chars: int = 320) -> str:
+        """One-line human/LLM readable summary prefixed with the citation id.
+
+        Every analytically decisive dimension must appear here: byte counters,
+        destination geography, error codes and salient extras (query names,
+        target servers, risk flags). A field the summary hides is a field the
+        investigation will wrongly report as absent from the telemetry.
+        """
         bits: list[str] = []
         if self.timestamp:
             bits.append(self.timestamp)
@@ -159,10 +182,24 @@ class EvidenceEvent(BaseModel):
         if self.dst_ip:
             dst = self.dst_ip if self.dst_port is None else f"{self.dst_ip}:{self.dst_port}"
             bits.append(f"dst={dst}")
+        if self.bytes_sent is not None:
+            bits.append(f"bytes_sent={self.bytes_sent}")
+        if self.bytes_received is not None:
+            bits.append(f"bytes_recv={self.bytes_received}")
+        if self.geo.country:
+            bits.append(f"geo={self.geo.country}")
+        if self.app_id:
+            bits.append(f"app={self.app_id}")
         if self.status:
             bits.append(f"status={self.status}")
+        if self.error_code:
+            bits.append(f"err={self.error_code}")
         if self.action:
             bits.append(f"action={self.action}")
+        for key in _SALIENT_EXTRA_KEYS:
+            value = self.extra.get(key)
+            if value not in (None, "", [], {}):
+                bits.append(f"{key}={value}")
 
         line = f"[{self.ev_id}] " + " | ".join(bits)
         if len(line) > max_chars:
@@ -191,6 +228,22 @@ def parse_timestamp(value: Any, default_year: int | None = None) -> str:
     if not text:
         return ""
 
+    # Unix epoch (Zeek `ts`, NetFlow, FortiOS `eventtime`): all-digits with an
+    # optional fraction. Precision varies by vendor — seconds, milliseconds,
+    # microseconds or nanoseconds — distinguished by digit count. Bounded so
+    # ordinary integers such as ports or counters are never misread as dates.
+    m = re.fullmatch(r"(\d{9,19})(?:\.\d+)?", text)
+    if m:
+        digits = len(m.group(1))
+        divisor = {12: 1e3, 13: 1e3, 14: 1e3, 15: 1e6, 16: 1e6, 17: 1e6}.get(
+            digits, 1e9 if digits >= 18 else 1.0
+        )
+        try:
+            epoch = float(text) / divisor
+            return datetime.fromtimestamp(epoch, tz=timezone.utc).isoformat()
+        except (ValueError, OverflowError, OSError):
+            pass
+
     candidate = text.replace("Z", "+00:00")
     try:
         return datetime.fromisoformat(candidate).isoformat()
@@ -206,6 +259,9 @@ def parse_timestamp(value: Any, default_year: int | None = None) -> str:
         "%b %d %Y %H:%M:%S",
         "%b %d %H:%M:%S",
         "%m/%d/%Y %H:%M:%S",
+        # BIND 9 query log: 14-Sep-2026 11:00:01.120
+        "%d-%b-%Y %H:%M:%S.%f",
+        "%d-%b-%Y %H:%M:%S",
     ):
         try:
             parsed = datetime.strptime(text, fmt)
@@ -367,10 +423,15 @@ class EvidenceStore:
         by_source: dict[str, int] = {}
         by_source_file: dict[str, int] = {}
         by_status: dict[str, int] = {}
-        # (action, event_code) inventory with example citation ids: this is
-        # what lets an investigation prove it examined every behaviour type
-        # present in the data rather than only the ones it went looking for.
-        by_signal: dict[tuple[str, str], dict[str, Any]] = {}
+        # (action, event_code, status) inventory with example citation ids:
+        # this is what lets an investigation prove it examined every behaviour
+        # type present in the data rather than only the ones it went looking
+        # for. Status is part of the key because a burst of failures and a
+        # burst of successes under the same code are different behaviours.
+        by_signal: dict[tuple[str, str, str], dict[str, Any]] = {}
+        # (src_ip, dst_ip, dst_port) flow totals: transfer volume must be a
+        # deterministic figure, never something a model infers from samples.
+        flows: dict[tuple[str, str, str], dict[str, Any]] = {}
         span_by_file: dict[str, list[str]] = {}
         hosts: set[str] = set()
         users: set[str] = set()
@@ -388,7 +449,11 @@ class EvidenceStore:
             if event.status:
                 key = event.status.lower()
                 by_status[key] = by_status.get(key, 0) + 1
-            signal_key = (event.action or "", event.event_code or "")
+            signal_key = (
+                event.action or "",
+                event.event_code or event.error_code or "",
+                event.status or "",
+            )
             if any(signal_key):
                 entry = by_signal.setdefault(
                     signal_key, {"count": 0, "example_ids": []}
@@ -396,6 +461,42 @@ class EvidenceStore:
                 entry["count"] += 1
                 if len(entry["example_ids"]) < 3:
                     entry["example_ids"].append(event.ev_id)
+            if event.dst_ip and (event.bytes_sent or event.bytes_received):
+                flow_key = (
+                    event.src_ip or "",
+                    event.dst_ip,
+                    str(event.dst_port) if event.dst_port is not None else "",
+                )
+                flow = flows.setdefault(
+                    flow_key,
+                    {
+                        "sessions": 0,
+                        "bytes_sent": 0,
+                        "bytes_received": 0,
+                        "example_ids": [],
+                        "app_id": "",
+                        "user": "",
+                        "rule": "",
+                        "geo": "",
+                    },
+                )
+                flow["sessions"] += 1
+                flow["bytes_sent"] += event.bytes_sent or 0
+                flow["bytes_received"] += event.bytes_received or 0
+                if len(flow["example_ids"]) < 3:
+                    flow["example_ids"].append(event.ev_id)
+                # Representative context: the app-id, account, policy rule and
+                # geography attached to a flow are exactly what separates a
+                # sanctioned bulk transfer from exfiltration. Hiding them
+                # forces that judgement to be guessed.
+                if not flow["app_id"] and event.app_id:
+                    flow["app_id"] = event.app_id
+                if not flow["user"] and event.user:
+                    flow["user"] = event.user
+                if not flow["rule"] and event.extra.get("rule"):
+                    flow["rule"] = str(event.extra["rule"])
+                if not flow["geo"] and event.geo.country:
+                    flow["geo"] = event.geo.country
             if event.source_file and event.timestamp:
                 span = span_by_file.setdefault(event.source_file, [event.timestamp, event.timestamp])
                 if event.timestamp < span[0]:
@@ -424,12 +525,33 @@ class EvidenceStore:
                 {
                     "action": action,
                     "event_code": code,
+                    "status": status,
                     "count": entry["count"],
                     "example_ids": entry["example_ids"],
                 }
-                for (action, code), entry in sorted(
+                for (action, code, status), entry in sorted(
                     by_signal.items(), key=lambda kv: kv[1]["count"]
                 )
+            ],
+            "top_flows_by_bytes": [
+                {
+                    "src_ip": src,
+                    "dst_ip": dst,
+                    "dst_port": port,
+                    "sessions": flow["sessions"],
+                    "bytes_sent": flow["bytes_sent"],
+                    "bytes_received": flow["bytes_received"],
+                    "app_id": flow["app_id"],
+                    "user": flow["user"],
+                    "rule": flow["rule"],
+                    "geo": flow["geo"],
+                    "example_ids": flow["example_ids"],
+                }
+                for (src, dst, port), flow in sorted(
+                    flows.items(),
+                    key=lambda kv: kv[1]["bytes_sent"] + kv[1]["bytes_received"],
+                    reverse=True,
+                )[:15]
             ],
             "time_span_by_source_file": {
                 name: {"earliest": span[0], "latest": span[1]}

@@ -323,24 +323,39 @@ class UAOSWorkflow:
                 timeout = task_dict.get("timeout_seconds", 300)
                 max_retries = task_dict.get("max_retries", 2)
 
-                result_dict = await workflow.execute_activity(
-                    execute_task,
-                    args=[task_dict, completed, agent_id],
-                    start_to_close_timeout=timedelta(seconds=timeout + 60),
-                    heartbeat_timeout=timedelta(seconds=90),
-                    retry_policy=RetryPolicy(
-                        maximum_attempts=max_retries + 1,
-                        initial_interval=timedelta(seconds=5),
-                        maximum_interval=timedelta(seconds=30),
-                        backoff_coefficient=2.0,
-                        non_retryable_error_types=[
-                            "ApprovalRejectedError",
-                            "ValueError",
-                            "KeyError",
-                            "FileNotFoundError",
-                        ],
-                    ),
-                )
+                try:
+                    result_dict = await workflow.execute_activity(
+                        execute_task,
+                        args=[task_dict, completed, agent_id],
+                        start_to_close_timeout=timedelta(seconds=timeout + 60),
+                        heartbeat_timeout=timedelta(seconds=90),
+                        retry_policy=RetryPolicy(
+                            maximum_attempts=max_retries + 1,
+                            initial_interval=timedelta(seconds=5),
+                            maximum_interval=timedelta(seconds=30),
+                            backoff_coefficient=2.0,
+                            non_retryable_error_types=[
+                                "ApprovalRejectedError",
+                                "ValueError",
+                                "KeyError",
+                                "FileNotFoundError",
+                            ],
+                        ),
+                    )
+                except Exception as act_err:
+                    # Retries exhausted (e.g. TransientWorkerError raised on
+                    # every attempt). Mark this task failed and continue so
+                    # one flaky phase doesn't kill the entire workflow.
+                    workflow.logger.error(
+                        "Task '%s' failed after all retry attempts: %s",
+                        task_name,
+                        act_err,
+                    )
+                    result_dict = {
+                        "status": "failed",
+                        "output": "",
+                        "error": f"Task failed after {max_retries + 1} attempts: {act_err}",
+                    }
 
                 if result_dict["status"] == "completed":
                     task_output = result_dict["output"]
@@ -350,7 +365,13 @@ class UAOSWorkflow:
                     try:
                         supervisor_eval = await workflow.execute_activity(
                             evaluate_task_output,
-                            args=[task_dict, task_output, user_query, completed],
+                            args=[
+                                task_dict,
+                                task_output,
+                                user_query,
+                                completed,
+                                result_dict.get("tool_calls_made", []),
+                            ],
                             start_to_close_timeout=timedelta(seconds=90),
                             retry_policy=RetryPolicy(maximum_attempts=2),
                         )
@@ -384,24 +405,35 @@ class UAOSWorkflow:
                             f"[SUPERVISOR EVALUATION FEEDBACK - PLEASE GATHER MORE INFO]: {feedback}"
                         )
                         # Re-execute immediately with updated prompt
-                        retry_result = await workflow.execute_activity(
-                            execute_task,
-                            args=[task_dict, completed, agent_id],
-                            start_to_close_timeout=timedelta(seconds=timeout + 60),
-                            heartbeat_timeout=timedelta(seconds=90),
-                            retry_policy=RetryPolicy(
-                                maximum_attempts=2,
-                                initial_interval=timedelta(seconds=5),
-                                maximum_interval=timedelta(seconds=30),
-                                backoff_coefficient=2.0,
-                                non_retryable_error_types=[
-                                    "ApprovalRejectedError",
-                                    "ValueError",
-                                    "KeyError",
-                                    "FileNotFoundError",
-                                ],
-                            ),
-                        )
+                        try:
+                            retry_result = await workflow.execute_activity(
+                                execute_task,
+                                args=[task_dict, completed, agent_id],
+                                start_to_close_timeout=timedelta(seconds=timeout + 60),
+                                heartbeat_timeout=timedelta(seconds=90),
+                                retry_policy=RetryPolicy(
+                                    maximum_attempts=2,
+                                    initial_interval=timedelta(seconds=5),
+                                    maximum_interval=timedelta(seconds=30),
+                                    backoff_coefficient=2.0,
+                                    non_retryable_error_types=[
+                                        "ApprovalRejectedError",
+                                        "ValueError",
+                                        "KeyError",
+                                        "FileNotFoundError",
+                                    ],
+                                ),
+                            )
+                        except Exception as retry_err:
+                            # Transient failure on the supervisor-requested
+                            # retry: keep the original completed output rather
+                            # than killing the workflow.
+                            workflow.logger.warning(
+                                "Supervisor retry of '%s' failed transiently: %s",
+                                task_name,
+                                retry_err,
+                            )
+                            retry_result = {"status": "failed", "output": ""}
                         if retry_result["status"] == "completed":
                             task_output = retry_result["output"]
                             result_dict = retry_result
@@ -410,7 +442,13 @@ class UAOSWorkflow:
                             try:
                                 re_eval = await workflow.execute_activity(
                                     evaluate_task_output,
-                                    args=[task_dict, task_output, user_query, completed],
+                                    args=[
+                                        task_dict,
+                                        task_output,
+                                        user_query,
+                                        completed,
+                                        result_dict.get("tool_calls_made", []),
+                                    ],
                                     start_to_close_timeout=timedelta(seconds=90),
                                     retry_policy=RetryPolicy(maximum_attempts=2),
                                 )

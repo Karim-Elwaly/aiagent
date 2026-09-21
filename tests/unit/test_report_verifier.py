@@ -127,6 +127,31 @@ def test_unknown_qualified_account_still_fails():
     )
 
 
+def test_grounded_destination_ip_in_remediation_is_not_flagged():
+    """Regression: a dst_ip present in the store, when backticked inside a
+    remediation section, was checked against the accounts/hosts pools instead
+    of the ips pool and falsely FAILed as an ungrounded remediation target."""
+    store = seeded_store("vr-remediation-ip")
+    report = (
+        "## Containment\n"
+        f"- Validate outbound flows to `{REAL_IP}` before blocking [EV-000001]\n"
+    )
+    result = verify_report(report, store=store, min_citation_coverage=0.0)
+    assert not any(
+        i.kind == "ungrounded_remediation_target" for i in result.issues
+    ), [i.value for i in result.issues]
+
+
+def test_unknown_ip_in_remediation_still_flagged_once():
+    """An absent IP in remediation must still fail — as ungrounded_ip — but
+    must not be double-reported as an ungrounded remediation target too."""
+    store = seeded_store("vr-remediation-fake-ip")
+    report = f"## Containment\n- Block `{FAKE_IP}` at the perimeter [EV-000001]\n"
+    result = verify_report(report, store=store, min_citation_coverage=0.0)
+    assert any(i.kind == "ungrounded_ip" and i.value == FAKE_IP for i in result.issues)
+    assert not any(i.kind == "ungrounded_remediation_target" for i in result.issues)
+
+
 # ── entity grounding ─────────────────────────────────────
 
 

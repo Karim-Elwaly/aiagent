@@ -125,12 +125,19 @@ def detect_format(path: Path, sample: str = "") -> str:
         return "xml"
     if suffix in (".jsonl", ".ndjson"):
         return "jsonl"
+    if suffix == ".tsv":
+        return "tsv"
 
     text = (sample or _read_sample(path)).lstrip()
     if not text:
         return "text"
 
-    if text.startswith("<"):
+    # Zeek logs declare their own container format in a directive header.
+    if text.startswith("#separator"):
+        return "tsv"
+
+    # An RFC 3164/5424 priority tag ("<190>...") is syslog, not markup.
+    if text.startswith("<") and not re.match(r"^<\d{1,3}>", text):
         return "xml"
     if text.startswith("["):
         return "json"
@@ -211,7 +218,7 @@ def select_mapping(
 
 # Container formats that parse compatibly, so a mapping declaring one may be
 # applied to a file detected as the other.
-_FORMAT_FAMILIES = ({"json", "jsonl"}, {"xml", "evtx"}, {"syslog", "text"})
+_FORMAT_FAMILIES = ({"json", "jsonl"}, {"xml", "evtx"}, {"syslog", "text"}, {"csv", "tsv"})
 
 
 def _same_family(left: str, right: str) -> bool:
@@ -239,6 +246,8 @@ def iter_records(path: Path, fmt: str, mapping: LogMapping | None) -> Iterator[t
         yield from _iter_jsonl(path)
     elif fmt == "csv":
         yield from _iter_csv(path, mapping)
+    elif fmt == "tsv":
+        yield from _iter_tsv(path)
     elif fmt == "xml":
         yield from _iter_xml(path, mapping)
     elif fmt == "evtx":
@@ -362,6 +371,62 @@ def _looks_like_data_row(line: str) -> bool:
         re.search(r"\d{4}-\d{2}-\d{2}", line)
         or re.search(r"\b\d{1,3}(?:\.\d{1,3}){3}\b", line)
     )
+
+
+def _iter_tsv(path: Path) -> Iterator[tuple[int, str, Any]]:
+    """Yield tab-separated records, understanding Zeek-style directive headers.
+
+    Zeek logs open with ``#``-prefixed directives; ``#fields`` names the
+    columns and ``#unset_field`` declares the placeholder used for absent
+    values (``-`` by default). Plain TSV exports with a first-row header are
+    also supported. Directive and comment lines are documentation, not events.
+    """
+    with open(path, "r", encoding="utf-8", errors="replace") as fh:
+        raw_lines = fh.read().splitlines()
+
+    columns: list[str] = []
+    unset = "-"
+    empty = "(empty)"
+    data_rows: list[tuple[int, str]] = []
+
+    for line_no, line in enumerate(raw_lines, start=1):
+        if not line.strip():
+            continue
+        if line.startswith("#"):
+            if line.startswith("#fields"):
+                columns = line.split("\t")[1:]
+            elif line.startswith("#unset_field"):
+                parts = line.split("\t")
+                if len(parts) > 1:
+                    unset = parts[1]
+            elif line.startswith("#empty_field"):
+                parts = line.split("\t")
+                if len(parts) > 1:
+                    empty = parts[1]
+            continue
+        data_rows.append((line_no, line))
+
+    if not data_rows:
+        return
+
+    if not columns:
+        # No Zeek directives: treat the first data row as a header when it
+        # doesn't look like data itself.
+        first_body = data_rows[0][1]
+        if not _looks_like_data_row(first_body):
+            columns = first_body.split("\t")
+            data_rows = data_rows[1:]
+
+    for line_no, line in data_rows:
+        values = line.split("\t")
+        if columns:
+            record = {
+                name: ("" if value in (unset, empty) else value)
+                for name, value in zip(columns, values)
+            }
+        else:
+            record = {str(i): value for i, value in enumerate(values)}
+        yield line_no, line, record
 
 
 def _iter_xml(path: Path, mapping: LogMapping | None) -> Iterator[tuple[int, str, Any]]:

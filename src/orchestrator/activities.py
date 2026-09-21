@@ -716,12 +716,130 @@ def _parse_verdict_json(text: str) -> dict:
     )
 
 
+# Telemetry families for the supervisor's analytics gate. The action names are
+# this pipeline's own normalized vocabulary (set by the declarative log
+# mappings), and the tool names are this pipeline's own registry — nothing here
+# refers to any particular dataset or incident.
+_ANALYTICS_GATE_FAMILIES: list[dict] = [
+    {
+        "family": "identity/authentication",
+        "task_skills": {
+            "identity_analysis",
+            "auth_sequence_analysis",
+            "geo_velocity_analysis",
+            "device_posture_analysis",
+            "threat_hunting",
+            "log_analysis",
+            "anomaly_detection",
+        },
+        "event_actions": {
+            "logon",
+            "logon_failed",
+            "signin",
+            "vpn_auth",
+            "explicit_credential_logon",
+        },
+        "tools": {
+            "analyze_auth_sequences",
+            "analyze_identity_velocity",
+            "analyze_device_posture",
+        },
+        "why": (
+            "authentication events are present in the evidence store; sprays, "
+            "brute force, MFA fatigue and impossible travel are sequence "
+            "patterns that must be checked by the deterministic detectors"
+        ),
+    },
+    {
+        "family": "network traffic",
+        "task_skills": {
+            "network_analysis",
+            "traffic_analysis",
+            "exfiltration_analysis",
+            "threat_hunting",
+            "log_analysis",
+            "anomaly_detection",
+        },
+        "event_actions": {
+            "allow",
+            "deny",
+            "drop",
+            "dns_query",
+            "block",
+            "pass",
+            "accept",
+            "acl_deny",
+            "connection_denied",
+            "connection_built",
+            "connection_teardown",
+            "connection_limit_exceeded",
+            "firewall_event",
+        },
+        "tools": {"analyze_traffic_patterns", "correlate_events"},
+        "why": (
+            "network events are present in the evidence store; beaconing "
+            "cadence, transfer-volume asymmetry and query bursts are aggregate "
+            "patterns that must be checked by the deterministic detectors"
+        ),
+    },
+]
+
+
+def _analytics_gate(
+    run_id: str, required_skills: set[str], tools_used: set[str]
+) -> str:
+    """Return retry feedback when a relevant analytics tool was never run.
+
+    Deterministic: uses only the evidence store's action inventory, the task's
+    declared skills and the names of tools actually called. Returns an empty
+    string when no gate applies.
+    """
+    try:
+        stats = get_store(run_id).stats()
+    except Exception as exc:
+        logger.debug("Analytics gate could not read store for %s: %s", run_id, exc)
+        return ""
+
+    actions_present = {
+        row.get("action", "")
+        for row in stats.get("event_inventory") or []
+        if row.get("action")
+    }
+    if not actions_present:
+        return ""
+
+    missing: list[str] = []
+    for family in _ANALYTICS_GATE_FAMILIES:
+        if not (required_skills & family["task_skills"]):
+            continue
+        if not (actions_present & family["event_actions"]):
+            continue
+        if tools_used & family["tools"]:
+            continue
+        tool_names = ", ".join(sorted(family["tools"]))
+        missing.append(f"{family['family']}: run one of [{tool_names}] — {family['why']}")
+
+    if not missing:
+        return ""
+
+    return (
+        "This analysis phase was accepted by narrative review but never ran the "
+        "deterministic analytics for telemetry that IS present in the evidence "
+        "store. Findings about these families cannot be trusted (or ruled out) "
+        "without them. Required before this task can pass:\n- "
+        + "\n- ".join(missing)
+        + "\nCall the tool(s), then integrate their findings (with evidence ids) "
+        "into the output."
+    )
+
+
 @activity.defn
 async def evaluate_task_output(
     task_dict: dict,
     worker_output: str,
     user_query: str,
     prior_completed: dict[str, str],
+    tools_used: list[str] | None = None,
 ) -> dict:
     """Supervisor ReAct activity: evaluates whether a completed task output is accurate or needs retry."""
     task_id = task_dict.get("id", "t")
@@ -899,6 +1017,23 @@ async def evaluate_task_output(
         decision = "needs_retry"
         if not feedback:
             feedback = "The worker reported inability to complete the task. Please execute the available tools to inspect the environment and fulfill the requirements."
+
+    # ── Analytics gate ───────────────────────────────────
+    # An analysis phase that never ran the deterministic detector for a
+    # telemetry family present in the store has not analysed that family —
+    # regardless of how confident its narrative reads. Password sprays,
+    # MFA-fatigue bursts, impossible travel and beaconing exist in the pattern
+    # space BETWEEN events, which prose review cannot check but these tools do.
+    if (
+        decision == "pass"
+        and not is_ingestion_task
+        and tools_used is not None
+        and int(task_dict.get("_supervisor_retried", 0) or 0) < 1
+    ):
+        gate_feedback = _analytics_gate(wf_id, required, set(tools_used))
+        if gate_feedback:
+            decision = "needs_retry"
+            feedback = gate_feedback
 
     eval_result = {
         "task_id": task_id,

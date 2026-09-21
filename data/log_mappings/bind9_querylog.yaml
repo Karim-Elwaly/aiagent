@@ -1,0 +1,35 @@
+id: bind9_querylog
+description: >
+  BIND 9 nameserver query log (queries.log). Records which client asked for
+  which domain and record type — the raw material for DNS tunneling, DGA and
+  subdomain-exfiltration detection.
+format: syslog
+priority: 1
+
+match:
+  filename_patterns:
+    - "*bind*.log"
+    - "*named*.log"
+    - "*queries*.log"
+    - "*dns*quer*.log"
+  content_patterns:
+    - "queries: info: client"
+    - "): query: "
+
+# <dd>-<Mon>-<yyyy> hh:mm:ss.mmm queries: info: client @0x<ptr>
+#   <client-addr>#<port> (name): query: name IN TXT +E(0) (<server-addr>)
+record_pattern: >-
+  (?P<ts>\d{1,2}-\w{3}-\d{4}\s+\d{2}:\d{2}:\d{2})(?:\.\d+)?\s+queries:.*?client\s+(?:@\S+\s+)?(?P<client>(?:\d{1,3}\.){3}\d{1,3})#(?P<port>\d+).*?query:\s+(?P<query>\S+)\s+(?P<qclass>\S+)\s+(?P<qtype>\S+)\s+(?P<flags>\S+)(?:\s+\((?P<server>(?:\d{1,3}\.){3}\d{1,3})\))?\s*$
+
+constants:
+  action: dns_query
+  status: info
+
+fields:
+  timestamp: ts
+  src_ip: client
+  src_port: port
+  dst_ip: server
+  event_code: qtype
+  extra.query: query
+  extra.query_class: qclass
