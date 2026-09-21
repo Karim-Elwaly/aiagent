@@ -53,6 +53,18 @@ _MIN_CLAIM_CHARS = 40
 # Version-like dotted numbers and similar constructs that are not addresses.
 _NOT_AN_IP_CONTEXT = re.compile(r"(?:v|version\s*)\d", re.IGNORECASE)
 
+# LLMs routinely emit typographic dashes (non-breaking hyphen, en/em dash,
+# minus sign) inside identifiers such as citation ids or addresses. Those are
+# semantically plain hyphens; left unnormalized they make every citation
+# invisible to the ASCII pattern and produce false "0 citations" verdicts.
+# Only dashes BETWEEN word characters are normalized — prose punctuation
+# ("text — more text") is left untouched.
+_IDENTIFIER_DASH = re.compile("(?<=\\w)[\u2010\u2011\u2012\u2013\u2014\u2015\u2212](?=\\w)")
+
+
+def _normalize_typography(text: str) -> str:
+    return _IDENTIFIER_DASH.sub("-", text)
+
 
 @dataclass
 class Issue:
@@ -153,6 +165,13 @@ def verify_report(
             Issue("empty_report", "fail", "", "The report is empty; nothing to verify.")
         )
         return result
+
+    # Normalize typographic dashes inside identifiers so citations and
+    # addresses emitted with non-ASCII hyphens still verify. The normalized
+    # text also becomes the annotated output — plain hyphens in identifiers
+    # are strictly more usable downstream.
+    report = _normalize_typography(report)
+    result.annotated_report = report
 
     evidence = store or get_store(run_id)
     result.evidence_events = evidence.count()
@@ -256,6 +275,38 @@ def _remediation_line_numbers(report: str) -> set[int]:
     return flagged
 
 
+def _entity_name_forms(value: str) -> set[str]:
+    """Lowercased comparable forms of an account or host name.
+
+    Reports legitimately qualify names the evidence stores bare —
+    ``DOMAIN\\user``, ``user@realm``, or a fully-qualified hostname where the
+    evidence holds the short name (or vice versa). All of these refer to the
+    same principal; flagging them as ungrounded would be a false accusation.
+    """
+    lowered = value.strip().lower()
+    forms = {lowered}
+    # DOMAIN\name  ->  name
+    if "\\" in lowered:
+        forms.add(lowered.rsplit("\\", 1)[-1])
+    # name@realm  ->  name
+    if "@" in lowered:
+        forms.add(lowered.split("@", 1)[0])
+    # fqdn -> first DNS label (only when it looks like a hostname, not a filename)
+    if "." in lowered and "\\" not in lowered and "/" not in lowered:
+        forms.add(lowered.split(".", 1)[0])
+    return {f for f in forms if f}
+
+
+def _is_known_principal(value: str, known: dict[str, set[str]]) -> bool:
+    """True when any comparable form of the value matches a known account/host."""
+    candidate_forms = _entity_name_forms(value)
+    for pool_name in ("accounts", "hosts"):
+        for entity in known[pool_name]:
+            if _entity_name_forms(entity) & candidate_forms:
+                return True
+    return False
+
+
 def _check_entities(
     report: str,
     known: dict[str, set[str]],
@@ -303,12 +354,9 @@ def _check_entities(
 
         if in_remediation:
             for account in _quoted_or_backticked(line):
-                lowered = account.lower()
-                if (
-                    lowered in known["accounts"]
-                    or lowered in known["hosts"]
-                    or not _looks_like_identifier(account)
-                ):
+                if not _looks_like_identifier(account):
+                    continue
+                if _is_known_principal(account, known):
                     continue
                 result.issues.append(
                     Issue(

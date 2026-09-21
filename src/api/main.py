@@ -526,6 +526,7 @@ async def run_direct_workflow(
                                 feedback,
                             )
                             state["supervisor_evaluations"].append(supervisor_eval)
+                            task_dict["_supervisor_retried"] = 1
                             task_dict["description"] = (
                                 f"{task_dict.get('description', '')}\n\n"
                                 f"[SUPERVISOR EVALUATION FEEDBACK - PLEASE GATHER MORE INFO]: {feedback}"
@@ -534,19 +535,50 @@ async def run_direct_workflow(
                             if retry_result.get("status") == "completed":
                                 task_output = retry_result.get("output", "")
                                 result_dict = retry_result
-                                # Update supervisor evaluation record to pass
+                            # Re-evaluate the retry honestly. The previous code
+                            # recorded a fabricated "pass" verdict here without
+                            # any re-inspection, which defeated the gate.
+                            try:
+                                re_eval = await evaluate_task_output(
+                                    task_dict, task_output, user_query, completed
+                                )
+                            except Exception as re_err:
+                                logger.warning(
+                                    "Supervisor re-evaluation error on '%s': %s", task.name, re_err
+                                )
+                                re_eval = None
+                            if re_eval:
                                 state["supervisor_evaluations"] = [
                                     e for e in state["supervisor_evaluations"]
                                     if e.get("task_id") != task_id
-                                ] + [{
-                                    "task_id": task_id,
-                                    "task_name": task.name,
-                                    "decision": "pass",
-                                    "confidence": 0.98,
-                                    "feedback": "Factual findings and metrics successfully verified.",
-                                }]
+                                ] + [re_eval]
+                                decision = re_eval.get("decision", "pass")
+                                feedback = re_eval.get("feedback", "")
                         else:
                             state["supervisor_evaluations"].append(supervisor_eval)
+
+                        # Fatal circuit breaker — parity with the Temporal path,
+                        # which halts the downstream cascade on supervisor abort.
+                        if decision == "abort":
+                            abort_reason = feedback or (
+                                "Prerequisite evidence missing or inaccessible."
+                            )
+                            logger.warning(
+                                "Supervisor issued fatal abort on task '%s': %s",
+                                task.name,
+                                abort_reason,
+                            )
+                            state["task_statuses"][task_id] = "failed"
+                            bus.publish(
+                                workflow_id,
+                                {
+                                    "type": "task_failed",
+                                    "task_id": task_id,
+                                    "task_name": task.name,
+                                    "error": f"Supervisor abort: {abort_reason}",
+                                },
+                            )
+                            continue
                 except Exception as eval_err:
                     logger.warning("Supervisor evaluation error on '%s': %s", task.name, eval_err)
 
@@ -791,9 +823,9 @@ async def get_workflow_templates():
                 {
                     "id": "t2",
                     "name": "Coverage & Baseline Audit",
-                    "description": "Run evidence_coverage_report. State the authoritative totals: how many records, from which sources, covering which hosts, accounts and time range. Identify blind spots — telemetry types absent from the dataset, and gaps in the timeline. Every later count in this investigation must match these figures.",
+                    "description": "Run evidence_coverage_report. State the authoritative totals: how many records, from which sources, covering which hosts, accounts and time range. Reproduce the Event Inventory table — every distinct action/event-code row in the data — because downstream phases must examine every row, and rows never mentioned here get silently missed. Identify blind spots — telemetry types absent from the dataset, per-source time-span gaps, and rare state-changing events that demand examination. Every later count in this investigation must match these figures.",
                     "required_skills": ["evidence_coverage", "coverage_audit", "evidence_query"],
-                    "expected_output": "Authoritative totals for records, sources, hosts, accounts and time range, plus a named list of telemetry blind spots.",
+                    "expected_output": "Authoritative totals for records, sources, hosts, accounts and time range, the full event inventory table with example evidence ids, and a named list of telemetry blind spots.",
                     "dependencies": ["t1"],
                     "risk_level": "low",
                 },
@@ -818,9 +850,9 @@ async def get_workflow_templates():
                 {
                     "id": "t5",
                     "name": "Identity & Access Analysis",
-                    "description": "Run analyze_auth_sequences, analyze_identity_velocity, analyze_device_posture, and actor_pivot on each suspicious source. Identify the exact moment any account was actually compromised — a success following a failure burst, or an approval following rejected second-factor prompts. Distinguish attempts from successes. Cite EV ids.",
-                    "required_skills": ["auth_sequence_analysis", "geo_velocity_analysis", "device_posture_analysis", "actor_correlation"],
-                    "expected_output": "Classified authentication patterns, the timestamp of each account compromise, geographic velocity findings with benign rotations suppressed, and device posture deviations — all cited.",
+                    "description": "Run analyze_auth_sequences, analyze_identity_velocity, analyze_device_posture, and actor_pivot on each suspicious source. Then work the coverage report's event inventory: query_evidence for EVERY account-management, privilege-assignment, service-installation and explicit-credential action row — these rare state-changing events are the persistence and lateral-movement trail and are the findings most often missed. Identify the exact moment any account was actually compromised — a success following a failure burst, or an approval following rejected second-factor prompts. Distinguish attempts from successes. Cite EV ids.",
+                    "required_skills": ["auth_sequence_analysis", "geo_velocity_analysis", "device_posture_analysis", "actor_correlation", "evidence_query"],
+                    "expected_output": "Classified authentication patterns, the timestamp of each account compromise, every account/privilege/service state change in the inventory examined or ruled benign, geographic velocity findings with benign rotations suppressed, and device posture deviations — all cited.",
                     "dependencies": ["t3"],
                     "risk_level": "low",
                 },
@@ -836,17 +868,17 @@ async def get_workflow_templates():
                 {
                     "id": "t7",
                     "name": "Kill-Chain Hypothesis Validation",
-                    "description": "Run build_attack_hypothesis with the findings so far, then work through EVERY MITRE tactic it lists. For each stage either cite the evidence establishing it or state explicitly that no evidence was observed. Use query_evidence and classify_technique to test the stages the investigation has not yet addressed. This phase exists to find what was missed.",
-                    "required_skills": ["hypothesis_testing", "mitre_mapping", "evidence_query"],
-                    "expected_output": "Every ATT&CK tactic marked evidenced (with citations), not observed, or not observable with the available telemetry — with no stage left unaddressed.",
+                    "description": "Run build_attack_hypothesis with the findings so far, then work through EVERY MITRE tactic it lists. For each stage either cite the evidence establishing it or state explicitly that no evidence was observed. Re-run evidence_coverage_report and confirm every event-inventory row has been examined by some phase — an inventory row nobody analysed is a missed finding until proven benign. Use query_evidence and classify_technique to test the stages the investigation has not yet addressed. This phase exists to find what was missed.",
+                    "required_skills": ["hypothesis_testing", "mitre_mapping", "evidence_query", "evidence_coverage"],
+                    "expected_output": "Every ATT&CK tactic marked evidenced (with citations), not observed, or not observable with the available telemetry — and every event-inventory row accounted for — with no stage left unaddressed.",
                     "dependencies": ["t6"],
                     "risk_level": "low",
                 },
                 {
                     "id": "t8",
                     "name": "Timeline Reconstruction",
-                    "description": "Build a single chronological timeline across all sources using correlate_events, ordered by timestamp, with an EV citation on every entry. Timestamps must come from the records themselves — never reconstruct or infer a time. Mark the initial access, the compromise moment, and any exfiltration.",
-                    "required_skills": ["timeline_synthesis", "event_correlation", "evidence_retrieval"],
+                    "description": "Build a single chronological timeline across all sources using correlate_events, ordered by timestamp, with an EV citation on every entry. Do NOT rely on upstream task summaries for timestamps, counts or citations — they may be truncated; re-query the evidence store directly with query_evidence and get_evidence for every entry you assert. Timestamps must come from the records themselves — never reconstruct or infer a time. Mark the initial access, the compromise moment, and any exfiltration.",
+                    "required_skills": ["timeline_synthesis", "event_correlation", "evidence_retrieval", "evidence_query"],
                     "expected_output": "A single cross-source chronological timeline, every entry carrying a real timestamp and an EV citation, with initial access, compromise and exfiltration marked.",
                     "dependencies": ["t7"],
                     "risk_level": "low",
@@ -863,8 +895,8 @@ async def get_workflow_templates():
                 {
                     "id": "t10",
                     "name": "Containment & Remediation Playbook",
-                    "description": "Produce containment and remediation steps naming ONLY hosts, accounts and addresses that appear in the evidence with citations. Never invent a value to complete a command — use an explicit placeholder and say it must be filled in. Scope actions to entities the evidence implicates; do not isolate systems only observed behaving normally.",
-                    "required_skills": ["incident_response", "containment_playbook", "firewall_rule"],
+                    "description": "Produce containment and remediation steps naming ONLY hosts, accounts and addresses that appear in the evidence with citations. Verify every entity you name by looking it up with query_evidence before writing the action — upstream summaries may be truncated and must not be your source for identifiers. Never invent a value to complete a command — use an explicit placeholder and say it must be filled in. Scope actions to entities the evidence implicates; do not isolate systems only observed behaving normally.",
+                    "required_skills": ["incident_response", "containment_playbook", "firewall_rule", "evidence_query"],
                     "expected_output": "Containment actions targeting only evidenced entities, each with its citation, and explicit placeholders wherever a value is unknown.",
                     "dependencies": ["t9"],
                     "risk_level": "high",

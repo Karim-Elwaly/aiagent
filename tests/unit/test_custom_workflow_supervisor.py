@@ -162,3 +162,166 @@ async def test_evaluate_task_output_circuit_breaker_abort():
         assert evaluation["decision"] == "abort"
         assert "Target log directory yielded 0 files" in evaluation["feedback"]
 
+
+class _FakeStore:
+    def __init__(self, count: int):
+        self._count = count
+
+    def count(self) -> int:
+        return self._count
+
+
+class TestVerdictParsing:
+    """Local models wrap verdict JSON in reasoning; a parsing artifact must
+    not consume the single supervisor retry."""
+
+    VERDICT = {"decision": "pass", "confidence": 0.9, "feedback": "ok", "missing_info": []}
+
+    @pytest.mark.parametrize(
+        "wrapper",
+        [
+            # bare JSON
+            "{json}",
+            # fenced
+            "```json\n{json}\n```",
+            # reasoning prose before a fence
+            "Let me evaluate the output carefully.\n\n```json\n{json}\n```",
+            # <think> block containing braces, then bare JSON
+            "<think>The output {{looks}} complete and cites ids.</think>\n{json}",
+            # two fences, verdict in the second
+            "```\nnot the verdict\n```\nHere is my verdict:\n```json\n{json}\n```",
+            # prose with stray braces before the verdict object
+            "Considering {{severity}} and coverage...\n{json}\nDone.",
+        ],
+    )
+    @pytest.mark.asyncio
+    async def test_wrapped_verdicts_parse(self, wrapper):
+        resp = wrapper.format(json=json.dumps(self.VERDICT))
+        task_dict = {"id": "t3", "name": "Triage", "description": "d", "expected_output": "e"}
+
+        with patch("src.orchestrator.activities._get_planner_llm") as mock_get_llm:
+            mock_get_llm.return_value.chat = AsyncMock(return_value=resp)
+
+            evaluation = await evaluate_task_output(task_dict, "Findings [EV-000001].", "q", {})
+
+        assert evaluation["decision"] == "pass", f"failed for wrapper: {wrapper!r}"
+        assert evaluation["confidence"] == 0.9
+
+    @pytest.mark.asyncio
+    async def test_genuinely_unparseable_still_fails_closed(self):
+        task_dict = {"id": "t3", "name": "Triage", "description": "d", "expected_output": "e"}
+
+        with patch("src.orchestrator.activities._get_planner_llm") as mock_get_llm:
+            mock_get_llm.return_value.chat = AsyncMock(return_value="I approve this output.")
+
+            evaluation = await evaluate_task_output(task_dict, "Findings.", "q", {})
+
+        assert evaluation["decision"] == "needs_retry"
+        assert evaluation["confidence"] == 0.0
+
+
+def _ingestion_task(**overrides):
+    task = {
+        "id": "t1",
+        "name": "Evidence Ingestion & Indexing",
+        "description": "Ingest all log files into the evidence store",
+        "required_skills": ["evidence_gathering", "log_ingestion"],
+        "expected_output": "Ingestion counts with citation id ranges",
+        "_workflow_id": "gate-test",
+    }
+    task.update(overrides)
+    return task
+
+
+def _mock_llm_verdict(decision: str = "pass"):
+    return json.dumps({
+        "decision": decision,
+        "confidence": 0.9,
+        "feedback": "",
+        "missing_info": [],
+    })
+
+
+class TestDeterministicIngestionGate:
+    """The evidence store, not output prose, decides whether ingestion happened."""
+
+    @pytest.mark.asyncio
+    async def test_empty_store_overrides_llm_pass(self):
+        """A confident narrative cannot pass an ingestion task that stored nothing."""
+        with patch("src.orchestrator.activities._get_planner_llm") as mock_get_llm, \
+             patch("src.orchestrator.activities.get_store", return_value=_FakeStore(0)):
+            mock_get_llm.return_value.chat = AsyncMock(return_value=_mock_llm_verdict("pass"))
+
+            evaluation = await evaluate_task_output(
+                _ingestion_task(),
+                "Ingestion complete. All logs processed successfully.",
+                "Investigate incident",
+                {},
+            )
+
+        assert evaluation["decision"] == "needs_retry"
+        assert "0 events" in evaluation["feedback"]
+        assert "ingest_logs" in evaluation["feedback"]
+
+    @pytest.mark.asyncio
+    async def test_empty_store_after_retry_aborts(self):
+        """A second failure to ingest is fatal — downstream analysis would be ungrounded."""
+        with patch("src.orchestrator.activities._get_planner_llm") as mock_get_llm, \
+             patch("src.orchestrator.activities.get_store", return_value=_FakeStore(0)):
+            mock_get_llm.return_value.chat = AsyncMock(return_value=_mock_llm_verdict("pass"))
+
+            evaluation = await evaluate_task_output(
+                _ingestion_task(_supervisor_retried=1),
+                "Ingestion complete.",
+                "Investigate incident",
+                {},
+            )
+
+        assert evaluation["decision"] == "abort"
+
+    @pytest.mark.asyncio
+    async def test_populated_store_passes_without_legacy_markers(self):
+        """Regression: the old substring markers did not match the current
+        ingest_logs phrasing, so a factually successful ingestion could be
+        misjudged. With events in the store, phrasing must not matter."""
+        output = (
+            "# Log Ingestion Complete\n\n"
+            "Ingested **32** new events from **2** file(s) into the evidence store."
+        )
+        with patch("src.orchestrator.activities._get_planner_llm") as mock_get_llm, \
+             patch("src.orchestrator.activities.get_store", return_value=_FakeStore(32)):
+            mock_get_llm.return_value.chat = AsyncMock(return_value=_mock_llm_verdict("pass"))
+
+            evaluation = await evaluate_task_output(
+                _ingestion_task(), output, "Investigate incident", {}
+            )
+
+        assert evaluation["decision"] == "pass"
+
+    @pytest.mark.asyncio
+    async def test_populated_store_downgrades_wrong_abort(self):
+        """Evidence on disk contradicts an abort verdict — the run must survive."""
+        with patch("src.orchestrator.activities._get_planner_llm") as mock_get_llm, \
+             patch("src.orchestrator.activities.get_store", return_value=_FakeStore(10)):
+            mock_get_llm.return_value.chat = AsyncMock(return_value=_mock_llm_verdict("abort"))
+
+            evaluation = await evaluate_task_output(
+                _ingestion_task(), "Some output.", "Investigate incident", {}
+            )
+
+        assert evaluation["decision"] == "needs_retry"
+
+    @pytest.mark.asyncio
+    async def test_unreadable_store_does_not_gate(self):
+        """A store read failure is unknown, not evidence of failure — fall back
+        to the LLM's verdict rather than punishing the worker."""
+        with patch("src.orchestrator.activities._get_planner_llm") as mock_get_llm, \
+             patch("src.orchestrator.activities.get_store", side_effect=OSError("disk")):
+            mock_get_llm.return_value.chat = AsyncMock(return_value=_mock_llm_verdict("pass"))
+
+            evaluation = await evaluate_task_output(
+                _ingestion_task(), "Ingested logs.", "Investigate incident", {}
+            )
+
+        assert evaluation["decision"] == "pass"
+

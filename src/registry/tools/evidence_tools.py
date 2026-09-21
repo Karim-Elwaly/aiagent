@@ -54,7 +54,9 @@ def _render(events: list[EvidenceEvent], detail: bool) -> str:
 # ── ingest_logs ──────────────────────────────────────────
 
 
-async def ingest_logs(target_path: str, recursive: bool = True, _run_id: str = "") -> str:
+async def ingest_logs(
+    target_path: str, recursive: bool = True, force: bool = False, _run_id: str = ""
+) -> str:
     """Parse every log file under a path into the run's evidence store."""
     resolved = resolve_target_path(target_path)
     if resolved is None or not Path(resolved).exists():
@@ -70,11 +72,23 @@ async def ingest_logs(target_path: str, recursive: bool = True, _run_id: str = "
     store = get_store(_run_id)
     mappings = load_mappings()
 
+    # Ingestion must be idempotent. A second call on the same path — a retry, or
+    # a directory call following a per-file call — would otherwise duplicate
+    # every record, inflating counts and making a 4-event burst look like 8.
+    already: dict[str, int] = {}
+    if not force:
+        already = dict(store.stats().get("events_by_source_file") or {})
+
     results: list[dict[str, Any]] = []
     unmapped: list[str] = []
+    skipped: list[str] = []
     total = 0
 
     for file_path in files:
+        if not force and already.get(file_path.name):
+            skipped.append(file_path.name)
+            continue
+
         events, outcome = ingest_file(file_path, mappings)
         stored = store.append(events)
         total += len(stored)
@@ -99,12 +113,21 @@ async def ingest_logs(target_path: str, recursive: bool = True, _run_id: str = "
     lines = [
         "# Log Ingestion Complete",
         "",
-        f"Ingested **{total}** events from **{len(files)}** file(s) into the evidence store.",
+        f"Ingested **{total}** new events from **{len(results)}** file(s) into the evidence store. "
+        f"The store now holds **{store.count()}** events in total.",
         "Every record is citable by its EV-xxxxxx id. Use `query_evidence` to filter "
         "and `get_evidence` to retrieve verbatim source lines.",
         "",
-        _json_block({"files": results, "total_events": total}),
+        _json_block({"files": results, "new_events": total, "store_total": store.count()}),
     ]
+
+    if skipped:
+        lines += [
+            "",
+            "## Already ingested (skipped)",
+            "These files were already in the evidence store and were NOT ingested again, "
+            "so counts stay accurate: " + ", ".join(skipped),
+        ]
 
     if unmapped:
         lines += [
@@ -344,6 +367,48 @@ async def evidence_coverage_report(_run_id: str = "") -> str:
         f"- Distinct users/accounts: {len(stats['distinct_users'])}",
         f"- Distinct source IPs: {len(stats['distinct_source_ips'])}",
         f"- Distinct destination IPs: {len(stats['distinct_destination_ips'])}",
+    ]
+
+    inventory = stats.get("event_inventory") or []
+    if inventory:
+        lines += [
+            "",
+            "## Event Inventory — every row must be examined",
+            "",
+            "Each row is a distinct behaviour type present in this data. The "
+            "investigation is not complete until every row has either been analysed "
+            "or explicitly ruled benign with a citation. Rows are ordered rarest "
+            "first: rare, state-changing events (account management, service "
+            "installation, privilege changes) are routinely the highest-signal "
+            "records in a corpus and the ones most often missed.",
+            "",
+            "| Action | Event code | Count | Example evidence ids |",
+            "| :--- | :--- | ---: | :--- |",
+        ]
+        for row in inventory:
+            examples = ", ".join(row["example_ids"])
+            lines.append(
+                f"| {row['action'] or '(none)'} | {row['event_code'] or '(none)'} "
+                f"| {row['count']} | {examples} |"
+            )
+
+    spans = stats.get("time_span_by_source_file") or {}
+    if spans:
+        lines += [
+            "",
+            "## Time span per source",
+            "",
+            "A source whose span is much narrower than the overall window is a "
+            "telemetry blind spot — say so rather than assuming the activity did "
+            "not happen.",
+            "",
+            "| Source file | Earliest | Latest |",
+            "| :--- | :--- | :--- |",
+        ]
+        for name, span in spans.items():
+            lines.append(f"| {name} | {span['earliest']} | {span['latest']} |")
+
+    lines += [
         "",
         _json_block(stats),
     ]

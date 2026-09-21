@@ -88,6 +88,30 @@ class TestIngestLogs:
 
         assert "Unmapped sources" in output
 
+    @pytest.mark.asyncio
+    async def test_reingestion_is_idempotent(self, isolated_store, log_dir):
+        """A retry or repeated directory call must not double every count.
+
+        Regression: a real run reported 120 events for a 60-event corpus
+        (and '8 MFA failures' for 4) because the same files were ingested twice.
+        """
+        await ingest_logs(str(log_dir))
+        first_count = isolated_store.count()
+
+        output = await ingest_logs(str(log_dir))
+
+        assert isolated_store.count() == first_count
+        assert "Already ingested (skipped)" in output
+
+    @pytest.mark.asyncio
+    async def test_force_reingests(self, isolated_store, log_dir):
+        await ingest_logs(str(log_dir))
+        first_count = isolated_store.count()
+
+        await ingest_logs(str(log_dir), force=True)
+
+        assert isolated_store.count() == first_count * 2
+
 
 class TestQueryEvidence:
     @pytest.mark.asyncio

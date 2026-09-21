@@ -15,6 +15,69 @@ match:
     - "TRAFFIC"
     - "PAN-OS"
 
+# Records are emitted through syslog, so each CSV row is preceded by an
+# RFC3164 header ("<pri>Mon dd hh:mm:ss host "). Strip it before column
+# splitting; the verbatim line is still preserved as evidence.
+line_prefix_pattern: '^<\d+>\w{3}\s+\d{1,2}\s+\d{2}:\d{2}:\d{2}\s+\S+\s+'
+
+# PAN-OS traffic logs are headerless positional CSV. Column names follow the
+# PAN-OS 10.x/11.x TRAFFIC log field order; trailing fields beyond
+# device_name are not needed and are left unnamed.
+columns:
+  - future_use_1
+  - receive_time
+  - serial
+  - type
+  - subtype
+  - future_use_2
+  - time_generated
+  - src
+  - dst
+  - natsrc
+  - natdst
+  - rule
+  - srcuser
+  - dstuser
+  - app
+  - vsys
+  - from
+  - to
+  - inbound_if
+  - outbound_if
+  - log_action
+  - future_use_3
+  - sessionid
+  - repeatcnt
+  - sport
+  - dport
+  - natsport
+  - natdport
+  - flags
+  - proto
+  - action
+  - bytes
+  - bytes_sent
+  - bytes_received
+  - packets
+  - start_time
+  - elapsed_time
+  - category
+  - future_use_4
+  - seqno
+  - actionflags
+  - srcloc
+  - dstloc
+  - future_use_5
+  - pkts_sent
+  - pkts_received
+  - session_end_reason
+  - dg_hier_level_1
+  - dg_hier_level_2
+  - dg_hier_level_3
+  - dg_hier_level_4
+  - vsys_name
+  - device_name
+
 fields:
   timestamp: [time_generated, receive_time, Time, generated_time]
   src_ip: [src, source_address, Source, source_ip]
@@ -29,6 +92,7 @@ fields:
   session_duration: [elapsed_time, Elapsed Time, duration]
   user: [srcuser, source_user, Source User]
   host: [device_name, Device Name]
+  geo.country: [dstloc, Destination Location]
   extra.source_zone: [from, source_zone, Source Zone]
   extra.destination_zone: [to, destination_zone, Destination Zone]
   extra.session_id: [sessionid, Session ID]

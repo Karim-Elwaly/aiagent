@@ -260,8 +260,11 @@ CANNOT_COMPLETE: <specific explanation of what's missing>
     ) -> str:
         """Format upstream task outputs with size capping.
 
-        Prevents context window overflow by truncating each upstream
-        output and capping total context size.
+        The budget is shared fairly across tasks rather than granted
+        first-come: with greedy allocation an early task's large output would
+        consume the entire window and silently starve the most recent — and
+        most refined — upstream analysis, dropping its evidence citations.
+        Outputs shorter than their share donate the surplus to the rest.
         """
         if not upstream:
             return ""
@@ -269,25 +272,34 @@ CANNOT_COMPLETE: <specific explanation of what's missing>
         block = "\n# Context from Prior Tasks\n"
         block += (
             "The following information was produced by tasks that ran "
-            "before yours. Use it as input for your work.\n"
+            "before yours. Use it as input for your work. If it appears "
+            "truncated, re-query the evidence store rather than guessing.\n"
         )
 
         remaining = self.max_context_chars
+        items = list(upstream.items())
+        truncated_any = False
 
-        for task_id, output in upstream.items():
-            if remaining <= 100:
-                block += (
-                    "\n> [Additional upstream context truncated to "
-                    "fit context window]\n"
-                )
+        for index, (task_id, output) in enumerate(items):
+            tasks_left = len(items) - index
+            share = max(remaining // tasks_left, 0)
+            if share < 100:
+                truncated_any = True
                 break
 
-            # Truncate individual output if needed
-            truncated = output[:remaining]
-            if len(output) > remaining:
-                truncated += "\n[...truncated]"
+            clipped = output[:share]
+            if len(output) > share:
+                clipped += "\n[...truncated — re-query the evidence store for full detail]"
+                truncated_any = True
 
-            block += f"\n## From task `{task_id}`:\n{truncated}\n"
-            remaining -= len(truncated)
+            block += f"\n## From task `{task_id}`:\n{clipped}\n"
+            remaining -= len(clipped)
+
+        if truncated_any:
+            block += (
+                "\n> [Some upstream context was truncated to fit the context "
+                "window. Retrieve exact values with query_evidence/get_evidence "
+                "instead of relying on the excerpts above.]\n"
+            )
 
         return block

@@ -186,6 +186,40 @@ class TestStats:
     def test_empty_store_stats(self, store):
         assert store.stats()["total_events"] == 0
 
+    def test_event_inventory_is_rarest_first_with_examples(self, store):
+        """The inventory is the checklist that stops rare, state-changing
+        events (the highest-signal records) from going unexamined."""
+        store.append(
+            [_event(action="logon", event_code="4624") for _ in range(5)]
+            + [_event(action="account_created", event_code="4720")]
+        )
+
+        inventory = store.stats()["event_inventory"]
+
+        assert inventory[0]["action"] == "account_created"
+        assert inventory[0]["count"] == 1
+        assert inventory[0]["example_ids"], "rows must carry citable example ids"
+        assert inventory[-1]["action"] == "logon"
+        assert inventory[-1]["count"] == 5
+        assert len(inventory[-1]["example_ids"]) <= 3
+
+    def test_time_span_per_source_file(self, store):
+        store.append(
+            [
+                _event(source_file="a.log", timestamp="2031-03-02T08:00:00"),
+                _event(source_file="a.log", timestamp="2031-03-02T12:00:00"),
+                _event(source_file="b.log", timestamp="2031-03-02T09:30:00"),
+            ]
+        )
+
+        spans = store.stats()["time_span_by_source_file"]
+
+        assert spans["a.log"] == {
+            "earliest": "2031-03-02T08:00:00",
+            "latest": "2031-03-02T12:00:00",
+        }
+        assert spans["b.log"]["earliest"] == spans["b.log"]["latest"]
+
 
 class TestKnownEntities:
     def test_collects_entities_for_verification(self, store):
@@ -230,6 +264,15 @@ class TestTimestampParsing:
     def test_empty_input(self):
         assert parse_timestamp(None) == ""
         assert parse_timestamp("") == ""
+
+    def test_yearless_syslog_uses_default_year_not_1900(self):
+        """RFC3164 timestamps carry no year; strptime's 1900 default would
+        break chronological ordering against year-carrying sources."""
+        result = parse_timestamp("Sep 14 12:15:02", default_year=2031)
+        assert result == "2031-09-14T12:15:02"
+
+    def test_yearless_syslog_without_default_never_yields_1900(self):
+        assert not parse_timestamp("Sep 14 12:15:02").startswith("1900")
 
 
 class TestSummary:

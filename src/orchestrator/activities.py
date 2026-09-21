@@ -13,12 +13,15 @@ from __future__ import annotations
 
 import json
 import logging
+import re
 
 from temporalio import activity
+from temporalio.exceptions import ApplicationError
 
 from src.brain.meta_planner import MetaPlanner
 from src.brain.prompts import ASSEMBLER_SYSTEM_PROMPT, SUPERVISOR_EVALUATION_PROMPT
 from src.core.config import get_settings
+from src.core.evidence import get_store
 from src.core.llm_client import LocalLLMClient
 from src.core.models import Task, TaskDAG
 from src.core.report_verifier import format_verification_section, verify_report
@@ -345,6 +348,23 @@ async def execute_task(
         result.execution_time_ms or 0,
     )
 
+    # Transient infrastructure failures (LLM timeout, connection drop) must
+    # surface as activity FAILURES, not as successful results carrying
+    # status='failed'. Returning normally here meant Temporal's RetryPolicy
+    # never fired — a timed-out phase died on its first and only attempt.
+    error_text = (result.error or "").lower()
+    is_transient = result.status.value == "failed" and (
+        "timed out" in error_text
+        or "llm call failed" in error_text
+        or "connection" in error_text
+    )
+    if is_transient:
+        raise ApplicationError(
+            f"Transient worker failure on task '{task.id}': {result.error}",
+            type="TransientWorkerError",
+            non_retryable=False,
+        )
+
     return result.to_serializable()
 
 
@@ -647,6 +667,55 @@ def _context_digest(output: str, max_chars: int = 600) -> str:
     return f"{text[:head].rstrip()}\n[...]\n{text[-tail:].lstrip()}"
 
 
+_THINK_BLOCK = re.compile(r"<think>[\s\S]*?</think>", re.IGNORECASE)
+_CODE_FENCE = re.compile(r"```(?:json)?\s*([\s\S]*?)```")
+
+
+def _parse_verdict_json(text: str) -> dict:
+    """Extract the supervisor's JSON verdict from an LLM response.
+
+    Local models wrap JSON in reasoning prose, ``<think>`` blocks and one or
+    more code fences. A parsing artifact must not consume the single
+    supervisor retry, so every plausible JSON candidate is tried before
+    giving up. Raises ``ValueError`` when no candidate parses.
+    """
+    cleaned = _THINK_BLOCK.sub("", text or "").strip()
+
+    candidates: list[str] = []
+    # Every fenced block, in order.
+    candidates.extend(m.group(1).strip() for m in _CODE_FENCE.finditer(cleaned))
+    # The text as a whole (already-bare JSON).
+    candidates.append(cleaned)
+    # Every balanced top-level {...} region in the text.
+    depth = 0
+    start = -1
+    for i, ch in enumerate(cleaned):
+        if ch == "{":
+            if depth == 0:
+                start = i
+            depth += 1
+        elif ch == "}" and depth:
+            depth -= 1
+            if depth == 0 and start != -1:
+                candidates.append(cleaned[start : i + 1])
+
+    for candidate in candidates:
+        if not candidate or "{" not in candidate:
+            continue
+        trimmed = candidate[candidate.find("{") : candidate.rfind("}") + 1]
+        try:
+            data = json.loads(trimmed)
+        except json.JSONDecodeError:
+            continue
+        if isinstance(data, dict) and "decision" in data:
+            return data
+
+    raise ValueError(
+        f"no parseable verdict JSON in supervisor response ({len(text or '')} chars): "
+        f"{(text or '')[:200]!r}"
+    )
+
+
 @activity.defn
 async def evaluate_task_output(
     task_dict: dict,
@@ -698,18 +767,7 @@ async def evaluate_task_output(
             {"role": "user", "content": prompt},
         ])
 
-        clean_json = resp.strip()
-        if "```" in clean_json:
-            clean_json = clean_json.split("```")[1]
-            if clean_json.startswith("json"):
-                clean_json = clean_json[4:].strip()
-
-        start = clean_json.find("{")
-        end = clean_json.rfind("}")
-        if start != -1 and end != -1:
-            clean_json = clean_json[start : end + 1]
-
-        data = json.loads(clean_json)
+        data = _parse_verdict_json(resp)
         raw_decision = str(data.get("decision", "pass")).lower().strip()
         if raw_decision in ("pass", "accurate", "success", "completed", "approved"):
             decision = "pass"
@@ -739,53 +797,92 @@ async def evaluate_task_output(
         )
         missing_info = []
 
-    # Domain-agnostic circuit breaker: evaluate if critical discovery yielded 0 target artifacts
-    is_initial_discovery = task_id in ("t1", "T1", "task-1") or any(
-        s in task_dict.get("required_skills", [])
-        for s in ("file_tree", "filesystem_inspection", "file_enumeration", "directory_listing", "evidence_collection")
-    )
+    # ── Ingestion gate ───────────────────────────────────
+    # For evidence-ingestion tasks the evidence store is the authority on
+    # whether ingestion actually happened. Narrative matching is not: a worker
+    # can claim success without calling any tool, and legitimate tool output
+    # phrasing changes over time (the old substring markers already failed to
+    # match the current ingest_logs output).
+    ingestion_skills = {"evidence_gathering", "log_ingestion", "log_forensics", "log_parsing"}
+    required = set(task_dict.get("required_skills", []) or [])
+    is_ingestion_task = bool(required & ingestion_skills)
     low_output = worker_output.lower()
 
-    # Check if files or log records were actually successfully ingested
-    has_ingested_data = any(
-        m in low_output
-        for m in (
-            "total artifacts analyzed:",
-            "xml events",
-            "total log records",
-            "extracted forensic event telemetry",
-            "json records",
-            "ingested:",
-        )
-    ) and not any(
-        m in low_output
-        for m in (
-            "0 total log records",
-            "0 items enumerated",
-            "0 files enumerated",
-            "total artifacts analyzed: 0",
-        )
-    )
+    if is_ingestion_task:
+        try:
+            store_count = get_store(wf_id).count()
+        except Exception as store_err:
+            logger.warning("Could not read evidence store for run %s: %s", wf_id, store_err)
+            store_count = -1  # unknown — do not gate on it
 
-    has_missing_target = any(
-        marker in low_output
-        for marker in (
-            "0 items enumerated",
-            "0 files enumerated",
-            "0 total log records",
-            "total: 0 items",
-            "total artifacts analyzed: 0 files",
-            "directory not found",
-            "path not a file / 0 files found",
+        if store_count == 0:
+            already_retried = int(task_dict.get("_supervisor_retried", 0) or 0) >= 1
+            if already_retried:
+                decision = "abort"
+                feedback = (
+                    "The evidence store for this run still contains 0 events after a "
+                    "retry, so no log data has actually been ingested regardless of "
+                    "what the narrative claims. Downstream analysis is aborted to "
+                    "prevent ungrounded findings."
+                )
+            elif decision == "pass":
+                decision = "needs_retry"
+                feedback = (
+                    "The evidence store for this run contains 0 events, so no "
+                    "ingestion has actually happened regardless of what the output "
+                    "claims. Call the ingest_logs tool on the investigation's target "
+                    "path and report the counts it returns."
+                )
+        elif store_count > 0 and decision == "abort":
+            # Evidence exists on disk — a text-heuristic or LLM abort would be
+            # factually wrong. Downgrade to retry so the run is not killed.
+            decision = "needs_retry"
+    else:
+        # Legacy text heuristics for discovery tasks that do not use the
+        # evidence store (e.g. file enumeration in non-forensic workflows).
+        is_initial_discovery = task_id in ("t1", "T1", "task-1") or any(
+            s in required
+            for s in ("file_tree", "filesystem_inspection", "file_enumeration", "directory_listing", "evidence_collection")
         )
-    ) or ("does not exist on disk" in low_output and not has_ingested_data)
 
-    if is_initial_discovery and has_missing_target and not has_ingested_data:
-        decision = "abort"
-        feedback = (
-            "Target log directory yielded 0 files or could not be accessed. "
-            "Downstream analysis tasks aborted to prevent ungrounded hallucinations."
+        has_gathered_data = any(
+            m in low_output
+            for m in (
+                "total artifacts analyzed:",
+                "xml events",
+                "total log records",
+                "json records",
+                "items found",
+            )
+        ) and not any(
+            m in low_output
+            for m in (
+                "0 total log records",
+                "0 items enumerated",
+                "0 files enumerated",
+                "total artifacts analyzed: 0",
+            )
         )
+
+        has_missing_target = any(
+            marker in low_output
+            for marker in (
+                "0 items enumerated",
+                "0 files enumerated",
+                "0 total log records",
+                "total: 0 items",
+                "total artifacts analyzed: 0 files",
+                "directory not found",
+                "path not a file / 0 files found",
+            )
+        ) or ("does not exist on disk" in low_output and not has_gathered_data)
+
+        if is_initial_discovery and has_missing_target and not has_gathered_data:
+            decision = "abort"
+            feedback = (
+                "Target log directory yielded 0 files or could not be accessed. "
+                "Downstream analysis tasks aborted to prevent ungrounded hallucinations."
+            )
 
     # Heuristic safety net: flag genuine agent refusals without misclassifying legitimate data reports
     refusal_cues = [

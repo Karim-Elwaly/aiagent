@@ -67,6 +67,66 @@ def test_fully_grounded_report_passes():
     assert not result.issues
 
 
+def test_unicode_dashes_in_citations_still_verify():
+    """LLMs emit typographic dashes inside identifiers (EV\u2011000001).
+
+    Regression: a fully cited real report scored 0% citation coverage because
+    every id used U+2011 instead of ASCII '-', producing a false FAIL.
+    """
+    store = seeded_store("vr-dash")
+    report = (
+        "## Findings\n"
+        f"Host SRV\u2011SYNTH\u201111 connected to {REAL_IP} on port 8080 at 08:00 [EV\u2011000001].\n"
+    )
+    result = verify_report(report, store=store)
+    assert result.citations_found == 1
+    assert not result.invalid_citations
+    assert result.verdict == "pass"
+    # The annotated output carries the normalized, greppable form.
+    assert "EV-000001" in result.annotated_report
+
+
+def test_domain_qualified_account_is_grounded():
+    """'DOMAIN\\user' refers to the same principal the evidence stores bare."""
+    store = seeded_store("vr-domain-user")
+    report = (
+        "## Containment\n"
+        "- Reset password for `SYNTHCORP\\dcorriveau` [EV-000001]\n"
+    )
+    result = verify_report(report, store=store, min_citation_coverage=0.0)
+    assert not any(i.kind == "ungrounded_remediation_target" for i in result.issues)
+
+
+def test_hostname_short_form_is_grounded():
+    """A short hostname matches its fully-qualified evidence form and vice versa."""
+    store = get_store("vr-fqdn")
+    store.append(
+        [
+            EvidenceEvent(
+                timestamp="2031-07-01T08:00:00+00:00",
+                host="srv-synth-11.corp.example.test",
+                user="dcorriveau",
+                source_type="synthetic",
+                raw_excerpt="logon srv-synth-11.corp.example.test",
+            )
+        ]
+    )
+    report = "## Containment\n- Isolate `SRV-SYNTH-11` [EV-000001]\n"
+    result = verify_report(report, store=store, min_citation_coverage=0.0)
+    assert not any(i.kind == "ungrounded_remediation_target" for i in result.issues)
+
+
+def test_unknown_qualified_account_still_fails():
+    """Normalization must not grant a pass to a genuinely absent principal."""
+    store = seeded_store("vr-unknown-principal")
+    report = "## Containment\n- Reset password for `SYNTHCORP\\nobody_real` [EV-000001]\n"
+    result = verify_report(report, store=store, min_citation_coverage=0.0)
+    assert any(
+        i.kind == "ungrounded_remediation_target" and "nobody_real" in i.value
+        for i in result.issues
+    )
+
+
 # ── entity grounding ─────────────────────────────────────
 
 

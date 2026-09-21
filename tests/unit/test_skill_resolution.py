@@ -109,7 +109,9 @@ def _soc_pipeline_tasks() -> list[tuple[str, list[str]]]:
     end = main_py.find('\n        {\n            "id": "', start)
     block = main_py[start : end if end > start else len(main_py)]
 
-    pattern = re.compile(r'"name": "([^"]+)"[\s\S]{0,500}?"required_skills": \[([^\]]*)\]')
+    pattern = re.compile(
+        r'"id": "t\d+",\s*"name": "([^"]+)"[\s\S]{0,2500}?"required_skills": \[([^\]]*)\]'
+    )
     out = []
     for m in pattern.finditer(block):
         skills = [s.strip().strip('"\'') for s in m.group(2).split(",") if s.strip()]

@@ -86,6 +86,26 @@ Common blind spots to check deliberately, because they are frequently missed:
 Exfiltration and impact are the tactics that determine regulatory and business
 consequence. Explicitly state their status even when the answer is "not observable".
 
+### Work the event inventory to completion
+
+The evidence store's coverage report lists every distinct action/event-code
+present in the ingested data, with counts and example citation ids. Treat that
+inventory as a checklist: the mapping exercise is not finished until every row
+has either been mapped, examined and ruled benign with a citation, or explicitly
+deferred with a reason.
+
+Rank rows rarest-first. In any log corpus the bulk of records are routine
+operations; the rare, state-changing rows - an account created, a group
+membership changed, a service installed, a privilege assigned, credentials used
+explicitly for another identity - are precisely where persistence, privilege
+escalation and lateral movement live. A row with three occurrences deserves more
+scrutiny than a row with three thousand.
+
+The most common investigation failure is not misreading an event - it is never
+reading it. Data that was ingested, counted, and displayed in the coverage table
+but analysed by nobody produces a report that is faithful to what it examined
+and still wrong about the incident.
+
 ## 5. Chain the mappings
 
 Individual mappings are weak; a sequence is strong. After mapping, order the

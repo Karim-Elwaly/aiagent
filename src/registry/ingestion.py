@@ -25,6 +25,7 @@ import json
 import logging
 import re
 from dataclasses import dataclass, field
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Iterator
 from xml.etree import ElementTree
@@ -61,6 +62,8 @@ class LogMapping:
     record_path: str = ""  # dotted path to the record array inside a JSON doc
     record_pattern: str = ""  # regex with named groups (syslog/text)
     record_element: str = ""  # element tag holding one record (xml)
+    line_prefix_pattern: str = ""  # regex stripped from each line before parsing (csv)
+    columns: list[str] = field(default_factory=list)  # column names for headerless csv
     fields: dict[str, Any] = field(default_factory=dict)
     value_maps: dict[str, dict[str, str]] = field(default_factory=dict)
     constants: dict[str, str] = field(default_factory=dict)
@@ -78,6 +81,8 @@ class LogMapping:
             record_path=str(data.get("record_path", "") or ""),
             record_pattern=str(data.get("record_pattern", "") or ""),
             record_element=str(data.get("record_element", "") or ""),
+            line_prefix_pattern=str(data.get("line_prefix_pattern", "") or ""),
+            columns=list(data.get("columns", []) or []),
             fields=dict(data.get("fields", {}) or {}),
             value_maps=dict(data.get("value_maps", {}) or {}),
             constants=dict(data.get("constants", {}) or {}),
@@ -233,7 +238,7 @@ def iter_records(path: Path, fmt: str, mapping: LogMapping | None) -> Iterator[t
     elif fmt == "jsonl":
         yield from _iter_jsonl(path)
     elif fmt == "csv":
-        yield from _iter_csv(path)
+        yield from _iter_csv(path, mapping)
     elif fmt == "xml":
         yield from _iter_xml(path, mapping)
     elif fmt == "evtx":
@@ -284,29 +289,71 @@ def _iter_jsonl(path: Path) -> Iterator[tuple[int, str, Any]]:
                 yield line_no, line, {"_raw": line}
 
 
-def _iter_csv(path: Path) -> Iterator[tuple[int, str, Any]]:
-    with open(path, "r", encoding="utf-8", errors="replace", newline="") as fh:
-        content = fh.read()
+def _iter_csv(path: Path, mapping: LogMapping | None = None) -> Iterator[tuple[int, str, Any]]:
+    """Yield CSV records, tolerating real-world export shapes.
 
-    if not content.strip():
+    Exports routinely wrap each CSV record in a syslog header and start with
+    ``#`` banner lines. Comments are documentation, not events; ingesting them
+    inflates counts and pollutes the citable record set. A mapping may declare
+    ``line_prefix_pattern`` (stripped before parsing, while the verbatim line
+    is preserved as evidence) and ``columns`` (names for headerless data —
+    positional keys like "0", "7" would make declarative field mapping
+    impossible).
+    """
+    prefix_re = None
+    if mapping and mapping.line_prefix_pattern:
+        try:
+            prefix_re = re.compile(mapping.line_prefix_pattern)
+        except re.error as exc:
+            logger.warning(
+                "Invalid line_prefix_pattern in mapping %s: %s", mapping.id, exc
+            )
+
+    columns = list(mapping.columns) if mapping and mapping.columns else []
+
+    with open(path, "r", encoding="utf-8", errors="replace") as fh:
+        raw_lines = fh.read().splitlines()
+
+    data_rows: list[tuple[int, str, str]] = []  # (line_no, verbatim, csv_body)
+    for line_no, line in enumerate(raw_lines, start=1):
+        stripped = line.strip()
+        if not stripped or stripped.startswith("#"):
+            continue
+        body = stripped
+        if prefix_re:
+            m = prefix_re.match(body)
+            if m:
+                body = body[m.end():].lstrip()
+        data_rows.append((line_no, line, body))
+
+    if not data_rows:
         return
 
-    sample_line = content.splitlines()[0]
-    has_header = not _looks_like_data_row(sample_line)
-    reader: Any
+    if columns:
+        for line_no, verbatim, body in data_rows:
+            row = next(csv.reader(io.StringIO(body)), [])
+            if not row:
+                continue
+            record = {name: value for name, value in zip(columns, row)}
+            yield line_no, verbatim, record
+        return
 
+    has_header = not _looks_like_data_row(data_rows[0][2])
     if has_header:
-        reader = csv.DictReader(io.StringIO(content))
-        for line_no, row in enumerate(reader, start=2):
-            raw = ",".join(str(v) for v in row.values() if v is not None)
-            yield line_no, raw, dict(row)
+        header = next(csv.reader(io.StringIO(data_rows[0][2])), [])
+        for line_no, verbatim, body in data_rows[1:]:
+            row = next(csv.reader(io.StringIO(body)), [])
+            if not row:
+                continue
+            record = {name: value for name, value in zip(header, row)}
+            yield line_no, verbatim, record
     else:
-        reader = csv.reader(io.StringIO(content))
-        for line_no, row in enumerate(reader, start=1):
+        for line_no, verbatim, body in data_rows:
+            row = next(csv.reader(io.StringIO(body)), [])
             if not row:
                 continue
             record = {str(i): value for i, value in enumerate(row)}
-            yield line_no, ",".join(row), record
+            yield line_no, verbatim, record
 
 
 def _looks_like_data_row(line: str) -> bool:
@@ -355,11 +402,20 @@ def _iter_evtx(path: Path, mapping: LogMapping | None) -> Iterator[tuple[int, st
 
 
 def _iter_lines(path: Path) -> Iterator[tuple[int, str, Any]]:
+    """Yield non-empty, non-comment lines.
+
+    Log exports routinely start with a banner of ``#``-prefixed description
+    lines. Ingesting those as evidence records inflates event counts and puts
+    non-events into the citable record set, so they are skipped. Line numbers
+    still reflect true file positions.
+    """
     with open(path, "r", encoding="utf-8", errors="replace") as fh:
         for line_no, line in enumerate(fh, start=1):
             line = line.rstrip("\n")
-            if line.strip():
-                yield line_no, line, line
+            stripped = line.strip()
+            if not stripped or stripped.startswith("#"):
+                continue
+            yield line_no, line, line
 
 
 def _localname(tag: str) -> str:
@@ -514,11 +570,15 @@ def build_event(
     source_file: str,
     mapping: LogMapping | None,
     fallback_source_type: str = "unmapped",
+    default_year: int | None = None,
 ) -> EvidenceEvent:
     """Apply a mapping to a single record, producing an EvidenceEvent.
 
     When no mapping matches, a generic best-effort extraction still records the
     raw line so the evidence is preserved and citable rather than discarded.
+
+    ``default_year`` is used for yearless syslog timestamps; callers pass the
+    year of the source file so the assumption comes from the evidence.
     """
     event = EvidenceEvent(
         source_file=source_file,
@@ -556,7 +616,7 @@ def build_event(
             continue
 
         if target == "timestamp":
-            event.timestamp = parse_timestamp(value)
+            event.timestamp = parse_timestamp(value, default_year=default_year)
         elif target.startswith("hashes."):
             event.hashes[target.split(".", 1)[1]] = str(value)
         elif target.startswith("extra."):
@@ -638,6 +698,14 @@ def ingest_file(
 
     events: list[EvidenceEvent] = []
     error = ""
+
+    # Yearless syslog lines inherit the year of the file they came from, which
+    # is evidence-derived rather than a guess from the current clock.
+    try:
+        default_year = datetime.fromtimestamp(path.stat().st_mtime, tz=timezone.utc).year
+    except Exception:
+        default_year = None
+
     try:
         for line_no, raw_text, record in iter_records(path, fmt, mapping):
             events.append(
@@ -647,6 +715,7 @@ def ingest_file(
                     line_no=line_no,
                     source_file=path.name,
                     mapping=mapping,
+                    default_year=default_year,
                 )
             )
     except Exception as exc:

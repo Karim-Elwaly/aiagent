@@ -357,6 +357,8 @@ body {
   display: flex;
   flex-direction: column;
   gap: 22px;
+  min-width: 0;
+  width: 100%;
 }
 
 .panel {
@@ -766,8 +768,9 @@ body {
 /* ─── Two-Column Execution Grid ─────────────────────────────────────────── */
 .execution-grid {
   display: grid;
-  grid-template-columns: 440px 1fr;
+  grid-template-columns: 440px minmax(0, 1fr);
   gap: 22px;
+  min-width: 0;
 }
 
 .execution-grid .panel:nth-child(1) {
@@ -780,6 +783,12 @@ body {
 
 .timeline-panel, .solution-panel {
   min-height: 420px;
+  min-width: 0;
+}
+
+.solution-panel {
+  overflow: hidden;
+  max-width: 100%;
 }
 
 /* Activity Timeline */
@@ -975,7 +984,12 @@ body {
   line-height: 1.65;
   max-height: 460px;
   overflow-y: auto;
+  overflow-x: auto;
+  overflow-wrap: anywhere;
+  word-break: break-word;
   flex: 1;
+  min-width: 0;
+  max-width: 100%;
 }
 
 .solution-body h1, .solution-body h2, .solution-body h3 {
@@ -1017,6 +1031,7 @@ body {
 }
 .solution-body table {
   width: 100%;
+  max-width: 100%;
   border-collapse: collapse;
   margin: 16px 0;
   font-size: 13px;
@@ -1024,6 +1039,8 @@ body {
   border-radius: var(--radius-sm);
   overflow: hidden;
   border: 1px solid var(--border-subtle);
+  word-break: break-word;
+  overflow-wrap: anywhere;
 }
 .solution-body th {
   background: rgba(30, 41, 59, 0.85);
@@ -1040,6 +1057,9 @@ body {
   padding: 10px 14px;
   border-bottom: 1px solid rgba(255, 255, 255, 0.05);
   color: var(--text-main);
+  word-break: break-word;
+  overflow-wrap: anywhere;
+  white-space: normal;
 }
 .solution-body tr:last-child td {
   border-bottom: none;

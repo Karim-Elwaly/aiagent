@@ -84,7 +84,7 @@ def test_synthesize_with_upstream_context_and_truncation():
 
     assert "Context from Prior Tasks" in prompt
     assert "From task `t1`:" in prompt
-    assert "[...truncated]" in prompt
+    assert "[...truncated" in prompt
     # The upstream context itself must be truncated to max_chars; the rest of
     # the prompt is fixed scaffolding (role, rules, grounding contract).
     assert long_context not in prompt

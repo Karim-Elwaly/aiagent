@@ -24,8 +24,10 @@ fields:
   user: [Data.TargetUserName, Data.SubjectUserName]
   account_domain: [Data.TargetDomainName, Data.SubjectDomainName]
   process: [Data.NewProcessName, Data.ProcessName]
-  parent_process: Data.ParentProcessName
-  command_line: Data.CommandLine
+  # 4688 exports carry the command line as CommandLine or ProcessCommandLine
+  # depending on audit policy and export tooling; both are standard.
+  command_line: [Data.CommandLine, Data.ProcessCommandLine]
+  parent_process: [Data.ParentProcessName, Data.ParentImage]
   src_ip: Data.IpAddress
   src_port: Data.IpPort
   extra.logon_type: Data.LogonType

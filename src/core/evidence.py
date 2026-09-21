@@ -32,7 +32,7 @@ import logging
 import os
 import re
 import threading
-from datetime import datetime
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Iterable
 
@@ -170,11 +170,17 @@ class EvidenceEvent(BaseModel):
         return line
 
 
-def parse_timestamp(value: Any) -> str:
+def parse_timestamp(value: Any, default_year: int | None = None) -> str:
     """Best-effort normalization of a timestamp into ISO-8601.
 
     Returns the original string when the format is unrecognized — an unparseable
     timestamp is still evidence and must not be silently dropped or invented.
+
+    RFC3164 syslog (``Sep 14 12:15:02``) carries no year. ``strptime`` would
+    default such a value to 1900, which silently breaks chronological ordering
+    against sources that do carry a year. ``default_year`` supplies the year to
+    assume — callers should pass the year of the source file so the assumption
+    is derived from the evidence rather than from the clock.
     """
     if value is None:
         return ""
@@ -191,6 +197,7 @@ def parse_timestamp(value: Any) -> str:
     except ValueError:
         pass
 
+    yearless_formats = {"%b %d %H:%M:%S"}
     for fmt in (
         "%Y-%m-%d %H:%M:%S",
         "%Y-%m-%dT%H:%M:%S",
@@ -201,9 +208,14 @@ def parse_timestamp(value: Any) -> str:
         "%m/%d/%Y %H:%M:%S",
     ):
         try:
-            return datetime.strptime(text, fmt).isoformat()
+            parsed = datetime.strptime(text, fmt)
         except ValueError:
             continue
+        if fmt in yearless_formats:
+            parsed = parsed.replace(
+                year=default_year or datetime.now(timezone.utc).year
+            )
+        return parsed.isoformat()
 
     return text
 
@@ -355,6 +367,11 @@ class EvidenceStore:
         by_source: dict[str, int] = {}
         by_source_file: dict[str, int] = {}
         by_status: dict[str, int] = {}
+        # (action, event_code) inventory with example citation ids: this is
+        # what lets an investigation prove it examined every behaviour type
+        # present in the data rather than only the ones it went looking for.
+        by_signal: dict[tuple[str, str], dict[str, Any]] = {}
+        span_by_file: dict[str, list[str]] = {}
         hosts: set[str] = set()
         users: set[str] = set()
         src_ips: set[str] = set()
@@ -371,6 +388,20 @@ class EvidenceStore:
             if event.status:
                 key = event.status.lower()
                 by_status[key] = by_status.get(key, 0) + 1
+            signal_key = (event.action or "", event.event_code or "")
+            if any(signal_key):
+                entry = by_signal.setdefault(
+                    signal_key, {"count": 0, "example_ids": []}
+                )
+                entry["count"] += 1
+                if len(entry["example_ids"]) < 3:
+                    entry["example_ids"].append(event.ev_id)
+            if event.source_file and event.timestamp:
+                span = span_by_file.setdefault(event.source_file, [event.timestamp, event.timestamp])
+                if event.timestamp < span[0]:
+                    span[0] = event.timestamp
+                if event.timestamp > span[1]:
+                    span[1] = event.timestamp
             if event.host:
                 hosts.add(event.host)
             if event.user:
@@ -389,6 +420,21 @@ class EvidenceStore:
             "events_by_source_type": by_source,
             "events_by_source_file": by_source_file,
             "events_by_status": by_status,
+            "event_inventory": [
+                {
+                    "action": action,
+                    "event_code": code,
+                    "count": entry["count"],
+                    "example_ids": entry["example_ids"],
+                }
+                for (action, code), entry in sorted(
+                    by_signal.items(), key=lambda kv: kv[1]["count"]
+                )
+            ],
+            "time_span_by_source_file": {
+                name: {"earliest": span[0], "latest": span[1]}
+                for name, span in sorted(span_by_file.items())
+            },
             "distinct_hosts": sorted(hosts),
             "distinct_users": sorted(users),
             "distinct_source_ips": sorted(src_ips),

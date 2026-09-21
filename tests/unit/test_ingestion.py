@@ -112,6 +112,67 @@ class TestGenericIngestion:
         assert len(events) == 1
         assert events[0].user == "rlopez"
 
+    def test_csv_comment_lines_are_not_evidence(self, tmp_path, shipped_mappings):
+        """CSV exports start with ``#`` banner lines; those are documentation.
+
+        Regression: comment lines were ingested as records (28 junk events in
+        one corpus), inflating authoritative counts and polluting citations.
+        """
+        path = _write(
+            tmp_path,
+            "flows.csv",
+            "# Export banner\n"
+            "# Generated for review\n"
+            "timestamp,src_ip,dst_ip,dst_port,bytes_sent\n"
+            "2031-03-02T08:00:00,198.51.100.4,203.0.113.9,443,512\n",
+        )
+
+        events, result = ingest_file(path, shipped_mappings)
+
+        assert result.event_count == 1
+        assert events[0].src_ip == "198.51.100.4"
+
+    def test_csv_with_syslog_prefix_and_declared_columns(self, tmp_path):
+        """Syslog-wrapped headerless CSV parses via mapping-declared columns.
+
+        The mechanism is generic: any vendor whose exporter prepends a syslog
+        header and omits the header row is handled by ``line_prefix_pattern``
+        plus ``columns`` in its mapping — no code change required.
+        """
+        mapping = LogMapping.from_dict(
+            {
+                "id": "vendor_csv",
+                "format": "csv",
+                "match": {"filename_patterns": ["*flows*.log"]},
+                "line_prefix_pattern": r"^<\d+>\w{3}\s+\d{1,2}\s+\d{2}:\d{2}:\d{2}\s+\S+\s+",
+                "columns": ["seq", "time_generated", "src", "dst", "dport", "bytes_sent"],
+                "fields": {
+                    "timestamp": "time_generated",
+                    "src_ip": "src",
+                    "dst_ip": "dst",
+                    "dst_port": "dport",
+                    "bytes_sent": "bytes_sent",
+                },
+            }
+        )
+        path = _write(
+            tmp_path,
+            "flows.log",
+            "# banner comment\n"
+            "<14>Mar  2 08:00:00 fw01 1,2031/03/02 08:00:00,198.51.100.4,203.0.113.9,8443,512\n"
+            "<14>Mar  2 08:01:00 fw01 2,2031/03/02 08:01:00,198.51.100.4,203.0.113.9,8443,518\n",
+        )
+
+        events, result = ingest_file(path, [mapping])
+
+        assert result.event_count == 2
+        assert events[0].src_ip == "198.51.100.4"
+        assert events[0].dst_port == 8443
+        assert events[0].bytes_sent == 512
+        assert events[0].timestamp.startswith("2031-03-02T08:00:00")
+        # The verbatim line, including the stripped syslog header, stays citable.
+        assert events[0].raw_excerpt.startswith("<14>")
+
 
 class TestNoTruncation:
     def test_every_record_becomes_evidence(self, tmp_path, shipped_mappings):
@@ -198,6 +259,69 @@ class TestVendorMappings:
         assert events[0].user == "rlopez"
         assert events[0].status == "failure"
         assert events[1].status == "success"
+
+    def test_asa_angle_bracket_dialect_extracts_identity(self, tmp_path, shipped_mappings):
+        """Session-lifecycle messages use ``User <x> IP <y>``, not ``user = x``.
+
+        Regression: only the AAA colon dialect was parsed, so most VPN events
+        lost their user and source address entirely.
+        """
+        path = _write(
+            tmp_path,
+            "vpn.log",
+            "Mar  2 2031 08:00:20 gw : %ASA-4-722051: Group <Staff> User <rlopez> "
+            "IP <198.51.100.4> IPv4 Address <10.60.1.7> assigned to session\n",
+        )
+
+        events, _ = ingest_file(path, shipped_mappings)
+
+        assert events[0].user == "rlopez"
+        assert events[0].src_ip == "198.51.100.4"
+        assert events[0].extra.get("assigned_ip") == "10.60.1.7"
+
+    def test_asa_rfc3164_timestamp_without_year(self, tmp_path, shipped_mappings):
+        """RFC3164 syslog carries no year; the file's own mtime supplies it.
+
+        Regression: the record pattern required a year, so every stock-format
+        ASA line lost its timestamp (0% parse rate) and chronological analytics
+        went blind.
+        """
+        path = _write(
+            tmp_path,
+            "vpn.log",
+            "Sep 14 12:15:02 gw %ASA-6-113039: Group <Staff> User <rlopez> "
+            "IP <198.51.100.4> AnyConnect session started.\n",
+        )
+
+        events, _ = ingest_file(path, shipped_mappings)
+
+        event = events[0]
+        assert event.timestamp, "no-year syslog timestamp must still parse"
+        assert "-09-14T12:15:02" in event.timestamp
+        # Year must come from the file, never strptime's 1900 default.
+        assert not event.timestamp.startswith("1900")
+
+    def test_comment_lines_are_not_evidence(self, tmp_path, shipped_mappings):
+        """``#`` banner lines are documentation, not citable events.
+
+        Regression: header comments were ingested as records, inflating counts
+        (28 junk events in one 21-line log) and polluting the citation space.
+        """
+        path = _write(
+            tmp_path,
+            "vpn.log",
+            "# Cisco ASA VPN log export\n"
+            "# Generated for review\n"
+            "\n"
+            "Sep 14 12:15:02 gw %ASA-6-113039: Group <Staff> User <rlopez> "
+            "IP <198.51.100.4> AnyConnect session started.\n",
+        )
+
+        events, result = ingest_file(path, shipped_mappings)
+
+        assert result.event_count == 1
+        # Line numbers still reflect true file positions for verbatim retrieval.
+        assert events[0].line_no == 4
 
     def test_azure_signin_json_maps_outcome_and_device(self, tmp_path, shipped_mappings):
         doc = {
