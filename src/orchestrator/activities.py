@@ -262,21 +262,25 @@ async def execute_task(
             upstream_context=upstream_outputs if upstream_outputs else None,
         )
 
-    # Component 4: Universal Worker Agent — execute with ReAct loop
-    worker = UniversalWorkerAgent(
-        llm=worker_llm,
-        max_iterations=settings.worker_max_iterations,
-        max_output_chars=settings.worker_max_output_chars,
-    )
-
-    # Connect streaming event bus
-    bus = get_event_bus()
+    # Resolve the run identifier before constructing the worker: it scopes both
+    # the streaming event bus and the per-run evidence store.
     wf_id = task_dict.get("_workflow_id")
     if not wf_id:
         try:
             wf_id = activity.info().workflow_id
         except Exception:
             wf_id = "default"
+
+    # Component 4: Universal Worker Agent — execute with ReAct loop
+    worker = UniversalWorkerAgent(
+        llm=worker_llm,
+        max_iterations=settings.worker_max_iterations,
+        max_output_chars=settings.worker_max_output_chars,
+        run_id=wf_id,
+    )
+
+    # Connect streaming event bus
+    bus = get_event_bus()
 
     def handle_token(token: str) -> None:
         bus.publish(wf_id, {"type": "token", "task_id": task.id, "content": token})
@@ -619,6 +623,28 @@ async def evaluate_task_output(
         for s in ("file_tree", "filesystem_inspection", "file_enumeration", "directory_listing", "evidence_collection")
     )
     low_output = worker_output.lower()
+
+    # Check if files or log records were actually successfully ingested
+    has_ingested_data = any(
+        m in low_output
+        for m in (
+            "total artifacts analyzed:",
+            "xml events",
+            "total log records",
+            "extracted forensic event telemetry",
+            "json records",
+            "ingested:",
+        )
+    ) and not any(
+        m in low_output
+        for m in (
+            "0 total log records",
+            "0 items enumerated",
+            "0 files enumerated",
+            "total artifacts analyzed: 0",
+        )
+    )
+
     has_missing_target = any(
         marker in low_output
         for marker in (
@@ -626,12 +652,13 @@ async def evaluate_task_output(
             "0 files enumerated",
             "0 total log records",
             "total: 0 items",
-            "does not exist on disk",
+            "total artifacts analyzed: 0 files",
             "directory not found",
             "path not a file / 0 files found",
         )
-    )
-    if is_initial_discovery and has_missing_target:
+    ) or ("does not exist on disk" in low_output and not has_ingested_data)
+
+    if is_initial_discovery and has_missing_target and not has_ingested_data:
         decision = "abort"
         feedback = (
             "Target log directory yielded 0 files or could not be accessed. "

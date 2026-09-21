@@ -55,6 +55,7 @@ class UniversalWorkerAgent:
         llm: LocalLLMClient,
         max_iterations: int = 8,
         max_output_chars: int = 2000,
+        run_id: str = "",
     ):
         """
         Args:
@@ -63,10 +64,14 @@ class UniversalWorkerAgent:
                 Prevents infinite reasoning loops. Default: 8.
             max_output_chars: Maximum chars per tool output. Prevents
                 context window overflow from large tool results. Default: 2000.
+            run_id: Investigation run identifier used to scope the evidence
+                store. Injected into tools that declare ``needs_run_context``;
+                never exposed to the LLM.
         """
         self.llm = llm
         self.max_iterations = max_iterations
         self.max_output_chars = max_output_chars
+        self.run_id = run_id
 
     async def execute(
         self,
@@ -377,7 +382,8 @@ class UniversalWorkerAgent:
                 })
 
             try:
-                result = await tool_spec.function(**tool_args)
+                call_args = self._inject_run_context(tool_spec, tool_args)
+                result = await tool_spec.function(**call_args)
                 result_str = str(result)
 
                 # Guardrail 3: Cap output size
@@ -605,6 +611,22 @@ class UniversalWorkerAgent:
                 },
             })
         return openai_tools
+
+    def _inject_run_context(
+        self, tool_spec: ToolSpec | None, tool_args: dict[str, Any]
+    ) -> dict[str, Any]:
+        """Attach the hidden ``_run_id`` for tools that declare they need it.
+
+        The run id is never advertised in the OpenAI tool schema, so the model
+        can neither supply nor tamper with it. Any value the model *did* invent
+        is overwritten here.
+        """
+        if tool_spec is None or not getattr(tool_spec, "needs_run_context", False):
+            return tool_args
+
+        call_args = dict(tool_args)
+        call_args["_run_id"] = self.run_id
+        return call_args
 
     def _enrich_tool_args(
         self,

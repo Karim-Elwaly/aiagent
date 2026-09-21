@@ -1,0 +1,54 @@
+id: azure_ad_signins_json
+description: >
+  Microsoft Entra ID (Azure AD) SigninLogs export. Covers interactive and
+  non-interactive sign-ins, MFA outcomes, device posture and geolocation.
+format: json
+priority: 1
+
+match:
+  filename_patterns:
+    - "*signin*.json"
+    - "*entra*.json"
+    - "*azure*ad*.json"
+  content_patterns:
+    - "userPrincipalName"
+    - "riskLevelAggregated"
+    - "conditionalAccessStatus"
+
+# Exports are commonly wrapped in an OData envelope.
+record_path: value
+
+fields:
+  timestamp: [createdDateTime, activityDateTime, time]
+  user: [userPrincipalName, userDisplayName]
+  src_ip: [ipAddress, callerIpAddress]
+  host: [deviceDetail.displayName]
+  app_id: [appDisplayName, resourceDisplayName]
+  action:
+    const: signin
+  error_code: [status.errorCode, resultType]
+  # An errorCode of 0 is the provider's success sentinel.
+  status: [status.errorCode, resultType]
+  os: deviceDetail.operatingSystem
+  browser: deviceDetail.browser
+  device_id: deviceDetail.deviceId
+  is_managed: [deviceDetail.isManaged, deviceDetail.isDomainJoined]
+  is_compliant: deviceDetail.isCompliant
+  city: location.city
+  country: [location.countryOrRegion, location.country]
+  latitude: location.geoCoordinates.latitude
+  longitude: location.geoCoordinates.longitude
+  extra.risk_level: [riskLevelAggregated, riskLevelDuringSignIn]
+  extra.risk_detail: riskDetail
+  extra.risk_state: riskState
+  extra.client_app: clientAppUsed
+  extra.auth_requirement: authenticationRequirement
+  extra.conditional_access: conditionalAccessStatus
+  extra.token_protection: tokenProtectionStatusDetails.signInSessionStatus
+  extra.failure_reason: status.failureReason
+  extra.correlation_id: correlationId
+
+value_maps:
+  status:
+    "0": success
+    "*": failure

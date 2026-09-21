@@ -1,0 +1,41 @@
+id: generic_json
+description: >
+  Fallback mapping for structured JSON/JSONL logs that have no vendor-specific
+  mapping. Tries the field names most commonly used across products so an
+  unknown source still yields queryable evidence instead of opaque text.
+format: json
+priority: 0
+
+match:
+  filename_patterns:
+    - "*.json"
+    - "*.jsonl"
+  content_patterns:
+    - '"timestamp"'
+    - '"@timestamp"'
+    - '"eventTime"'
+
+fields:
+  timestamp: [timestamp, "@timestamp", time, eventTime, event_time, createdDateTime, date]
+  user: [user, username, user_name, userName, account, actor, subject]
+  host: [host, hostname, computer, device, machine, source_host]
+  src_ip: [src_ip, source_ip, sourceIp, client_ip, clientIp, ip, ipAddress]
+  dst_ip: [dst_ip, destination_ip, destinationIp, server_ip, target_ip]
+  src_port: [src_port, source_port, sourcePort]
+  dst_port: [dst_port, destination_port, destinationPort, port]
+  protocol: [protocol, proto]
+  process: [process, process_name, processName, image, executable]
+  parent_process: [parent_process, parentImage, parent_process_name]
+  command_line: [command_line, commandLine, cmdline, command]
+  event_code: [event_id, eventId, eventID, event_code, code, id]
+  action: [action, operation, event_type, eventType, activity]
+  status: [status, result, outcome, resultType]
+  error_code: [error_code, errorCode, error]
+  app_id: [app, application, appDisplayName, service]
+  bytes_sent: [bytes_sent, bytesSent, sent_bytes, out_bytes]
+  bytes_received: [bytes_received, bytesReceived, received_bytes, in_bytes]
+  user_agent: [user_agent, userAgent, http_user_agent]
+  country: [country, countryOrRegion, geo_country]
+  city: [city, geo_city]
+  hashes.sha256: [sha256, hash_sha256, fileHashSha256]
+  hashes.md5: [md5, hash_md5]

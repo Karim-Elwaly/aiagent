@@ -1,0 +1,40 @@
+id: palo_alto_traffic_csv
+description: >
+  Palo Alto Networks PAN-OS traffic log in CSV syslog form. Carries App-ID,
+  zones, NAT translation, byte counts and session duration — the fields needed
+  for beaconing and transfer-volume analysis.
+format: csv
+priority: 1
+
+match:
+  filename_patterns:
+    - "*firewall*.log"
+    - "*traffic*.log"
+    - "*panos*.csv"
+  content_patterns:
+    - "TRAFFIC"
+    - "PAN-OS"
+
+fields:
+  timestamp: [time_generated, receive_time, Time, generated_time]
+  src_ip: [src, source_address, Source, source_ip]
+  dst_ip: [dst, destination_address, Destination, destination_ip]
+  src_port: [sport, source_port]
+  dst_port: [dport, destination_port, Destination Port]
+  protocol: [proto, protocol, IP Protocol]
+  app_id: [app, application, Application]
+  action: [action, Action]
+  bytes_sent: [bytes_sent, Bytes Sent, bytes_from_client]
+  bytes_received: [bytes_received, Bytes Received, bytes_from_server]
+  session_duration: [elapsed_time, Elapsed Time, duration]
+  user: [srcuser, source_user, Source User]
+  host: [device_name, Device Name]
+  extra.source_zone: [from, source_zone, Source Zone]
+  extra.destination_zone: [to, destination_zone, Destination Zone]
+  extra.session_id: [sessionid, Session ID]
+  extra.rule: [rule, Rule]
+  extra.nat_source: [natsrc, NAT Source IP]
+  extra.session_end_reason: [session_end_reason, Session End Reason]
+
+constants:
+  status: info

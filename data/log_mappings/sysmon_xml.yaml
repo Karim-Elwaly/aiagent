@@ -1,0 +1,60 @@
+id: sysmon_xml
+description: >
+  Microsoft Sysmon operational log. Event ID 1 carries process lineage with
+  command lines and hashes; Event ID 3 network connections; Event ID 10
+  process access (including handles opened against credential stores).
+format: xml
+priority: 2
+
+match:
+  filename_patterns:
+    - "*sysmon*.xml"
+    - "*sysmon*.evtx"
+  content_patterns:
+    - "Microsoft-Windows-Sysmon"
+
+record_element: Event
+
+fields:
+  timestamp: [Data.UtcTime, SystemTime, TimeCreated.SystemTime]
+  event_code: EventID
+  host: [Computer, Data.Computer]
+  user: Data.User
+  process: [Data.Image, Data.SourceImage]
+  parent_process: [Data.ParentImage]
+  command_line: [Data.CommandLine, Data.ParentCommandLine]
+  src_ip: Data.SourceIp
+  src_port: Data.SourcePort
+  dst_ip: Data.DestinationIp
+  dst_port: Data.DestinationPort
+  protocol: Data.Protocol
+
+  hashes.sha256:
+    paths: [Data.Hashes, Data.Hash]
+    regex: "SHA256=([A-Fa-f0-9]{64})"
+  hashes.md5:
+    paths: [Data.Hashes, Data.Hash]
+    regex: "MD5=([A-Fa-f0-9]{32})"
+
+  extra.target_image: Data.TargetImage
+  extra.granted_access: Data.GrantedAccess
+  extra.call_trace: Data.CallTrace
+  extra.process_guid: Data.ProcessGuid
+  extra.parent_guid: Data.ParentProcessGuid
+  extra.process_id: Data.ProcessId
+  extra.rule_name: Data.RuleName
+
+  action: EventID
+
+value_maps:
+  action:
+    "1": process_create
+    "3": network_connect
+    "7": image_loaded
+    "8": remote_thread
+    "10": process_access
+    "11": file_create
+    "12": registry_event
+    "13": registry_event
+    "22": dns_query
+    "*": sysmon_event

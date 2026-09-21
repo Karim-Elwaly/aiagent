@@ -310,6 +310,113 @@ def _parse_firewall_traffic_log(content: str, filename: str) -> tuple[int, list[
     return len(lines), events
 
 
+def _parse_json_security_log(content: str, filename: str) -> tuple[int, list[str]]:
+    """Parse JSON / Azure AD / CloudTrail / Okta / Auth logs with deep field extraction."""
+    events = []
+    items = []
+    content_s = content.strip()
+    try:
+        data = json.loads(content_s)
+        if isinstance(data, list):
+            items = data
+        elif isinstance(data, dict):
+            for k in ("value", "records", "events", "SignIns", "items"):
+                if k in data and isinstance(data[k], list):
+                    items = data[k]
+                    break
+            if not items:
+                items = [data]
+    except Exception:
+        for line in content.splitlines():
+            line = line.strip()
+            if not line:
+                continue
+            try:
+                items.append(json.loads(line))
+            except Exception:
+                pass
+
+    total = len(items)
+    for obj in items:
+        if not isinstance(obj, dict):
+            continue
+        ts = (
+            obj.get("createdDateTime")
+            or obj.get("time")
+            or obj.get("Timestamp")
+            or obj.get("@timestamp")
+            or obj.get("EventTime")
+            or ""
+        )
+        user = (
+            obj.get("userPrincipalName")
+            or obj.get("userId")
+            or obj.get("user")
+            or obj.get("username")
+            or (obj.get("actor", {}) if isinstance(obj.get("actor"), dict) else {}).get("userPrincipalName", "")
+            or ""
+        )
+        ip = (
+            obj.get("ipAddress")
+            or obj.get("clientIp")
+            or obj.get("sourceIPAddress")
+            or obj.get("callerIpAddress")
+            or ""
+        )
+        app = (
+            obj.get("appDisplayName")
+            or obj.get("application")
+            or obj.get("clientAppUsed")
+            or obj.get("app")
+            or ""
+        )
+        loc = obj.get("location")
+        loc_str = ""
+        if isinstance(loc, dict):
+            city = loc.get("city", "")
+            country = loc.get("countryOrRegion", "")
+            loc_str = f"{city}, {country}" if city or country else ""
+        elif isinstance(loc, str):
+            loc_str = loc
+
+        status = obj.get("status")
+        status_str = ""
+        if isinstance(status, dict):
+            err_code = status.get("errorCode", 0)
+            reason = status.get("failureReason") or ("Success" if err_code == 0 else f"Failed (Code {err_code})")
+            status_str = f"Status: {reason}"
+        elif isinstance(status, str):
+            status_str = f"Status: {status}"
+
+        risk = (
+            obj.get("riskLevelAggregated")
+            or obj.get("riskLevelDuringSignIn")
+            or obj.get("riskDetail")
+            or ""
+        )
+        risk_str = f" | Risk: {risk}" if risk else ""
+
+        events.append(
+            f"[{filename}] [{ts}] Sign-in User: {user} | IP: {ip} | Loc: {loc_str} | App: {app} | {status_str}{risk_str}"
+        )
+
+    return total or len(content.splitlines()), events
+
+
+def _parse_vpn_log(content: str, filename: str) -> tuple[int, list[str]]:
+    """Parse Cisco ASA / VPN connection and session logs."""
+    events = []
+    lines = content.splitlines()
+    for idx, line in enumerate(lines):
+        line_s = line.strip()
+        if not line_s or line_s.startswith("#"):
+            continue
+        line_l = line_s.lower()
+        if any(k in line_l for k in ("asa-", "vpn", "session", "connect", "disconnect", "tunnel", "group", "user", "ip ")):
+            events.append(f"[{filename}:L{idx+1}] {line_s}")
+    return len(lines), events
+
+
 async def gather_log_evidence(
     target_path: str,
     max_files: int = 30,
@@ -319,12 +426,32 @@ async def gather_log_evidence(
     """Scan, ingest, and parse security log directories and files with deep multi-format extraction.
     
     Supports Windows Security XML, Sysmon XML, Cisco Email Gateway logs, Palo Alto PAN-OS CSV,
-    Linux syslog, and Windows EVTX binary logs.
+    Linux syslog, Windows EVTX binary logs, Azure AD / Cloud JSON, and Cisco ASA VPN logs.
     """
     clean_path = str(target_path).strip().strip('"').strip("'").strip()
+    # Normalize unicode hyphens, dashes, minus signs, and non-breaking spaces
+    for c in ("\u2010", "\u2011", "\u2012", "\u2013", "\u2014", "\u2015", "\u2212"):
+        clean_path = clean_path.replace(c, "-")
+    for c in ("\u00a0", "\u202f"):
+        clean_path = clean_path.replace(c, " ")
+
     p = Path(clean_path)
     if not p.exists():
         p = Path(clean_path.replace("\\", "/"))
+    if not p.exists() and clean_path.startswith("/"):
+        p = Path(clean_path.lstrip("/"))
+    if not p.exists():
+        # Fuzzy match on parent directory in case of minor casing or hyphen differences
+        try:
+            parent = p.parent
+            if parent.exists():
+                norm_name = p.name.lower().replace("-", "").replace("_", "")
+                for child in parent.iterdir():
+                    if child.name.lower().replace("-", "").replace("_", "") == norm_name:
+                        p = child
+                        break
+        except Exception:
+            pass
     if not p.exists():
         return f"Error: Path '{clean_path}' does not exist on disk."
 
@@ -365,7 +492,7 @@ async def gather_log_evidence(
             output_lines.append(f"Ingested: {f.name} ({rec_count} records, {f_size} bytes) [Windows EVTX Log]")
             continue
 
-        # Text, XML, CSV, Syslog handlers
+        # Text, XML, CSV, Syslog, JSON handlers
         try:
             content = ""
             for enc in ("utf-8", "latin-1", "cp1252"):
@@ -388,7 +515,17 @@ async def gather_log_evidence(
                 extracted_hashes.add(h)
 
             # Route to specialized parser
-            if f_ext == ".xml" or "<Event" in content[:2000]:
+            if f_ext == ".json" or "signins" in f.name.lower():
+                cnt, ev_list = _parse_json_security_log(content, f.name)
+                total_records += cnt
+                parsed_evidence_records.extend(ev_list)
+                output_lines.append(f"Ingested: {f.name} ({cnt} JSON records, {f_size} bytes) [Azure AD / JSON Log]")
+            elif "vpn" in f.name.lower() or "asa" in f.name.lower():
+                cnt, ev_list = _parse_vpn_log(content, f.name)
+                total_records += cnt
+                parsed_evidence_records.extend(ev_list)
+                output_lines.append(f"Ingested: {f.name} ({cnt} lines, {f_size} bytes) [Cisco ASA / VPN Log]")
+            elif f_ext == ".xml" or "<Event" in content[:2000]:
                 cnt, ev_list = _parse_xml_security_log(content, f.name)
                 total_records += cnt
                 parsed_evidence_records.extend(ev_list)

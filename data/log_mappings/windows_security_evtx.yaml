@@ -1,0 +1,64 @@
+id: windows_security_evtx
+description: >
+  Windows Security event log (EVTX or exported XML). Covers logon, process
+  creation, privilege assignment, account management and service install.
+format: evtx
+priority: 1
+
+match:
+  filename_patterns:
+    - "*security*.evtx"
+    - "*security*.xml"
+    - "*windows*event*.xml"
+    - "*windows*endpoint*.xml"
+  content_patterns:
+    - "Microsoft-Windows-Security-Auditing"
+    - "TargetUserName"
+
+record_element: Event
+
+fields:
+  timestamp: [SystemTime, TimeCreated.SystemTime]
+  event_code: [EventID]
+  host: [Computer, WorkstationName]
+  user: [Data.TargetUserName, Data.SubjectUserName]
+  account_domain: [Data.TargetDomainName, Data.SubjectDomainName]
+  process: [Data.NewProcessName, Data.ProcessName]
+  parent_process: Data.ParentProcessName
+  command_line: Data.CommandLine
+  src_ip: Data.IpAddress
+  src_port: Data.IpPort
+  extra.logon_type: Data.LogonType
+  extra.target_server: Data.TargetServerName
+  extra.service_name: Data.ServiceName
+  extra.service_file: Data.ImagePath
+  extra.privileges: Data.PrivilegeList
+  extra.group_name: Data.TargetUserName
+  extra.logon_id: Data.SubjectLogonId
+
+  # Windows encodes outcome in the event id itself.
+  status: EventID
+  action: EventID
+
+value_maps:
+  status:
+    "4624": success
+    "4625": failure
+    "4634": info
+    "4648": success
+    "4672": success
+    "4720": success
+    "4732": success
+    "7045": success
+    "*": info
+  action:
+    "4624": logon
+    "4625": logon_failed
+    "4634": logoff
+    "4648": explicit_credential_logon
+    "4672": privilege_assigned
+    "4688": process_create
+    "4720": account_created
+    "4732": group_member_added
+    "7045": service_installed
+    "*": windows_event

@@ -43,6 +43,14 @@ class ToolSpec:
     risk_level: RiskLevel = RiskLevel.LOW
     source_type: str = "native"  # "native" | "mcp" | "openapi"
     server_or_host: str = ""  # origin identifier (e.g., mcp server command, API base URL)
+    needs_run_context: bool = False
+    """Whether the worker should inject the hidden ``_run_id`` argument.
+
+    Tools that read or write the per-run evidence store need to know which run
+    they belong to. The run id is injected by the worker at call time and is
+    deliberately kept out of ``parameters`` so the LLM never sees it, cannot
+    hallucinate it, and cannot point a tool at another run's evidence.
+    """
 
 
 class ToolRegistry:

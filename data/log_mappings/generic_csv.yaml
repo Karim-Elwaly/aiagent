@@ -1,0 +1,35 @@
+id: generic_csv
+description: >
+  Fallback mapping for tabular CSV logs with a header row and no
+  vendor-specific mapping. Column names are matched case-sensitively against
+  the common spellings below.
+format: csv
+priority: 0
+
+match:
+  filename_patterns:
+    - "*.csv"
+  content_patterns:
+    - "timestamp,"
+    - "time,"
+    - "date,"
+
+fields:
+  timestamp: [timestamp, Timestamp, time, Time, date, Date, datetime, event_time]
+  user: [user, User, username, Username, user_name, account, Account]
+  host: [host, Host, hostname, Hostname, computer, Computer, device, Device]
+  src_ip: [src_ip, Source IP, source_ip, src, Source, client_ip]
+  dst_ip: [dst_ip, Destination IP, destination_ip, dst, Destination]
+  src_port: [src_port, Source Port, sport]
+  dst_port: [dst_port, Destination Port, dport, port, Port]
+  protocol: [protocol, Protocol, proto]
+  process: [process, Process, process_name, image, Image]
+  command_line: [command_line, Command Line, cmdline, command]
+  event_code: [event_id, Event ID, event_code, code, Code]
+  action: [action, Action, operation, Operation, event_type]
+  status: [status, Status, result, Result, outcome, Outcome]
+  bytes_sent: [bytes_sent, Bytes Sent, sent]
+  bytes_received: [bytes_received, Bytes Received, received]
+  app_id: [app, Application, application, service, Service]
+  country: [country, Country]
+  city: [city, City]
