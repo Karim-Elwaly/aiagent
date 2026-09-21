@@ -115,32 +115,18 @@ Tool call format:
 
             # Ensure tool call format and workflow rules are provided if omitted in template
             if "FINAL_ANSWER:" not in prompt:
-                prompt += f"""
-
-# Available Tools
-When you need to use a tool, output a tool call in this EXACT JSON format on its own line:
-{{"tool": "<tool_name>", "args": {{"param1": "value1", "param2": "value2"}}}}
-
-{tool_block}
-
-# Workflow
-1. Think about what you need to do.
-2. If you need information or need to perform an action, call a tool.
-3. After receiving a tool result, analyze it and decide your next step.
-4. You may call multiple tools sequentially.
-5. When you have enough information to provide a complete answer, write:
+                tool_section = "" if "{tools}" in template else f"\n# Available Tools\n{tool_block}\n"
+                prompt += f"""{tool_section}
+# Workflow & Rules
+1. Think about what you need to do and execute tools proactively to inspect real host system data.
+2. When you need to call a tool, output a JSON tool call:
+{{"tool": "<tool_name>", "args": {{"param1": "value1"}}}}
+3. After analyzing tool results, if you have sufficient findings, write:
 
 FINAL_ANSWER: <your complete, well-structured response>
 
-6. If you truly cannot complete the task with available tools, write:
-
+4. If truly impossible with available tools, write:
 CANNOT_COMPLETE: <specific explanation of what's missing>
-
-# Rules
-- Use tools proactively — don't guess when you can look up or compute.
-- Be precise and structured — downstream tasks depend on your output.
-- Do NOT invent tool names. Only use tools listed above.
-- Do NOT call a tool and provide a FINAL_ANSWER in the same response.
 """
             if context_block and context_block not in prompt:
                 prompt += f"\n{context_block}"
@@ -225,7 +211,11 @@ CANNOT_COMPLETE: <specific explanation of what's missing>
         for pname, pinfo in tool.parameters.items():
             ptype = pinfo.get("type", "string")
             pname_lower = pname.lower()
-            if "path" in pname_lower or "dir" in pname_lower or "folder" in pname_lower:
+            if ptype == "integer":
+                example[pname] = 20
+            elif ptype == "boolean":
+                example[pname] = True
+            elif "path" in pname_lower or "dir" in pname_lower or "folder" in pname_lower or "target" in pname_lower:
                 example[pname] = "D:\\"
             elif "file" in pname_lower:
                 example[pname] = "D:\\example.txt"
@@ -235,10 +225,6 @@ CANNOT_COMPLETE: <specific explanation of what's missing>
                 example[pname] = "system metrics"
             elif "command" in pname_lower or "cmd" in pname_lower:
                 example[pname] = "dir D:\\"
-            elif ptype == "integer":
-                example[pname] = 2
-            elif ptype == "boolean":
-                example[pname] = True
             else:
                 example[pname] = "value"
         return json.dumps(example)

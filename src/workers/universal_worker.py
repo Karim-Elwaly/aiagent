@@ -117,6 +117,14 @@ class UniversalWorkerAgent:
                 + "\n\n".join(context_blocks)
             )
 
+        if tools:
+            tool_names = [t.name for t in tools]
+            user_parts.append(
+                f"# Execution Directive:\n"
+                f"Use the available tools ({', '.join(tool_names)}) to inspect real telemetry and host environment data. "
+                f"Execute the appropriate tool now."
+            )
+
         user_content = "\n\n".join(user_parts)
 
         # Conversation history for the ReAct loop
@@ -149,6 +157,7 @@ class UniversalWorkerAgent:
 
             # ── Step 1: LLM thinks ──────────────────────────
             active_messages = self._compress_context_history(messages)
+            openai_tools = self._convert_tools_to_openai(tools) if tools else None
             try:
                 if on_token:
                     tokens_list: list[str] = []
@@ -157,10 +166,18 @@ class UniversalWorkerAgent:
                         on_token(token)
                     response = "".join(tokens_list)
                 else:
-                    response = await asyncio.wait_for(
-                        self.llm.chat(active_messages),
-                        timeout=task.timeout_seconds,
-                    )
+                    try:
+                        response = await asyncio.wait_for(
+                            self.llm.chat(active_messages, tools=openai_tools),
+                            timeout=task.timeout_seconds,
+                        )
+                    except TypeError:
+                        response = await asyncio.wait_for(
+                            self.llm.chat(active_messages),
+                            timeout=task.timeout_seconds,
+                        )
+                if not isinstance(response, str):
+                    response = str(response)
             except TimeoutError:
                 elapsed = int((time.monotonic() - start_time) * 1000)
                 logger.warning(
@@ -301,6 +318,15 @@ class UniversalWorkerAgent:
 
             tool_name = tool_call.get("tool", "")
             tool_args = tool_call.get("args", {})
+            tool_spec = tool_map.get(tool_name)
+            tool_args = self._enrich_tool_args(
+                tool_spec,
+                tool_args,
+                task,
+                user_query,
+                upstream_context,
+                _get_accumulated_tool_outputs(),
+            )
 
             # ── Guardrail 2: Validate tool exists ───────────
             if tool_name not in tool_map:
@@ -542,6 +568,89 @@ class UniversalWorkerAgent:
         # Fallback to current working directory (cross-platform) instead of hardcoding D:\
         return os.getcwd()
 
+    def _convert_tools_to_openai(self, tools: list[ToolSpec]) -> list[dict[str, Any]]:
+        """Convert ToolSpec instances to OpenAI function calling schemas."""
+        openai_tools = []
+        for spec in tools:
+            properties: dict[str, Any] = {}
+            required: list[str] = []
+            for param_name, param_def in spec.parameters.items():
+                if isinstance(param_def, dict):
+                    p_type = param_def.get("type", "string")
+                    p_desc = param_def.get("description", "")
+                    properties[param_name] = {"type": p_type, "description": p_desc}
+                    if param_def.get("required", False):
+                        required.append(param_name)
+                else:
+                    properties[param_name] = {"type": "string"}
+
+            openai_tools.append({
+                "type": "function",
+                "function": {
+                    "name": spec.name,
+                    "description": spec.description,
+                    "parameters": {
+                        "type": "object",
+                        "properties": properties,
+                        "required": required,
+                    },
+                },
+            })
+        return openai_tools
+
+    def _enrich_tool_args(
+        self,
+        tool_spec: ToolSpec | None,
+        tool_args: dict[str, Any],
+        task: Task,
+        user_query: str,
+        upstream_context: dict[str, str] | None,
+        accumulated_tool_outputs: str,
+    ) -> dict[str, Any]:
+        """Enrich tool arguments with task target path or upstream evidence if missing."""
+        enriched = dict(tool_args)
+        allowed_params = set(tool_spec.parameters.keys()) if tool_spec is not None else None
+        detected_path = self._extract_task_path_or_default(task, user_query)
+
+        # 1. Target path enrichment
+        for key in ["target_path", "path", "directory", "dir_path", "log_dir", "file_path"]:
+            if allowed_params is not None and key not in allowed_params:
+                continue
+            val = enriched.get(key)
+            if not val or val in ("D:\\", "C:\\", ".", "./", "value", ""):
+                if detected_path:
+                    enriched[key] = detected_path
+
+        # 2. Upstream evidence / alert text enrichment
+        combined_evidence = ""
+        if upstream_context:
+            combined_evidence = "\n\n".join(upstream_context.values())
+        if accumulated_tool_outputs:
+            combined_evidence = f"{combined_evidence}\n\n{accumulated_tool_outputs}".strip()
+
+        for key in ["alert_text", "evidence_text", "raw_evidence_text", "raw_evidence", "evidence", "log_text", "incident_data"]:
+            if allowed_params is not None and key not in allowed_params:
+                continue
+            val = str(enriched.get(key, "")).strip()
+            if not val or val in ("Investigating logs", "value", "") or len(val) < 20:
+                if combined_evidence:
+                    enriched[key] = combined_evidence
+                elif detected_path:
+                    enriched[key] = f"Investigating logs at {detected_path}"
+
+        # 3. Target entity for containment actions
+        for key in ["target_entity", "entity", "ip", "indicator"]:
+            if allowed_params is not None and key not in allowed_params:
+                continue
+            val = str(enriched.get(key, "")).strip()
+            if not val or val in ("value", "127.0.0.1", ""):
+                m_ips = re.findall(r"\b(?:(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\.){3}(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\b", combined_evidence)
+                ext_ips = [ip for ip in m_ips if not (ip.startswith("10.") or ip.startswith("192.168.") or ip.startswith("172.16.") or ip.startswith("127."))]
+                if ext_ips:
+                    enriched[key] = ext_ips[0]
+
+        return enriched
+
     def _build_tool_steering_message(self, task: Task, tools: list[ToolSpec], user_query: str = "") -> str:
         """Build an imperative steering message forcing the LLM to output a valid tool call."""
         detected_path = self._extract_task_path_or_default(task, user_query)
@@ -710,12 +819,16 @@ class UniversalWorkerAgent:
                         val = False
                     elif str(val).isdigit():
                         val = int(val)
+                    elif isinstance(val, str):
+                        val = val.replace("\\\\", "\\")
                     args[k] = val
                 return {"tool": cand_tool, "args": args}
             # Positional single string arg: tool_name("D:\ai_gpu")
             pos_match = re.match(r'^(?:"([^"]*)"|\'([^\']*)\')$', inner)
             if pos_match:
                 single_val = pos_match.group(1) or pos_match.group(2)
+                if isinstance(single_val, str):
+                    single_val = single_val.replace("\\\\", "\\")
                 return {
                     "tool": cand_tool,
                     "args": {

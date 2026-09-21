@@ -885,8 +885,9 @@ async def approve_task(workflow_id: str, request: ApproveRequest):
     When a task with HIGH or CRITICAL risk level is encountered,
     the workflow pauses and waits for this signal.
     """
-    if workflow_id in app.state.direct_workflows:
-        dw = app.state.direct_workflows[workflow_id]
+    direct_wfs = getattr(app.state, "direct_workflows", {})
+    if workflow_id in direct_wfs:
+        dw = direct_wfs[workflow_id]
         action = "APPROVED" if request.approved else "REJECTED"
         dw["approval_response"] = {
             "approved": request.approved,

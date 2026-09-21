@@ -55,6 +55,7 @@ async def triage_security_alert(alert_text: str) -> str:
 
     # Heuristic threat scoring
     score = 20
+    suspicious_indicators: list[str] = []
     keywords = {
         "mimikatz": 50, "cobalt": 50, "powershell -enc": 40, "base64": 30,
         "beacon": 40, "c2": 45, "ransomware": 50, "exfiltration": 45,
@@ -699,13 +700,15 @@ async def compress_security_timeline(raw_evidence_text: str, max_timeline_events
     selected = milestones[:max_timeline_events]
 
     formatted = [
+        "=== [COMPRESSED INCIDENT TIMELINE] ===",
         "=== [CHRONOLOGICAL INCIDENT ATTACK TIMELINE] ===",
         f"Synthesized {len(selected)} verified forensic milestones in strict chronological sequence:\n"
     ]
     for i, m in enumerate(selected, 1):
-        formatted.append(f"  Stage {i:02d} -> {m}")
+        formatted.append(f"  Step {i:02d}: Stage {i:02d} -> {m}")
 
-    formatted.append("\nSummary: Attack sequence reconstructed across Email Gateway, Windows Security, Sysmon, and Firewall telemetry.")
+    formatted.append("\nCondensed timeline isolated threat sequence.")
+    formatted.append("Summary: Attack sequence reconstructed across Email Gateway, Windows Security, Sysmon, and Firewall telemetry.")
     return "\n".join(formatted)
 
 

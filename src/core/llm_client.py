@@ -42,45 +42,53 @@ class LocalLLMClient:
         self.max_tokens = max_tokens
         self.timeout = timeout
 
-    async def chat(self, messages: list[dict[str, str]]) -> str:
-        """Send a chat completion request.
+    async def chat(
+        self,
+        messages: list[dict[str, str]],
+        tools: list[dict[str, Any]] | None = None,
+    ) -> str:
+        """Send a chat completion request to the local LLM.
 
-        Uses streaming internally to receive response headers immediately
-        from local inference servers (avoiding ReadTimeout on large models like 27B/70B),
+        Streams tokens internally for fast first-token response times
         and falls back to non-streaming if needed.
 
         Args:
             messages: List of message dicts with 'role' and 'content' keys.
+            tools: Optional OpenAI-compatible tool specifications.
 
         Returns:
-            The assistant's response text.
+            The assistant's response text (or JSON tool call if tools were called).
         """
-        # First attempt: stream accumulation to avoid long header wait timeouts
-        try:
-            tokens = []
-            async for token in self.chat_stream(messages):
-                tokens.append(token)
-            if tokens:
-                content = "".join(tokens)
-                logger.debug("LLM stream completed: %d chars", len(content))
-                return content
-        except Exception as stream_err:
-            logger.debug("Streaming chat attempt failed, trying direct POST: %s", stream_err)
+        # If tools are not provided, try streaming chat first for fast token response
+        if not tools:
+            try:
+                tokens = []
+                async for token in self.chat_stream(messages):
+                    tokens.append(token)
+                if tokens:
+                    content = "".join(tokens)
+                    logger.debug("LLM stream completed: %d chars", len(content))
+                    return content
+            except Exception as stream_err:
+                logger.debug("Streaming chat attempt failed, trying direct POST: %s", stream_err)
 
-        # Fallback to direct POST
-        payload = {
+        # Fallback / Direct POST (required for tools to receive atomic function calling payloads)
+        payload: dict[str, Any] = {
             "model": self.model,
             "messages": messages,
             "temperature": self.temperature,
             "max_tokens": self.max_tokens,
             "stream": False,
         }
+        if tools:
+            payload["tools"] = tools
 
         logger.debug(
-            "LLM request (direct): model=%s, messages=%d, max_tokens=%d",
+            "LLM request (direct): model=%s, messages=%d, max_tokens=%d, tools=%d",
             self.model,
             len(messages),
             self.max_tokens,
+            len(tools) if tools else 0,
         )
 
         timeout_config = httpx.Timeout(
@@ -103,7 +111,28 @@ class LocalLLMClient:
             raise ValueError(f"LLM returned no choices in response: {data}")
 
         message = choices[0].get("message", {})
-        content = message.get("content") or message.get("reasoning_content") or ""
+
+        # 1. Check for native OpenAI tool_calls
+        tool_calls = message.get("tool_calls", [])
+        if tool_calls:
+            tc = tool_calls[0]
+            func = tc.get("function", {})
+            name = func.get("name", "")
+            raw_args = func.get("arguments", "{}")
+            try:
+                parsed_args = json.loads(raw_args) if isinstance(raw_args, str) else raw_args
+            except Exception:
+                parsed_args = {}
+            logger.info("LocalLLMClient captured native tool_call: %s", name)
+            return json.dumps({"tool": name, "args": parsed_args})
+
+        # 2. Extract content with fallback to reasoning
+        content = (
+            message.get("content")
+            or message.get("reasoning_content")
+            or message.get("reasoning")
+            or ""
+        )
 
         logger.debug(
             "LLM response: %d chars, finish_reason=%s",
@@ -164,7 +193,13 @@ class LocalLLMClient:
                         choices = chunk.get("choices", [])
                         if choices:
                             delta = choices[0].get("delta", {})
-                            content = delta.get("content") or delta.get("text") or ""
+                            content = (
+                                delta.get("content")
+                                or delta.get("text")
+                                or delta.get("reasoning_content")
+                                or delta.get("reasoning")
+                                or ""
+                            )
                             if content:
                                 yield str(content)
                     except json.JSONDecodeError:
