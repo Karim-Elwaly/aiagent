@@ -30,6 +30,7 @@ PLANNER_SYSTEM_PROMPT = """You are a Meta-Planner. Your job is to analyze a user
    - NEVER exceed 12 tasks
 8. Each task description must provide clear, actionable instructions for the worker agent.
 9. The expected_output field should describe what substantive findings, data, or metrics the task produces. DO NOT prescribe rigid line-by-line syntax or exact line counts (e.g. do NOT demand "exact two lines stdout").
+10. DO NOT hallucinate specific log types, file names, or expected artifacts (e.g., CloudTrail, Nginx, WAF) in task descriptions unless explicitly mentioned by the user query. Use generic terms like "available logs in the target directory".
 
 ## Available Skills
 {available_skills}
@@ -160,7 +161,8 @@ Your job is to evaluate whether a worker agent's completed phase/task output is 
 1. If the worker fulfilled the core task objective with concrete findings, correct numbers, code outputs, or appropriate calculations, evaluate as "accurate" (pass).
 2. **DO NOT be pedantic about output formatting or line counts**: If the worker provided the correct calculation (e.g. prime sum 4,227 and elapsed time) in markdown, prose, stdout, or a table, evaluate as "accurate" (pass) with high confidence (0.95+). NEVER trigger a retry over formatting or line structure when the factual calculations or data are present.
 3. Only evaluate as "needs_retry" if the worker completely failed to execute the required tool, hallucinated without executing code/tools, or omitted critical required indicators.
-4. If the worker hit an insurmountable error or tool limitation that cannot be fixed by retrying the same task, evaluate as "accurate" with low confidence to avoid an infinite loop.
+4. **DO NOT fail a task for missing file types**: If the worker successfully gathers evidence or executes a tool on a directory, do NOT evaluate as "needs_retry" just because some expected file types or log sources (e.g., CloudTrail, Nginx, WAF, etc.) were not found in that directory. The directory may simply not contain them.
+5. If the worker hit an insurmountable error or tool limitation that cannot be fixed by retrying the same task, evaluate as "accurate" with low confidence to avoid an infinite loop.
 
 ## Output Format
 Return ONLY valid JSON with this exact structure:
