@@ -151,6 +151,17 @@ async def plan_tasks(user_query: str, agent_id: str = "") -> dict:
 
     dag = await planner.plan(user_query)
 
+    from src.core.path_utils import extract_target_path
+    target_path = extract_target_path(user_query)
+    if target_path:
+        for t in dag.tasks:
+            if not hasattr(t, "parameters") or t.parameters is None:
+                t.parameters = {}
+            if "target_path" not in t.parameters:
+                t.parameters["target_path"] = target_path
+            if "[Investigation Target Path]" not in t.description:
+                t.description = f"{t.description}\n\n[Investigation Target Path]: {target_path}"
+
     logger.info(
         "Plan created: %d tasks, goal='%s'",
         len(dag.tasks),
@@ -179,6 +190,14 @@ async def execute_task(
         TaskResult as a plain dict.
     """
     task = Task.model_validate(task_dict)
+    
+    # Ensure target_path is propagated if present
+    from src.core.path_utils import extract_target_path
+    user_query = task_dict.get("_user_query", "")
+    target_path = extract_target_path(user_query) or getattr(task, "parameters", {}).get("target_path", "")
+    if target_path and "[Investigation Target Path]" not in task.description:
+        task.description = f"{task.description}\n\n[Investigation Target Path]: {target_path}"
+
     logger.info(
         "Executing task '%s' (%s), skills: %s (agent_id: %s)",
         task.name,

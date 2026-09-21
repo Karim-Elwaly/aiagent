@@ -12,6 +12,8 @@ from __future__ import annotations
 import json
 from enum import Enum
 
+from typing import Any
+
 from pydantic import BaseModel, Field
 
 # ─── Enums ────────────────────────────────────────────────────────
@@ -79,6 +81,10 @@ class Task(BaseModel):
     timeout_seconds: int = Field(
         default=300,
         description="Maximum execution time in seconds",
+    )
+    parameters: dict[str, Any] = Field(
+        default_factory=dict,
+        description="Optional execution parameters or context, e.g. target_path",
     )
 
 
@@ -251,4 +257,11 @@ class SupervisorEvaluation(BaseModel):
     @classmethod
     def from_serializable(cls, data: dict) -> SupervisorEvaluation:
         return cls.model_validate(data)
+
+
+# Rebuild models to resolve type annotations under __future__.annotations
+Task.model_rebuild()
+TaskDAG.model_rebuild()
+TaskResult.model_rebuild()
+SupervisorEvaluation.model_rebuild()
 

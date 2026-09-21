@@ -902,7 +902,7 @@ document.addEventListener("DOMContentLoaded", () => {
           id: "t3",
           name: "Environment Discovery & Blast Radius Mapping",
           description: "Analyze filesystem impact, identify affected services, detect credential dumping attempts (Mimikatz, LSASS), and map attack blast radius across the system.",
-          required_skills: ["directory_listing", "file_reading", "code_execution"],
+          required_skills: ["impact_analysis", "blast_radius", "directory_listing", "file_reading"],
           dependencies: ["t2"],
           risk_level: "medium",
         },

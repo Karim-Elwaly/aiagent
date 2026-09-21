@@ -61,6 +61,7 @@ from src.orchestrator.activities import (
     assemble_response,
     clean_assembled_solution,
 )
+from src.core.path_utils import extract_target_path, resolve_target_path
 from src.registry.auto_discover import register_all_tools
 from src.registry.mcp.mcp_adapter import mcp_tool_to_tool_spec
 from src.registry.mcp.mcp_client import MCPClient
@@ -356,6 +357,18 @@ async def run_direct_workflow(
         state["dag"] = dag_dict
         state["task_statuses"] = {t.id: "pending" for t in dag.tasks}
 
+        # Inject target path into tasks if detected in query
+        target_path = extract_target_path(user_query)
+        if target_path:
+            logger.info("Direct workflow detected target investigation path: %s", target_path)
+            for t in dag.tasks:
+                if not hasattr(t, "parameters") or t.parameters is None:
+                    t.parameters = {}
+                if "target_path" not in t.parameters:
+                    t.parameters["target_path"] = target_path
+                if "[Investigation Target Path]" not in t.description:
+                    t.description = f"{t.description}\n\n[Investigation Target Path]: {target_path}"
+
         # Broadcast DAG plan to UI
         bus.publish(
             workflow_id,
@@ -388,7 +401,7 @@ async def run_direct_workflow(
                 state["pending_task_id"] = task_id
                 state["pending_task_desc"] = task.description
                 state["pending_task_risk"] = risk_level
-                state["pending_task_params"] = task.parameters
+                state["pending_task_params"] = getattr(task, "parameters", {})
                 approval_event = asyncio.Event()
                 state["approval_event"] = approval_event
                 state["approval_response"] = None
@@ -402,7 +415,7 @@ async def run_direct_workflow(
                         "task_name": task.name,
                         "task_desc": task.description,
                         "risk_level": risk_level,
-                        "task_params": task.parameters,
+                        "task_params": getattr(task, "parameters", {}),
                         "timeout_seconds": approval_timeout,
                     },
                 )
@@ -620,6 +633,13 @@ async def solve(request: SolveRequest):
     )
 
     try:
+        target_path = extract_target_path(request.query)
+        if target_path and request.custom_dag and request.custom_dag.get("tasks"):
+            for t in request.custom_dag["tasks"]:
+                t.setdefault("parameters", {})["target_path"] = target_path
+                if "[Investigation Target Path]" not in t.get("description", ""):
+                    t["description"] = f"{t.get('description', '')}\n\n[Investigation Target Path]: {target_path}"
+
         workflow_args = [request.query, request.agent_id or ""]
         if request.custom_dag:
             workflow_args.append(request.custom_dag)
@@ -735,7 +755,7 @@ async def get_workflow_templates():
                     "id": "t3",
                     "name": "Environment Discovery & Blast Radius Mapping",
                     "description": "Analyze filesystem impact, identify affected services, detect credential dumping attempts (Mimikatz, LSASS), and map attack blast radius across the system.",
-                    "required_skills": ["directory_listing", "file_reading", "code_execution"],
+                    "required_skills": ["impact_analysis", "blast_radius", "directory_listing", "file_reading"],
                     "expected_output": "Blast radius assessment including compromised accounts, affected services, and lateral movement traces.",
                     "dependencies": ["t2"],
                     "risk_level": "medium",
