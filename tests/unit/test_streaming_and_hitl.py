@@ -110,26 +110,14 @@ async def test_universal_worker_streaming():
     """Verify UniversalWorkerAgent fires on_token and on_event callbacks during ReAct loop."""
     mock_llm = AsyncMock(spec=LocalLLMClient)
 
-    # Simulate streaming LLM chunks for tool call then final answer
-    llm_stream_chunks_step1 = [
-        "THOUGHT: I need to calculate.\n",
-        "ACTION: add\n",
-        '{"a": 2, "b": 3}',
-    ]
-    llm_stream_chunks_step2 = [
-        "THOUGHT: Calculation finished.\n",
+    # When tools are present, the worker uses non-streaming chat() so the LLM
+    # receives the OpenAI function-calling schema. Mock chat() accordingly.
+    mock_llm.chat.side_effect = [
+        # Step 1: LLM returns a tool call
+        '{"tool": "add", "args": {"a": 2, "b": 3}}',
+        # Step 2: LLM returns final answer after observing tool result
         "FINAL_ANSWER: 5",
     ]
-
-    async def fake_stream_1(messages):
-        for chunk in llm_stream_chunks_step1:
-            yield chunk
-
-    async def fake_stream_2(messages):
-        for chunk in llm_stream_chunks_step2:
-            yield chunk
-
-    mock_llm.chat_stream.side_effect = [fake_stream_1([]), fake_stream_2([])]
 
     async def fake_add(a: int, b: int) -> int:
         return a + b
@@ -174,7 +162,7 @@ async def test_universal_worker_streaming():
     assert result.status == TaskStatus.COMPLETED
     assert result.output.strip() == "5"
 
-    # Verify tokens were streamed
+    # Verify on_token was called with each non-streaming response
     assert len(received_tokens) > 0
     full_text = "".join(received_tokens)
     assert "FINAL_ANSWER: 5" in full_text

@@ -159,13 +159,18 @@ class UniversalWorkerAgent:
             active_messages = self._compress_context_history(messages)
             openai_tools = self._convert_tools_to_openai(tools) if tools else None
             try:
-                if on_token:
+                if on_token and not openai_tools:
+                    # Stream tokens only when no tools are needed (tools require
+                    # non-streaming chat() to receive atomic function-calling payloads)
                     tokens_list: list[str] = []
                     async for token in self.llm.chat_stream(active_messages):
                         tokens_list.append(token)
                         on_token(token)
                     response = "".join(tokens_list)
                 else:
+                    # Use non-streaming chat() when tools are available so the LLM
+                    # receives the OpenAI function-calling schema and can return
+                    # native tool_calls in the response.
                     try:
                         response = await asyncio.wait_for(
                             self.llm.chat(active_messages, tools=openai_tools),
@@ -176,6 +181,9 @@ class UniversalWorkerAgent:
                             self.llm.chat(active_messages),
                             timeout=task.timeout_seconds,
                         )
+                    # Fire on_token with full response for UI streaming feedback
+                    if on_token and response:
+                        on_token(response)
                 if not isinstance(response, str):
                     response = str(response)
             except TimeoutError:
