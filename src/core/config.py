@@ -34,8 +34,8 @@ class Settings(BaseSettings):
 
     # ── Worker Configuration ─────────────────────────────
     worker_max_iterations: int = 8  # ReAct loop iteration limit
-    worker_max_output_chars: int = 2000  # cap tool output per call
-    worker_max_context_chars: int = 3000  # cap upstream context in persona
+    worker_max_output_chars: int = 30000  # cap tool output per call (increased to allow full log dumps)
+    worker_max_context_chars: int = 30000  # cap upstream context in persona
 
     # ── Planner Configuration ────────────────────────────
     planner_max_retries: int = 3  # retries on JSON parse failure
