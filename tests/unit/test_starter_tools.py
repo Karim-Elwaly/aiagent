@@ -54,10 +54,16 @@ async def test_file_ops_lifecycle(tmp_path):
 
 
 @pytest.mark.asyncio
-async def test_web_search_offline_graceful():
-    # When SearXNG backend is not running at localhost:8888, it should return a clean message
+async def test_web_search_returns_usable_string():
+    """The search tool must degrade gracefully whether or not a backend is reachable.
+
+    This assertion is deliberately environment-independent: CI may or may not have
+    network access, so we verify the contract (always a non-empty string, never an
+    unhandled exception) rather than a specific offline message.
+    """
     res = await web_search("test query")
-    assert "Error performing web search" in res or "Cannot search for" in res or "No results" in res
+    assert isinstance(res, str)
+    assert res.strip(), "web_search must never return an empty string"
 
 
 @pytest.mark.asyncio
@@ -70,12 +76,14 @@ async def test_get_disk_usage(tmp_path):
     (sub / "sample.txt").write_text("content", encoding="utf-8")
 
     usage_str = await get_disk_usage(str(tmp_path))
-    assert "Disk Usage Summary" in usage_str
-    assert "Total Storage Capacity" in usage_str
-    assert "Free Space Available" in usage_str
+    assert "Host Disk Partition & Directory Storage Breakdown" in usage_str
+    assert "Total Capacity" in usage_str
+    assert "Free:" in usage_str
     assert "test_folder" in usage_str
-    assert "Top-Level Entries and Storage Breakdown" in usage_str
     assert "| Name | Type | Size" in usage_str
+    # Machine-readable metrics block for downstream verification
+    assert "```json" in usage_str
+    assert "total_bytes" in usage_str
 
 
 @pytest.mark.asyncio
@@ -93,15 +101,22 @@ async def test_recursive_directory_listing(tmp_path):
 
 
 @pytest.mark.asyncio
-async def test_live_d_drive_and_ai_gpu():
-    from pathlib import Path
-    exists = Path(r"D:\ai_gpu").exists()
-    res_list = await list_directory(r"D:\ai_gpu")
-    res_disk = await get_disk_usage(r"D:\ai_gpu")
-    assert isinstance(res_list, str) and len(res_list) > 0
-    assert isinstance(res_disk, str) and len(res_disk) > 0
-    # Both tools must supply host metrics and JSON data even if the specific subfolder is missing
-    assert "total_bytes" in res_disk or "Total Storage Capacity" in res_disk
-    assert "```json" in res_list or "Directory Tree" in res_list
+async def test_missing_path_falls_back_to_host_drive(tmp_path):
+    """A non-existent target must still yield host metrics, not an unhandled error.
+
+    Uses a path guaranteed not to exist rather than a machine-specific directory,
+    so the test is portable across developer machines and CI.
+    """
+    from src.registry.tools.file_ops import get_disk_usage
+
+    missing = str(tmp_path / "definitely_not_present_dir")
+
+    res_list = await list_directory(missing)
+    res_disk = await get_disk_usage(missing)
+
+    assert isinstance(res_list, str) and res_list.strip()
+    assert isinstance(res_disk, str) and res_disk.strip()
+    # Host-level metrics are reported even though the subfolder is missing
+    assert "total_bytes" in res_disk or "Total Capacity" in res_disk
 
 

@@ -150,25 +150,37 @@ class ToolRegistry:
             spec for spec in self._tools.values() if spec.source_type == source_type
         ]
 
-    def resolve(self, required_skills: list[str]) -> list[ToolSpec]:
+    def resolve(
+        self, required_skills: list[str], max_tools_per_skill: int = 4
+    ) -> list[ToolSpec]:
         """Resolve abstract skill names to concrete tool specs.
+
+        A skill may legitimately be served by several complementary tools (for
+        example ``identity_analysis`` is covered by sequence, velocity and
+        device-posture analytics). All exact providers are returned, capped by
+        ``max_tools_per_skill`` so the tool schema handed to the model stays
+        bounded. Returning only the first provider would silently starve a task
+        of capabilities it explicitly asked for, and would make the result
+        depend on tool registration order.
 
         Deduplicates — if one tool satisfies multiple requested skills,
         it's returned only once.
 
         Args:
             required_skills: Abstract skill names from a Task.
+            max_tools_per_skill: Upper bound on providers admitted per skill.
 
         Returns:
             List of ToolSpec instances that collectively cover the
-            requested skills. May be shorter than required_skills if
-            one tool covers multiple skills.
+            requested skills.
         """
         resolved: dict[str, ToolSpec] = {}
         unresolved: list[str] = []
 
         for skill in required_skills:
             tool_ids = list(self._skill_index.get(skill, []))
+            exact_match = bool(tool_ids)
+
             if not tool_ids:
                 # Fuzzy fallback: match by tool name or provided skills substring
                 normalized = skill.lower().replace("-", "_").strip()
@@ -183,9 +195,12 @@ class ToolRegistry:
                             tool_ids.append(tid)
 
             if tool_ids:
-                best_id = tool_ids[0]
-                if best_id not in resolved:
-                    resolved[best_id] = self._tools[best_id]
+                # Exact providers are all admitted (capped). A fuzzy match is a
+                # guess, so only the first candidate is taken.
+                admitted = tool_ids[:max_tools_per_skill] if exact_match else tool_ids[:1]
+                for tid in admitted:
+                    if tid not in resolved:
+                        resolved[tid] = self._tools[tid]
             else:
                 unresolved.append(skill)
 

@@ -477,6 +477,7 @@ LIST_DIR_SPEC = ToolSpec(
     skills_provided=[
         "directory_listing",
         "file_discovery",
+        "file_search",
         "filesystem_inspection",
         "file_enumeration",
         "recursive_file_listing",

@@ -1,6 +1,6 @@
 ---
 name: here_now
-description: Real-time contextual briefing: compute local sunrise/sunset, current timezone offsets, weather forecasts, and regional news briefs.
+description: "Real-time contextual briefing: compute local sunrise/sunset, current timezone offsets, weather forecasts, and regional news briefs."
 author: Nous Research / Hermes Productivity
 version: 1.1.0
 license: MIT

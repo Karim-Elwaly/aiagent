@@ -272,18 +272,27 @@ Rules:
                 pass
 
         # 6. Fallback: regex key-value extraction for known schema fields
+        def _unescape(value: str) -> str:
+            """Resolve JSON escape sequences while preserving real Unicode characters."""
+            if "\\" not in value:
+                return value
+            try:
+                return json.loads(f'"{value}"')
+            except Exception:
+                return value
+
         result: dict[str, Any] = {}
         name_m = re.search(r'"suggested_name"\s*:\s*"([^"\\]*(?:\\.[^"\\]*)*)"', cleaned)
         if name_m:
-            result["suggested_name"] = name_m.group(1).encode("utf-8").decode("unicode_escape", errors="ignore")
+            result["suggested_name"] = _unescape(name_m.group(1))
 
         desc_m = re.search(r'"suggested_description"\s*:\s*"([^"\\]*(?:\\.[^"\\]*)*)"', cleaned)
         if desc_m:
-            result["suggested_description"] = desc_m.group(1).encode("utf-8").decode("unicode_escape", errors="ignore")
+            result["suggested_description"] = _unescape(desc_m.group(1))
 
         icon_m = re.search(r'"suggested_icon"\s*:\s*"([^"\\]*(?:\\.[^"\\]*)*)"', cleaned)
         if icon_m:
-            result["suggested_icon"] = icon_m.group(1).encode("utf-8").decode("unicode_escape", errors="ignore")
+            result["suggested_icon"] = _unescape(icon_m.group(1))
 
         prompt_m = re.search(r'"suggested_system_prompt_template"\s*:\s*"([\s\S]*?)"(?=\s*,\s*"suggested_|\s*})', cleaned)
         if prompt_m:

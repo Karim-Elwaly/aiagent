@@ -1,0 +1,134 @@
+# Evaluation spec: Case 1 - APT enterprise intrusion and lateral movement.
+#
+# SCORING INPUT ONLY. Nothing under src/ may read this file (charter R9), and no
+# unit-test fixture may reuse the values in it (charter R8). It exists so that
+# scripts/eval_benchmark.py can score a produced report against known truth.
+#
+# Each stage is credited when ANY of its `match` groups is satisfied. A group is
+# satisfied when EVERY term in it appears in the report (case-insensitive).
+# Terms are deliberately redundant so a correct report phrased differently
+# still scores.
+
+case_id: case1
+name: APT Enterprise Intrusion and Lateral Movement
+developed_against: true   # R10: case1 was the development case
+
+stages:
+  - id: S1
+    technique: T1566.001
+    label: Spearphishing attachment delivered
+    match:
+      - [phish, invoice_90214]
+      - [t1566, attachment]
+      - [spearphishing, .docm]
+
+  - id: S2
+    technique: T1059.001
+    label: Obfuscated PowerShell cradle spawned from Word
+    match:
+      - [powershell, winword]
+      - [t1059.001]
+      - [base64, powershell, downloadstring]
+
+  - id: S3
+    technique: T1105
+    label: certutil used to download second-stage payload
+    match:
+      - [certutil]
+      - [t1105]
+
+  - id: S4
+    technique: T1003.001
+    label: LSASS memory access for credential harvesting
+    match:
+      - [lsass]
+      - [t1003]
+      - [credential dump]
+
+  - id: S5
+    technique: T1078.002
+    label: Explicit credential logon with domain admin account
+    match:
+      - [4648]
+      - [t1078]
+      - [runas, admin]
+
+  - id: S6
+    technique: T1021.002
+    label: SMB/network lateral movement to the domain controller
+    match:
+      - [lateral movement, smb]
+      - [t1021]
+      - [logon type 3]
+
+  - id: S7
+    technique: T1569.002
+    label: Remote service installed on the domain controller
+    match:
+      - [psexec]
+      - [t1569]
+      - [7045, service]
+
+  - id: S8
+    technique: T1136.001
+    label: Backdoor account created
+    match:
+      - [4720]
+      - [t1136]
+      - [account, created, backdoor]
+
+  - id: S9
+    technique: T1098
+    label: Backdoor account added to a privileged group
+    match:
+      - [4732]
+      - [t1098]
+      - [administrators, added]
+
+  - id: S10
+    technique: T1071.001
+    label: Periodic C2 beaconing on a non-standard TLS port
+    match:
+      - [beacon, 8443]
+      - [t1071]
+      - [beacon, 60]
+
+  - id: S11
+    technique: T1048.003
+    label: Bulk exfiltration over SSL to an external host
+    match:
+      - [exfiltration]
+      - [t1048]
+      - [450 mb]
+      - [452.8]
+
+# Benign activity co-mingled in the dataset. A report that names any of these as
+# malicious has produced a false positive. `context` terms must appear near the
+# trap term for it to count as a hit - a trap explicitly listed as EXCLUDED or
+# benign is correct behaviour, not a failure.
+traps:
+  - id: TRAP1
+    label: Microsoft cloud service address treated as adversary infrastructure
+    term: 13.107.136.9
+    malicious_context: [c2, command and control, beacon, malicious, cobalt, adversary, attacker]
+    benign_context: [benign, false positive, excluded, legitimate, onedrive, microsoft, ruled out]
+
+  - id: TRAP2
+    label: Routine administrative tooling treated as lateral movement
+    term: gpupdate
+    malicious_context: [malicious, attacker, lateral, compromise]
+    benign_context: [benign, false positive, excluded, legitimate, ruled out]
+
+  - id: TRAP3
+    label: Scheduled backup traffic treated as exfiltration
+    term: backup
+    malicious_context: [exfiltration, malicious, attacker]
+    benign_context: [benign, false positive, excluded, legitimate, scheduled, ruled out]
+
+# Fabrications observed in prior runs. Any of these appearing in a report means
+# the model invented data. Scored separately from precision because a fabrication
+# is a correctness failure of a different and more serious kind.
+fabrication_markers:
+  - mimikatz.exe sha256
+  - unc2452
+  - apt29 confirmed

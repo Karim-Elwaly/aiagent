@@ -1,6 +1,6 @@
 ---
 name: drug_discovery
-description: Computational cheminformatics: parse chemical SMILES representations, compute molecular descriptors, and query bioactivity databases.
+description: "Computational cheminformatics: parse chemical SMILES representations, compute molecular descriptors, and query bioactivity databases."
 author: Nous Research / Hermes Science
 version: 1.0.0
 license: MIT

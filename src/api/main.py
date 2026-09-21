@@ -100,6 +100,9 @@ class SolveResponse(BaseModel):
     tasks_failed: int
     replans: int
     supervisor_evaluations: list[dict[str, Any]] = []
+    # Evidence-grounding verdict for the final report (pass | warn | fail | skipped).
+    # Callers should surface a non-pass verdict rather than treating the report as final.
+    verification: dict[str, Any] | None = None
 
 
 class ApproveRequest(BaseModel):
@@ -664,6 +667,7 @@ async def solve(request: SolveRequest):
             tasks_failed=result.get("tasks_failed", 0),
             replans=result.get("replans", 0),
             supervisor_evaluations=result.get("supervisor_evaluations", []),
+            verification=result.get("verification"),
         )
 
     logger.info(
@@ -701,6 +705,7 @@ async def solve(request: SolveRequest):
             tasks_failed=result.get("tasks_failed", 0),
             replans=result.get("replans", 0),
             supervisor_evaluations=result.get("supervisor_evaluations", []),
+            verification=result.get("verification"),
         )
 
     except Exception as e:

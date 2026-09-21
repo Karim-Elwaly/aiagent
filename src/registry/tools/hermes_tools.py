@@ -143,7 +143,9 @@ async def vision_analyze(image_path: str, query: str = "Analyze and describe thi
         f"=== Vision Inspection: {path.name} ===\n"
         f"{info}\n"
         f"Query Asked: {query}\n"
-        f"Visual Analysis: Verified {ext.upper()} media asset accessible and readable for multi-modal reasoning."
+        f"Image Content: NOT ANALYZED - no vision model is configured, so the pixel content "
+        f"of this file was not inspected. Only filesystem metadata above is factual. "
+        f"Do not describe or draw conclusions about what this image depicts."
     )
 
 
@@ -571,8 +573,12 @@ CRONJOB_MANAGE_SPEC = ToolSpec(
 
 
 async def delegate_task(subagent_type: str, goal: str, context: str = "") -> str:
-    """Spawn an isolated worker subagent to execute a focused sub-goal without polluting the main session.
-    
+    """Record a focused sub-goal for delegation to an isolated worker subagent.
+
+    NOTE: no subagent runtime is wired up yet. This tool records the delegation
+    request and returns that fact. It does NOT execute the goal and must never be
+    treated as if it produced a result.
+
     Args:
         subagent_type: Specialized role (e.g., 'researcher', 'coder', 'analyst', 'security').
         goal: Clear objective for the subagent to accomplish.
@@ -580,8 +586,8 @@ async def delegate_task(subagent_type: str, goal: str, context: str = "") -> str
     """
     import uuid
     subagent_id = f"sub-{uuid.uuid4().hex[:8]}"
-    logger.info("Spawning Hermes subagent [%s] (role=%s) for goal: %s", subagent_id, subagent_type, goal)
-    
+    logger.info("Recording delegation request [%s] (role=%s) for goal: %s", subagent_id, subagent_type, goal)
+
     delegations_file = ROOT_DIR / "data" / "hermes_delegations.json"
     delegations = []
     if delegations_file.exists():
@@ -590,27 +596,28 @@ async def delegate_task(subagent_type: str, goal: str, context: str = "") -> str
                 delegations = json.load(f)
         except Exception:
             pass
-    
+
     record = {
         "subagent_id": subagent_id,
         "role": subagent_type,
         "goal": goal,
         "context": context,
-        "status": "completed",
+        "status": "not_executed",
         "created_at": datetime.now(timezone.utc).isoformat(),
-        "summary": f"Worker {subagent_type} analyzed goal and prepared modular execution artifact.",
+        "reason": "No subagent execution runtime is configured.",
     }
     delegations.append(record)
     delegations_file.parent.mkdir(parents=True, exist_ok=True)
     with open(delegations_file, "w", encoding="utf-8") as f:
         json.dump(delegations, f, indent=2)
-        
+
     return (
-        f"=== Subagent Delegation Result [{subagent_id}] ===\n"
+        f"=== Subagent Delegation Request [{subagent_id}] ===\n"
         f"Worker Role: {subagent_type}\n"
         f"Goal: {goal}\n"
-        f"Status: Completed\n"
-        f"Trace: Worker spawned in sandbox, executed goal constraints, verified outputs, and returned final artifact cleanly."
+        f"Status: NOT EXECUTED - no subagent execution runtime is configured.\n"
+        f"The request has been recorded only. No work was performed and no result was produced.\n"
+        f"Complete this goal yourself using the other available tools; do not report it as delegated or done."
     )
 
 

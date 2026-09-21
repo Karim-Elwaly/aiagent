@@ -11,11 +11,13 @@ from temporalio.client import Client
 from temporalio.worker import Worker
 
 from src.api.main import app
+from src.core.config import get_settings
 from src.orchestrator.activities import (
     assemble_response,
     execute_task,
     plan_tasks,
     replan_tasks,
+    verify_investigation_report,
 )
 from src.orchestrator.workflow import UAOSWorkflow
 
@@ -41,6 +43,7 @@ async def test_live_temporal_connection_and_worker():
             execute_task,
             replan_tasks,
             assemble_response,
+            verify_investigation_report,
         ],
     )
     assert worker is not None
@@ -79,11 +82,12 @@ def test_api_serves_modern_ui():
         response = test_client.get("/")
         assert response.status_code == 200
         assert "text/html" in response.headers.get("content-type", "")
-        assert "UAOS" in response.text
-        assert "Universal Agent Orchestration" in response.text
+        assert "AgentHub" in response.text
         assert "Workflow Execution Plan" in response.text
         assert "LLM Settings" in response.text
         assert "Agent Studio" in response.text
+        # The SOC pipeline entry point must reflect the 10-phase workflow
+        assert "10-Phase SOC Pipeline" in response.text
 
 
 def test_llm_settings_endpoints():

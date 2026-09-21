@@ -159,10 +159,11 @@ document.addEventListener("DOMContentLoaded", () => {
       showToast(`Execution Error: ${err.message}`, "error");
       renderFinalSolution(
         `### ❌ Execution Failed\n\n**Error:** \`${err.message}\`\n\n` +
-        `Please ensure the AgentHub backend server is running at \`${API_BASE || 'http://localhost:8001'}\`.\n\n` +
+        `Please ensure the AgentHub backend server is running at \`${API_BASE || window.location.origin}\`.\n\n` +
         `**Troubleshooting Steps:**\n` +
-        `- Run \`.\\start.bat\` or \`uvicorn src.api.main:app --port 8001\` in the project directory\n` +
-        `- Verify health at [http://localhost:8001/health](http://localhost:8001/health)\n` +
+        `- Run \`.\\start.bat\` (or \`python run.py\`) in the project directory\n` +
+        `- Verify health at [${API_BASE || ''}/health](${API_BASE || ''}/health)\n` +
+        `- If port 8000 was already in use, \`run.py\` auto-selects the next free port — check the console output for the actual URL\n` +
         `- Check Temporal server connectivity`,
         0,
         1

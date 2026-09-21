@@ -38,15 +38,23 @@ def extract_target_path(query: str) -> str:
     if m_quoted_posix:
         return m_quoted_posix.group(1).strip()
 
-    # Match unquoted Windows drive path: D:\Security-logs-test\...
+    # Match unquoted Windows drive path: D:\some\directory\...
     m_win = re.search(r'\b([a-zA-Z]:\\[^\s"\'<>|]+)', query)
     if m_win:
         return m_win.group(1).strip()
 
-    # Match unquoted POSIX path: /var/log/... or /home/...
-    m_posix = re.search(r'(\/(?:var|tmp|home|etc|opt|usr|Security-logs-test)[^\s"\'<>|]*)', query)
+    # Match unquoted POSIX path with at least two segments: /any/directory/...
+    # Anchored to start-of-string or whitespace so date-like "12/05/2024" is not matched.
+    m_posix = re.search(r'(?:^|\s)(/(?:[^\s"\'<>|/]+/)+[^\s"\'<>|]*)', query)
     if m_posix:
         return m_posix.group(1).strip()
+
+    # Match unquoted single-segment POSIX path under a conventional root: /var, /tmp, ...
+    m_posix_root = re.search(
+        r'(?:^|\s)(/(?:var|tmp|home|etc|opt|usr|mnt|media|srv|data)[^\s"\'<>|]*)', query
+    )
+    if m_posix_root:
+        return m_posix_root.group(1).strip()
 
     return ""
 

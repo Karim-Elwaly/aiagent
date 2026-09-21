@@ -249,6 +249,20 @@ async def execute_task(
         effective_skills = [
             s for s in task.required_skills if s in profile.curated_skills
         ]
+        if task.required_skills and not effective_skills:
+            # The profile curates none of the requested skills. Silently running
+            # a toolless worker here is the worst outcome: it cannot gather any
+            # evidence yet will still produce confident prose. Fall back to the
+            # unfiltered skills so the task keeps its capabilities, and say so.
+            logger.warning(
+                "AgentProfile '%s' curates none of the required skills %s for task '%s'. "
+                "Falling back to unfiltered skill resolution so the task is not left "
+                "without tools. Consider adding these skills to the profile.",
+                profile.id,
+                task.required_skills,
+                task.id,
+            )
+            effective_skills = list(task.required_skills)
         tools = registry.resolve(effective_skills)
     else:
         tools = registry.resolve(task.required_skills)

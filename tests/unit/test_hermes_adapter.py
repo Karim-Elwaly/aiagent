@@ -55,12 +55,12 @@ def test_parse_skill_markdown():
 def test_hermes_skill_to_tool_spec():
     spec = hermes_skill_to_tool_spec(SAMPLE_SKILL_MD)
     assert spec.name == "airtable_crud"
-    assert spec.tool_id == "hermes_airtable_crud_v1"
+    assert spec.tool_id == "skill_airtable_crud_v1"
     assert "airtable" in spec.skills_provided
     assert "records" in spec.skills_provided
     assert "action" in spec.parameters
     assert spec.risk_level == RiskLevel.LOW
-    assert spec.source_type == "hermes"
+    assert spec.source_type == "skill"
 
 
 def test_determine_risk_level():
@@ -77,7 +77,7 @@ async def test_hermes_tool_execution():
     assert registry.has_tool("airtable_crud")
 
     result = await spec.function(action="list", table="Tasks")
-    assert "Executed Hermes Skill: airtable_crud" in result
+    assert "Executed Agent Skill: airtable_crud" in result
     assert "action: list" in result
     assert "table: Tasks" in result
 

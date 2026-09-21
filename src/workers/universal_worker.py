@@ -567,7 +567,7 @@ class UniversalWorkerAgent:
     def _extract_task_path_or_default(self, task: Task, user_query: str = "") -> str:
         """Extract a filesystem path mentioned in the task or user_query, defaulting to current working directory."""
         combined_text = f"{task.name} {task.description} {user_query}"
-        # Match Windows drive path e.g. "D:\Security-logs-test\...", "D:\ai_gpu", D:\
+        # Match Windows drive path e.g. "D:\logs\incident", "D:\data", D:\
         m = re.search(r'([a-zA-Z]:\\[^"\'\s<>*?|]*)', combined_text)
         if m:
             clean = m.group(1).rstrip(",;.:)").strip('"').strip("'")

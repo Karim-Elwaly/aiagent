@@ -271,13 +271,16 @@ GATHER_EVIDENCE_SPEC = ToolSpec(
     tool_id="soc_gather_evidence",
     name="gather_log_evidence",
     description=(
-        "Parse ALL security logs in a directory or file into the structured evidence store. "
-        "Handles Windows EVTX/XML, Sysmon, Cisco ASA syslog, Azure AD sign-in JSON, "
-        "Palo Alto CSV, mail gateway syslog and generic JSON/CSV/text automatically. "
-        "No records are truncated. Run this FIRST: every later analysis and every citation "
-        "depends on the evidence it stores."
+        "LEGACY ingestion entry point, retained for backwards compatibility. "
+        "Prefer `ingest_logs`, which is the canonical ingestion tool and writes to the "
+        "same evidence store. Use this only when a caller specifically needs the "
+        "`pattern` or `max_files` filters, which `ingest_logs` does not expose."
     ),
-    skills_provided=["evidence_gathering", "log_forensics", "artifact_inspection", "file_reading"],
+    # Deliberately narrow: the primary ingestion skills (evidence_gathering,
+    # log_ingestion, log_forensics, log_parsing) belong to `ingest_logs` alone so
+    # that a task requesting ingestion receives one unambiguous tool rather than
+    # two near-identical ones competing for the model's attention.
+    skills_provided=["artifact_inspection", "filtered_log_collection"],
     parameters={
         "target_path": {
             "type": "string",

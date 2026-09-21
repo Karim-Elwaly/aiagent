@@ -479,6 +479,16 @@ _stores_lock = threading.Lock()
 
 def get_store(run_id: str | None = None) -> EvidenceStore:
     """Return the cached store for a run id, creating it on first use."""
+    if not run_id:
+        # Every real execution path supplies a workflow id. Falling back to the
+        # shared ad-hoc store means two unrelated investigations could read each
+        # other's evidence, which would make citations meaningless — so make the
+        # fallback loud rather than silent.
+        logger.warning(
+            "get_store() called without a run_id; using the shared '%s' store. "
+            "Evidence from different investigations may be co-mingled.",
+            _DEFAULT_RUN_ID,
+        )
     key = _sanitize_run_id(run_id or _DEFAULT_RUN_ID)
     with _stores_lock:
         store = _stores.get(key)

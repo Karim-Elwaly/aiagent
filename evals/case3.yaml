@@ -1,0 +1,120 @@
+# Evaluation spec: Case 3 - cloud identity takeover.
+#
+# SCORING INPUT ONLY (charter R9). Case 3 is the HOLD-OUT case (charter R10):
+# development was performed against Case 1, so a large F1 gap between case1 and
+# case3 indicates overfitting and blocks merge.
+#
+# See case1.yaml for the matching semantics.
+
+case_id: case3
+name: Cloud Identity Takeover
+developed_against: false   # R10: hold-out
+
+stages:
+  - id: S1
+    technique: T1589
+    label: Account enumeration / target discovery preceding the spray
+    match:
+      - [enumeration]
+      - [t1589]
+      - [reconnaissance, account]
+
+  - id: S2
+    technique: T1110.003
+    label: Password spray against many accounts from a single source
+    match:
+      - [password spray]
+      - [t1110.003]
+      - [spray]
+
+  - id: S3
+    technique: T1078.004
+    label: Spray succeeds - first account compromised
+    match:
+      - [successful, sign-in, after, failed]
+      - [t1078.004]
+      - [compromise, succeeded]
+
+  - id: S4
+    technique: T1621
+    label: MFA fatigue / push bombing against the targeted account
+    match:
+      - [mfa fatigue]
+      - [t1621]
+      - [push, bombing]
+      - [repeated, mfa, denied]
+
+  - id: S5
+    technique: T1621
+    label: MFA fatigue SUCCEEDS - the approval is the compromise moment
+    match:
+      - [mfa, approved]
+      - [mfa, accepted]
+      - [fatigue, succeeded]
+      - ["09:24:10"]
+
+  - id: S6
+    technique: T1550.001
+    label: Token / PRT replay from a new device context
+    match:
+      - [token replay]
+      - [prt]
+      - [t1550]
+      - [session, replay]
+
+  - id: S7
+    technique: T1078.004
+    label: Second account compromised from the same attacker source
+    match:
+      - [second, account, compromised]
+      - [david.clark]
+      - [additional, compromised, account]
+
+  - id: S8
+    technique: T1098.005
+    label: MFA method registered or altered for persistence
+    match:
+      - [mfa, registered]
+      - [t1098]
+      - [authentication method, added]
+
+  - id: S9
+    technique: T1114.003
+    label: Mail forwarding or delegation rule created
+    match:
+      - [forwarding rule]
+      - [t1114]
+      - [mail, delegation]
+
+  - id: S10
+    technique: T1530
+    label: Access to cloud-hosted data after compromise
+    match:
+      - [sharepoint]
+      - [onedrive, download]
+      - [t1530]
+      - [cloud storage, accessed]
+
+traps:
+  - id: TRAP1
+    label: Legitimate VPN egress treated as attacker infrastructure
+    term: vpn
+    malicious_context: [attacker, malicious, c2, compromise]
+    benign_context: [benign, false positive, excluded, legitimate, ruled out]
+
+  - id: TRAP2
+    label: Mobile carrier address rotation treated as impossible travel
+    term: alice.wang
+    malicious_context: [compromised, malicious, attacker, isolate, contain, impossible travel]
+    benign_context: [benign, false positive, excluded, legitimate, carrier, roaming, ruled out]
+
+  - id: TRAP3
+    label: Self-corrected credential typo treated as a brute-force success
+    term: typo
+    malicious_context: [brute force, compromise, attacker]
+    benign_context: [benign, false positive, excluded, legitimate, ruled out]
+
+fabrication_markers:
+  - 10.200.1.
+  - 65 log records
+  - "7 failed attempts"
