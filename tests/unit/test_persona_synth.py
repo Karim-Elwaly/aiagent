@@ -3,6 +3,8 @@ Unit tests for PersonaSynthesizer: dynamic system prompt generation,
 tool description injection, and upstream context truncation.
 """
 
+import re
+
 from src.core.models import RiskLevel, Task
 from src.persona.synthesizer import PersonaSynthesizer
 from src.registry.tool_registry import ToolSpec
@@ -83,4 +85,8 @@ def test_synthesize_with_upstream_context_and_truncation():
     assert "Context from Prior Tasks" in prompt
     assert "From task `t1`:" in prompt
     assert "[...truncated]" in prompt
-    assert len(prompt) < 2000
+    # The upstream context itself must be truncated to max_chars; the rest of
+    # the prompt is fixed scaffolding (role, rules, grounding contract).
+    assert long_context not in prompt
+    longest_run = max(len(run) for run in re.findall(r"A+", prompt))
+    assert longest_run <= max_chars

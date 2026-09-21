@@ -1,0 +1,119 @@
+# Living-off-the-land binaries (LOLBins) and interpreters.
+#
+# Source: publicly documented Microsoft signed binaries with dual-use
+# capabilities (LOLBAS project categories) plus common scripting hosts. These
+# are legitimate OS components; presence alone is NOT malicious. Each entry
+# records WHY the binary is dual-use so the analyst can judge context.
+#
+# Extend this file to cover additional platforms; no code change is required.
+
+binaries:
+  certutil.exe:
+    capabilities: [download, encode, decode]
+    note: "Certificate utility that can fetch remote files and base64 encode/decode payloads."
+  bitsadmin.exe:
+    capabilities: [download, persistence]
+    note: "Background transfer service client; can download files and create persistent jobs."
+  mshta.exe:
+    capabilities: [execute, download]
+    note: "Executes HTML applications, including remote ones."
+  regsvr32.exe:
+    capabilities: [execute, proxy_execution]
+    note: "Registers DLLs and can execute remote scriptlets."
+  rundll32.exe:
+    capabilities: [execute, proxy_execution]
+    note: "Executes exported functions from DLLs, commonly abused for proxy execution."
+  wmic.exe:
+    capabilities: [execute, lateral_movement, discovery]
+    note: "WMI command line; can execute processes locally and remotely."
+  powershell.exe:
+    capabilities: [execute, download, encode]
+    note: "Scripting host; encoded or hidden-window invocation is a common abuse pattern."
+  pwsh.exe:
+    capabilities: [execute, download, encode]
+    note: "Cross-platform PowerShell host."
+  cscript.exe:
+    capabilities: [execute]
+    note: "Windows Script Host, console."
+  wscript.exe:
+    capabilities: [execute]
+    note: "Windows Script Host, windowed."
+  msbuild.exe:
+    capabilities: [execute, compile]
+    note: "Builds and executes inline task code from project files."
+  installutil.exe:
+    capabilities: [execute]
+    note: ".NET installer utility that can execute assembly code."
+  odbcconf.exe:
+    capabilities: [execute]
+    note: "Can load and execute a DLL via REGSVR action."
+  forfiles.exe:
+    capabilities: [execute]
+    note: "Runs a command per matched file; used to break parent-process lineage."
+  schtasks.exe:
+    capabilities: [persistence, execute]
+    note: "Creates scheduled tasks, a common persistence and execution mechanism."
+  at.exe:
+    capabilities: [persistence, execute]
+    note: "Legacy scheduler."
+  sc.exe:
+    capabilities: [persistence, lateral_movement]
+    note: "Service control; creates services locally or remotely."
+  net.exe:
+    capabilities: [discovery, lateral_movement]
+    note: "Account, share and session enumeration."
+  net1.exe:
+    capabilities: [discovery, lateral_movement]
+    note: "Invoked by net.exe; same capabilities."
+  nltest.exe:
+    capabilities: [discovery]
+    note: "Domain trust and domain controller enumeration."
+  whoami.exe:
+    capabilities: [discovery]
+    note: "Identity and privilege enumeration."
+  ntdsutil.exe:
+    capabilities: [credential_access]
+    note: "Can create a snapshot of the Active Directory database."
+  vssadmin.exe:
+    capabilities: [credential_access, destruction]
+    note: "Shadow copy management; used for credential theft and for deleting backups."
+  esentutl.exe:
+    capabilities: [credential_access, copy]
+    note: "Can copy locked files such as credential stores."
+  reg.exe:
+    capabilities: [credential_access, persistence]
+    note: "Can export registry hives containing secrets and write run keys."
+  curl.exe:
+    capabilities: [download]
+    note: "Built-in HTTP client."
+  finger.exe:
+    capabilities: [download, exfiltration]
+    note: "Legacy protocol client usable as a transfer channel."
+
+# Command-line substrings that raise the significance of an otherwise normal
+# binary. Generic abuse idioms, not incident-specific strings.
+suspicious_arguments:
+  - "-enc"
+  - "-encodedcommand"
+  - "-e "
+  - "frombase64string"
+  - "-nop"
+  - "-noprofile"
+  - "-w hidden"
+  - "-windowstyle hidden"
+  - "-exec bypass"
+  - "-executionpolicy bypass"
+  - "downloadstring"
+  - "downloadfile"
+  - "invoke-expression"
+  - "iex("
+  - "-urlcache"
+  - "-decode"
+  - "-decodehex"
+  - "/transfer"
+  - "http://"
+  - "https://"
+  - "\\\\"        # UNC path reference
+  - "scrobj.dll"
+  - "javascript:"
+  - "vbscript:"

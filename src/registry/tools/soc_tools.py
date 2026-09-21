@@ -17,7 +17,9 @@ import subprocess
 from pathlib import Path
 from typing import Any
 
+from src.core.evidence import get_store
 from src.core.models import RiskLevel
+from src.registry.ingestion import discover_log_files, ingest_file, load_mappings
 from src.registry.tool_registry import ToolSpec
 
 logger = logging.getLogger(__name__)
@@ -29,7 +31,7 @@ SHA256_REGEX = r"\b[a-fA-F0-9]{64}\b"
 DOMAIN_REGEX = r"\b(?:[a-zA-Z0-9](?:[a-zA-Z0-9\-]{0,61}[a-zA-Z0-9])?\.)+[a-zA-Z]{2,}\b"
 
 
-# ─── 1. TRIAGE SKILL ──────────────────────────────────────────────────────────
+#  1. TRIAGE SKILL 
 
 async def triage_security_alert(alert_text: str) -> str:
     """Analyze raw alert text or JSON, extract IoCs, and assess initial severity.
@@ -106,327 +108,31 @@ TRIAGE_ALERT_SPEC = ToolSpec(
 )
 
 
-# ─── 2. EVIDENCE GATHERING SKILL ──────────────────────────────────────────────
-
-def _parse_evtx_records(evtx_path: Path, max_records: int = 50) -> tuple[int, list[str]]:
-    """Parse Windows EVTX binary logs using python-evtx or fallback binary string extraction."""
-    records: list[str] = []
-
-    # 1. Native Python EVTX Parser (cross-platform, memory-efficient, no subprocesses)
-    try:
-        import Evtx.Evtx as evtx_mod
-        with evtx_mod.Evtx(str(evtx_path)) as log:
-            for record in log.records():
-                xml_str = record.xml()
-                # Fast regex field extraction without full XML DOM overhead
-                m_eid = re.search(r"<EventID[^>]*>(\d+)</EventID>", xml_str)
-                eid = m_eid.group(1) if m_eid else "Unknown"
-
-                m_time = re.search(r'SystemTime="([^"]+)"', xml_str)
-                time_str = m_time.group(1) if m_time else ""
-
-                m_level = re.search(r"<Level>(\d+)</Level>", xml_str)
-                lvl_val = m_level.group(1) if m_level else ""
-                lvl = "Error" if lvl_val in ("1", "2") else "Warning" if lvl_val == "3" else "Info"
-
-                # Extract salient EventData / Data values
-                data_items = re.findall(r'<Data(?:\s+Name="([^"]*)")?>([^<]*)</Data>', xml_str)
-                data_summary = ", ".join(
-                    f"{name}={val}" if name else val
-                    for name, val in data_items[:5]
-                    if val.strip()
-                )
-                if len(data_summary) > 160:
-                    data_summary = data_summary[:160] + "..."
-
-                record_line = f"[{time_str}] [EventID {eid}] [{lvl}] {data_summary or 'Windows Event Log Record'}"
-                records.append(record_line)
-                if len(records) >= max_records:
-                    break
-        if records:
-            return len(records), records
-    except ImportError:
-        logger.debug("python-evtx not installed; falling back to binary inspection.")
-    except Exception as evtx_err:
-        logger.debug("python-evtx parser error on %s: %s", evtx_path.name, evtx_err)
-
-    # 2. Cross-platform / fallback binary string scraping
-    try:
-        raw = evtx_path.read_bytes()
-        # Find printable ASCII and UTF-16 sequences
-        ascii_strings = re.findall(rb"[\x20-\x7E]{6,}", raw)
-        extracted = []
-        for s in ascii_strings[:100]:
-            try:
-                dec = s.decode("ascii", errors="ignore").strip()
-                if any(k in dec.lower() for k in ["event", "powershell", "cmd", "user", "logon", "fail", "error"]):
-                    extracted.append(dec[:140])
-                    if len(extracted) >= max_records:
-                        break
-            except Exception:
-                continue
-        return len(extracted), [f"[Scraped Binary Event] {e}" for e in extracted]
-    except Exception as e:
-        return 0, [f"[EVTX Read Error: {e}]"]
-
-
-def _parse_xml_security_log(content: str, filename: str) -> tuple[int, list[str]]:
-    """Parse Windows Security and Sysmon XML event records into structured forensic events."""
-    events = []
-    # Match each <Event ...>...</Event> block
-    event_blocks = re.findall(r"<Event(?:\s+[^>]*)?>(.*?)</Event>", content, re.DOTALL)
-    for block in event_blocks:
-        m_eid = re.search(r"<EventID[^>]*>(\d+)</EventID>", block)
-        eid = m_eid.group(1) if m_eid else "Unknown"
-
-        m_time = re.search(r'SystemTime="([^"]+)"', block)
-        time_str = m_time.group(1) if m_time else ""
-
-        m_comp = re.search(r"<Computer>([^<]+)</Computer>", block)
-        computer = m_comp.group(1) if m_comp else ""
-
-        # Extract all Data name/value pairs
-        data_pairs = dict(re.findall(r'<Data(?:\s+Name="([^"]*)")?>([^<]*)</Data>', block))
-
-        if eid == "1":  # Sysmon Process Create
-            image = data_pairs.get("Image", "")
-            cmd = data_pairs.get("CommandLine", "")
-            parent_img = data_pairs.get("ParentImage", "")
-            parent_cmd = data_pairs.get("ParentCommandLine", "")
-            user = data_pairs.get("User", "")
-            hashes = data_pairs.get("Hashes", "")
-            events.append(
-                f"[{time_str}] [SYSMON EID 1 - PROCESS CREATE] Host: {computer} | User: {user} | "
-                f"Process: {image} | Command: {cmd} | Parent: {parent_img} ({parent_cmd}) | Hashes: {hashes}"
-            )
-        elif eid == "10":  # Sysmon ProcessAccess (LSASS Memory Dump)
-            src_img = data_pairs.get("SourceImage", "")
-            tgt_img = data_pairs.get("TargetImage", "")
-            access = data_pairs.get("GrantedAccess", "")
-            call_trace = data_pairs.get("CallTrace", "")
-            events.append(
-                f"[{time_str}] [SYSMON EID 10 - LSASS ACCESS / CREDENTIAL DUMP] Host: {computer} | "
-                f"Source: {src_img} -> Target: {tgt_img} | GrantedAccess: {access} | CallTrace: {call_trace[:100]}"
-            )
-        elif eid == "4688":  # Windows Process Creation
-            proc = data_pairs.get("NewProcessName", "")
-            cmd = data_pairs.get("CommandLine", "")
-            parent = data_pairs.get("ParentProcessName", "")
-            user = data_pairs.get("SubjectUserName", "")
-            events.append(
-                f"[{time_str}] [WINDOWS EID 4688 - PROCESS CREATE] Host: {computer} | User: {user} | "
-                f"Process: {proc} | Command: {cmd} | Parent: {parent}"
-            )
-        elif eid == "4624":  # Windows Logon
-            logon_type = data_pairs.get("LogonType", "")
-            user = data_pairs.get("TargetUserName", "")
-            domain = data_pairs.get("TargetDomainName", "")
-            ip = data_pairs.get("IpAddress", "")
-            ws = data_pairs.get("WorkstationName", "")
-            # Filter standard system noise unless elevated or network logon
-            if logon_type in ("3", "10", "2") and not user.endswith("$"):
-                events.append(
-                    f"[{time_str}] [WINDOWS EID 4624 - LOGON (Type {logon_type})] Host: {computer} | "
-                    f"Account: {domain}\\{user} | SourceIP: {ip} | Workstation: {ws}"
-                )
-        elif eid == "4648":  # Explicit Credential Logon (runas)
-            subj = data_pairs.get("SubjectUserName", "")
-            target_user = data_pairs.get("TargetUserName", "")
-            target_srv = data_pairs.get("TargetServerName", "")
-            proc = data_pairs.get("ProcessName", "")
-            events.append(
-                f"[{time_str}] [WINDOWS EID 4648 - EXPLICIT CREDS / RUNAS] Host: {computer} | "
-                f"Subject: {subj} -> TargetUser: {target_user} | TargetServer: {target_srv} | Process: {proc}"
-            )
-        elif eid == "4672":  # Special Privileges Assigned
-            user = data_pairs.get("SubjectUserName", "")
-            privs = data_pairs.get("PrivilegeList", "")
-            if not user.endswith("$"):
-                events.append(
-                    f"[{time_str}] [WINDOWS EID 4672 - PRIVILEGE ASSIGNED] Host: {computer} | "
-                    f"User: {user} | Privileges: {privs}"
-                )
-        elif eid == "4720":  # User Account Created
-            target_user = data_pairs.get("TargetUserName", "")
-            subj = data_pairs.get("SubjectUserName", "")
-            events.append(
-                f"[{time_str}] [WINDOWS EID 4720 - BACKDOOR USER CREATED] Host: {computer} | "
-                f"NewUser: {target_user} | CreatedBy: {subj}"
-            )
-        elif eid == "4732":  # Member Added to Local Security Group
-            member = data_pairs.get("MemberName", "") or data_pairs.get("MemberSid", "")
-            group = data_pairs.get("TargetUserName", "")
-            subj = data_pairs.get("SubjectUserName", "")
-            events.append(
-                f"[{time_str}] [WINDOWS EID 4732 - GROUP PRIVILEGE ESCALATION] Host: {computer} | "
-                f"Group: {group} | MemberAdded: {member} | ByUser: {subj}"
-            )
-        elif eid == "7045":  # Service Installed (PsExec)
-            service = data_pairs.get("ServiceName", "")
-            img_path = data_pairs.get("ImagePath", "")
-            account = data_pairs.get("AccountName", "")
-            events.append(
-                f"[{time_str}] [WINDOWS EID 7045 - SERVICE INSTALLED] Host: {computer} | "
-                f"Service: {service} | ImagePath: {img_path} | RunAs: {account}"
-            )
-        else:
-            summary = ", ".join(f"{k}={v}" for k, v in list(data_pairs.items())[:4] if v.strip())
-            if any(k in block.lower() for k in ("powershell", "mimikatz", "admin", "psexec", "fail", "deny")):
-                events.append(f"[{time_str}] [WINDOWS EID {eid}] Host: {computer} | {summary}")
-
-    return len(event_blocks), events
-
-
-def _parse_email_gateway_log(content: str, filename: str) -> tuple[int, list[str]]:
-    """Parse Cisco AsyncOS / Postfix mail gateway logs for spearphishing indicators."""
-    events = []
-    lines = content.splitlines()
-    for line in lines:
-        line_s = line.strip()
-        if not line_s or line_s.startswith("#"):
-            continue
-        line_l = line_s.lower()
-        if any(term in line_l for term in ("attach", "mid", "icid", "malware", "phish", "invoice", "docm", "exe", "zip")):
-            events.append(f"[{filename}] {line_s}")
-    return len(lines), events
-
-
-def _parse_firewall_traffic_log(content: str, filename: str) -> tuple[int, list[str]]:
-    """Parse Palo Alto PAN-OS CSV firewall traffic logs for C2 beaconing and exfiltration."""
-    events = []
-    lines = content.splitlines()
-    for idx, line in enumerate(lines):
-        line_s = line.strip()
-        if not line_s or line_s.startswith("#"):
-            continue
-        line_l = line_s.lower()
-        # Highlight non-internal destination traffic, high port beaconing, or high bandwidth
-        if any(term in line_l for term in ("8443", "drop", "deny", "alert", "threat", "tunnel")) or any(
-            ip in line_s for ip in ("185.220.101.45", "198.51.100.240", "203.0.113.119")
-        ):
-            events.append(f"[{filename}:L{idx+1}] {line_s}")
-        elif len(events) < 30 and any(ip in line_s for ip in ("185.", "198.", "203.")):
-            events.append(f"[{filename}:L{idx+1}] {line_s}")
-    return len(lines), events
-
-
-def _parse_json_security_log(content: str, filename: str) -> tuple[int, list[str]]:
-    """Parse JSON / Azure AD / CloudTrail / Okta / Auth logs with deep field extraction."""
-    events = []
-    items = []
-    content_s = content.strip()
-    try:
-        data = json.loads(content_s)
-        if isinstance(data, list):
-            items = data
-        elif isinstance(data, dict):
-            for k in ("value", "records", "events", "SignIns", "items"):
-                if k in data and isinstance(data[k], list):
-                    items = data[k]
-                    break
-            if not items:
-                items = [data]
-    except Exception:
-        for line in content.splitlines():
-            line = line.strip()
-            if not line:
-                continue
-            try:
-                items.append(json.loads(line))
-            except Exception:
-                pass
-
-    total = len(items)
-    for obj in items:
-        if not isinstance(obj, dict):
-            continue
-        ts = (
-            obj.get("createdDateTime")
-            or obj.get("time")
-            or obj.get("Timestamp")
-            or obj.get("@timestamp")
-            or obj.get("EventTime")
-            or ""
-        )
-        user = (
-            obj.get("userPrincipalName")
-            or obj.get("userId")
-            or obj.get("user")
-            or obj.get("username")
-            or (obj.get("actor", {}) if isinstance(obj.get("actor"), dict) else {}).get("userPrincipalName", "")
-            or ""
-        )
-        ip = (
-            obj.get("ipAddress")
-            or obj.get("clientIp")
-            or obj.get("sourceIPAddress")
-            or obj.get("callerIpAddress")
-            or ""
-        )
-        app = (
-            obj.get("appDisplayName")
-            or obj.get("application")
-            or obj.get("clientAppUsed")
-            or obj.get("app")
-            or ""
-        )
-        loc = obj.get("location")
-        loc_str = ""
-        if isinstance(loc, dict):
-            city = loc.get("city", "")
-            country = loc.get("countryOrRegion", "")
-            loc_str = f"{city}, {country}" if city or country else ""
-        elif isinstance(loc, str):
-            loc_str = loc
-
-        status = obj.get("status")
-        status_str = ""
-        if isinstance(status, dict):
-            err_code = status.get("errorCode", 0)
-            reason = status.get("failureReason") or ("Success" if err_code == 0 else f"Failed (Code {err_code})")
-            status_str = f"Status: {reason}"
-        elif isinstance(status, str):
-            status_str = f"Status: {status}"
-
-        risk = (
-            obj.get("riskLevelAggregated")
-            or obj.get("riskLevelDuringSignIn")
-            or obj.get("riskDetail")
-            or ""
-        )
-        risk_str = f" | Risk: {risk}" if risk else ""
-
-        events.append(
-            f"[{filename}] [{ts}] Sign-in User: {user} | IP: {ip} | Loc: {loc_str} | App: {app} | {status_str}{risk_str}"
-        )
-
-    return total or len(content.splitlines()), events
-
-
-def _parse_vpn_log(content: str, filename: str) -> tuple[int, list[str]]:
-    """Parse Cisco ASA / VPN connection and session logs."""
-    events = []
-    lines = content.splitlines()
-    for idx, line in enumerate(lines):
-        line_s = line.strip()
-        if not line_s or line_s.startswith("#"):
-            continue
-        line_l = line_s.lower()
-        if any(k in line_l for k in ("asa-", "vpn", "session", "connect", "disconnect", "tunnel", "group", "user", "ip ")):
-            events.append(f"[{filename}:L{idx+1}] {line_s}")
-    return len(lines), events
+#  2. EVIDENCE GATHERING SKILL 
+#
+# Format-specific parsing lives in src/registry/ingestion.py, driven by the
+# declarative mappings under data/log_mappings/. Adding a new log source is a
+# YAML change, not a code change, and no parser applies per-case filtering.
 
 
 async def gather_log_evidence(
     target_path: str,
-    max_files: int = 30,
+    max_files: int = 0,
     pattern: str = "*",
     recursive: bool = True,
+    _run_id: str = "",
 ) -> str:
-    """Scan, ingest, and parse security log directories and files with deep multi-format extraction.
-    
-    Supports Windows Security XML, Sysmon XML, Cisco Email Gateway logs, Palo Alto PAN-OS CSV,
-    Linux syslog, Windows EVTX binary logs, Azure AD / Cloud JSON, and Cisco ASA VPN logs.
+    """Scan and parse security logs into the structured evidence store.
+
+    Delegates to the universal ingestion engine, which normalizes every
+    supported format (Windows Security EVTX/XML, Sysmon, Cisco ASA syslog,
+    Azure AD sign-in JSON, Palo Alto CSV, mail gateway syslog, generic
+    JSON/JSONL/CSV/text) into citable evidence records.
+
+    Unlike the earlier implementation, nothing is truncated: every record in
+    every file is persisted and addressable by its ``EV-xxxxxx`` id. The
+    summary below is a navigation aid, not the evidence itself  use
+    ``query_evidence`` to filter and ``get_evidence`` to read raw lines.
     """
     clean_path = str(target_path).strip().strip('"').strip("'").strip()
     # Normalize unicode hyphens, dashes, minus signs, and non-breaking spaces
@@ -455,124 +161,122 @@ async def gather_log_evidence(
     if not p.exists():
         return f"Error: Path '{clean_path}' does not exist on disk."
 
-    output_lines = [f"=== [EVIDENCE COLLECTION: {p.resolve()}] ==="]
-    
-    files_to_check: list[Path] = []
-    if p.is_file():
-        files_to_check = [p]
-    else:
-        for root, _, f_names in os.walk(p):
-            for fname in sorted(f_names):
-                fp = Path(root) / fname
-                if pattern != "*" and not fp.match(pattern):
-                    continue
-                files_to_check.append(fp)
-                if len(files_to_check) >= max_files:
-                    break
-            if len(files_to_check) >= max_files:
-                break
+    # Honour the recursive flag (it was previously accepted but ignored).
+    files_to_check = discover_log_files(p, recursive=recursive)
+    if pattern and pattern != "*":
+        files_to_check = [f for f in files_to_check if f.match(pattern)]
+    # max_files <= 0 means "no limit"  the default, so evidence is never
+    # silently dropped just because a directory is large.
+    if max_files and max_files > 0:
+        files_to_check = files_to_check[:max_files]
 
-    parsed_evidence_records: list[str] = []
-    extracted_ips: set[str] = set()
-    extracted_hashes: set[str] = set()
+    if not files_to_check:
+        return f"No files matched under '{p}'. Nothing was ingested."
+
+    store = get_store(_run_id)
+    mappings = load_mappings()
+
+    output_lines = [f"=== [EVIDENCE COLLECTION: {p.resolve()}] ==="]
+    ingested: list[dict[str, Any]] = []
+    unmapped_files: list[str] = []
     total_records = 0
 
     for f in files_to_check:
-        if f.is_dir():
-            continue
+        events, outcome = ingest_file(f, mappings)
+        stored = store.append(events)
+        total_records += len(stored)
 
-        f_size = f.stat().st_size
-        f_ext = f.suffix.lower()
-
-        # Dedicated Windows EVTX binary handler
-        if f_ext == ".evtx":
-            rec_count, evtx_events = _parse_evtx_records(f, max_records=50)
-            total_records += rec_count
-            parsed_evidence_records.extend(evtx_events)
-            output_lines.append(f"Ingested: {f.name} ({rec_count} records, {f_size} bytes) [Windows EVTX Log]")
-            continue
-
-        # Text, XML, CSV, Syslog, JSON handlers
         try:
-            content = ""
-            for enc in ("utf-8", "latin-1", "cp1252"):
-                try:
-                    content = f.read_text(encoding=enc, errors="replace")
-                    break
-                except Exception:
-                    pass
+            size = f.stat().st_size
+        except OSError:
+            size = 0
 
-            if not content:
-                output_lines.append(f"Ingested: {f.name} (0 bytes or unreadable)")
-                continue
+        id_range = f"{stored[0].ev_id}..{stored[-1].ev_id}" if stored else "(none)"
+        output_lines.append(
+            f"Ingested: {f.name} ({outcome.event_count} records, {size} bytes) "
+            f"[{outcome.mapping_id}/{outcome.detected_format}] -> {id_range}"
+            + (f" ERROR: {outcome.error}" if outcome.error else "")
+        )
+        ingested.append(
+            {
+                "file": outcome.source_file,
+                "records": outcome.event_count,
+                "mapping": outcome.mapping_id,
+                "format": outcome.detected_format,
+                "evidence_ids": id_range,
+            }
+        )
+        if outcome.mapping_id == "unmapped":
+            unmapped_files.append(outcome.source_file)
 
-            # Collect generic IoCs from content
-            for ip in re.findall(IPV4_REGEX, content):
-                extracted_ips.add(ip)
-            for h in re.findall(SHA256_REGEX, content):
-                extracted_hashes.add(h)
-            for h in re.findall(MD5_REGEX, content):
-                extracted_hashes.add(h)
+    store.write_index()
+    stats = store.stats()
 
-            # Route to specialized parser
-            if f_ext == ".json" or "signins" in f.name.lower():
-                cnt, ev_list = _parse_json_security_log(content, f.name)
-                total_records += cnt
-                parsed_evidence_records.extend(ev_list)
-                output_lines.append(f"Ingested: {f.name} ({cnt} JSON records, {f_size} bytes) [Azure AD / JSON Log]")
-            elif "vpn" in f.name.lower() or "asa" in f.name.lower():
-                cnt, ev_list = _parse_vpn_log(content, f.name)
-                total_records += cnt
-                parsed_evidence_records.extend(ev_list)
-                output_lines.append(f"Ingested: {f.name} ({cnt} lines, {f_size} bytes) [Cisco ASA / VPN Log]")
-            elif f_ext == ".xml" or "<Event" in content[:2000]:
-                cnt, ev_list = _parse_xml_security_log(content, f.name)
-                total_records += cnt
-                parsed_evidence_records.extend(ev_list)
-                output_lines.append(f"Ingested: {f.name} ({cnt} XML events, {f_size} bytes) [Windows/Sysmon XML]")
-            elif "email" in f.name.lower() or "mail" in f.name.lower():
-                cnt, ev_list = _parse_email_gateway_log(content, f.name)
-                total_records += cnt
-                parsed_evidence_records.extend(ev_list)
-                output_lines.append(f"Ingested: {f.name} ({cnt} lines, {f_size} bytes) [Cisco/Email Gateway Log]")
-            elif "firewall" in f.name.lower() or "traffic" in f.name.lower() or f_ext == ".csv":
-                cnt, ev_list = _parse_firewall_traffic_log(content, f.name)
-                total_records += cnt
-                parsed_evidence_records.extend(ev_list)
-                output_lines.append(f"Ingested: {f.name} ({cnt} lines, {f_size} bytes) [Firewall Traffic Log]")
-            else:
-                lines = [l.strip() for l in content.splitlines() if l.strip()]
-                total_records += len(lines)
-                parsed_evidence_records.extend([f"[{f.name}] {l}" for l in lines[:30]])
-                output_lines.append(f"Ingested: {f.name} ({len(lines)} lines, {f_size} bytes) [Standard Text Log]")
+    output_lines.append(
+        f"\nTotal Artifacts Analyzed: {len(files_to_check)} files, "
+        f"{total_records} log records ingested this call."
+    )
+    output_lines.append(
+        f"Evidence store now holds {stats['total_events']} citable events "
+        f"spanning {stats['earliest_timestamp'] or 'unknown'} to "
+        f"{stats['latest_timestamp'] or 'unknown'}."
+    )
 
-        except Exception as e:
-            output_lines.append(f"File: {f.name} (Error reading: {e})")
-
-    output_lines.append(f"\nTotal Artifacts Analyzed: {len(files_to_check)} files, {total_records} total log records.")
-    
-    # Filter external egress IPs
-    ext_ips = [
-        ip for ip in extracted_ips 
-        if not (ip.startswith(("10.", "192.168.", "172.16.", "127.", "0.", "255.")) or ip.endswith(".255"))
+    # Observed entities, reported as raw inventory. No judgement is attached
+    # here: whether an address is hostile is decided by analysis of behaviour,
+    # never by matching against a list baked into this tool.
+    external_ips = [
+        ip
+        for ip in stats["distinct_destination_ips"] + stats["distinct_source_ips"]
+        if not _is_internal_ip(ip)
     ]
-    if ext_ips:
-        output_lines.append(f"\nExtracted External IoC IPs: {', '.join(sorted(ext_ips))}")
-    if extracted_hashes:
-        output_lines.append(f"Extracted Artifact Hashes: {', '.join(sorted(extracted_hashes)[:10])}")
+    if external_ips:
+        output_lines.append(
+            "\nExternal addresses observed (inventory only  not yet assessed): "
+            + ", ".join(sorted(set(external_ips)))
+        )
+    if stats["distinct_users"]:
+        output_lines.append("Accounts observed: " + ", ".join(stats["distinct_users"]))
+    if stats["distinct_hosts"]:
+        output_lines.append("Hosts observed: " + ", ".join(stats["distinct_hosts"]))
 
-    output_lines.append(f"\n=== [EXTRACTED FORENSIC EVENT TELEMETRY ({len(parsed_evidence_records)} key records)] ===")
-    for rec in parsed_evidence_records:
-        output_lines.append(f"  * {rec}")
+    if unmapped_files:
+        output_lines.append(
+            "\nSources without a vendor mapping (only generic fields extracted; "
+            "search them by keyword before concluding a behaviour is absent): "
+            + ", ".join(unmapped_files)
+        )
+
+    output_lines.append(
+        "\nAll records are stored and citable. Use `query_evidence` to filter by user, "
+        "host, ip, event code, status, keyword or time range, and `get_evidence` to read "
+        "the verbatim source lines behind any EV-xxxxxx id. Do not rely on this summary "
+        "alone for findings."
+    )
+    output_lines.append("\n```json\n" + json.dumps({"files": ingested}, indent=2) + "\n```")
 
     return "\n".join(output_lines)
+
+
+def _is_internal_ip(ip: str) -> bool:
+    """True for private, loopback, link-local and broadcast addresses."""
+    return ip.startswith(
+        ("10.", "192.168.", "172.16.", "172.17.", "172.18.", "172.19.",
+         "172.2", "172.30.", "172.31.", "127.", "169.254.", "0.", "255.")
+    ) or ip.endswith(".255")
 
 
 
 GATHER_EVIDENCE_SPEC = ToolSpec(
     tool_id="soc_gather_evidence",
     name="gather_log_evidence",
-    description="Inspect security log directories (including .evtx, .log, .json, .csv) recursively and extract forensic records.",
+    description=(
+        "Parse ALL security logs in a directory or file into the structured evidence store. "
+        "Handles Windows EVTX/XML, Sysmon, Cisco ASA syslog, Azure AD sign-in JSON, "
+        "Palo Alto CSV, mail gateway syslog and generic JSON/CSV/text automatically. "
+        "No records are truncated. Run this FIRST: every later analysis and every citation "
+        "depends on the evidence it stores."
+    ),
     skills_provided=["evidence_gathering", "log_forensics", "artifact_inspection", "file_reading"],
     parameters={
         "target_path": {
@@ -582,7 +286,7 @@ GATHER_EVIDENCE_SPEC = ToolSpec(
         },
         "max_files": {
             "type": "integer",
-            "description": "Maximum files to inspect (default 30)",
+            "description": "Maximum files to inspect. Omit or use 0 for no limit (default).",
             "required": False,
         },
         "pattern": {
@@ -599,60 +303,125 @@ GATHER_EVIDENCE_SPEC = ToolSpec(
     function=gather_log_evidence,
     risk_level=RiskLevel.LOW,
     source_type="native",
+    needs_run_context=True,
 )
 
 
-# ─── 3. DISCOVERY SKILL ───────────────────────────────────────────────────────
+#  3. DISCOVERY SKILL 
 
-async def lookup_threat_indicators(indicator: str, indicator_type: str = "auto") -> str:
-    """Analyze and cross-reference an indicator of compromise (IP, domain, or hash).
-    
+async def lookup_threat_indicators(
+    indicator: str, indicator_type: str = "auto", _run_id: str = ""
+) -> str:
+    """Report what the ingested evidence actually says about an indicator.
+
+    This tool deliberately does NOT assign reputation. No external threat feed is
+    configured, and inventing an attribution ("known C2", "malicious binary") from
+    an IP literal or a hash string is fabrication. It reports observed behaviour
+    from the evidence store and labels everything else UNVERIFIED.
+
     Args:
         indicator: The IP address, domain name, or file hash.
         indicator_type: 'ip', 'domain', 'hash', or 'auto' for auto-detection.
-        
+
     Returns:
-        Threat intelligence categorization, risk rating, and known malicious affiliations.
+        Evidence-derived facts about the indicator, plus an explicit statement of
+        what could not be verified.
     """
-    clean_ind = indicator.strip()
-    
+    clean = indicator.strip()
+    if not clean:
+        return "Error: 'indicator' is required."
+
     if indicator_type == "auto":
-        if re.match(IPV4_REGEX, clean_ind):
+        if re.fullmatch(IPV4_REGEX, clean):
             indicator_type = "ip"
-        elif re.match(SHA256_REGEX, clean_ind) or re.match(MD5_REGEX, clean_ind):
+        elif re.fullmatch(SHA256_REGEX, clean) or re.fullmatch(MD5_REGEX, clean):
             indicator_type = "hash"
         else:
             indicator_type = "domain"
 
-    # Known test indicators / intelligence heuristic
-    results = [
-        f"=== [THREAT DISCOVERY: {clean_ind}] ===",
-        f"Type: {indicator_type.upper()}",
-    ]
+    observed = _observe_indicator(clean, indicator_type, _run_id)
+
+    payload: dict[str, Any] = {
+        "indicator": clean,
+        "type": indicator_type,
+        "external_reputation": "UNVERIFIED — no threat intelligence feed is configured",
+        "attribution": (
+            "NOT AVAILABLE. Do not name a malware family, toolkit or threat actor for "
+            "this indicator; nothing in the evidence or in a configured feed supports it."
+        ),
+        "observed_in_evidence": observed,
+    }
 
     if indicator_type == "ip":
-        is_private = clean_ind.startswith(("10.", "192.168.", "172.16.", "127."))
-        if is_private:
-            results.append("Classification: RFC 1918 Private Internal Address (Not routable on public Internet).")
-            results.append("Risk Level: LOW (Internal infrastructure / workstation subnet).")
-        else:
-            results.append("Classification: Public WAN Address.")
-            results.append("Reputation: Suspected External C2 / Egress Destination.")
-            results.append("Recommended Action: Quarantine traffic at border firewall.")
-    elif indicator_type == "hash":
-        results.append("Reputation: Potential malicious binary / unverified artifact.")
-        results.append("Action: Block execution via EDR application control.")
-    else:
-        results.append("Classification: Fully Qualified Domain Name.")
-        results.append("Reputation: Uncategorized or newly registered domain.")
+        scope = "internal (RFC 1918 / loopback / link-local)" if _is_internal_ip(clean) else "externally routable"
+        payload["addressing"] = (
+            f"This address is {scope}. This is an addressing fact only and carries no "
+            "reputation on its own."
+        )
 
-    return "\n".join(results)
+    payload["guidance"] = (
+        "Base any assessment of this indicator on the observed behaviour above "
+        "(who contacted it, how often, how much data, which process) — not on the "
+        "indicator string itself. If behaviour is absent, say so."
+    )
+
+    return "```json\n" + json.dumps(payload, indent=2, ensure_ascii=False, default=str) + "\n```"
+
+
+def _observe_indicator(value: str, kind: str, run_id: str) -> dict[str, Any]:
+    """Summarize every stored event that references the indicator."""
+    store = get_store(run_id)
+    if store.count() == 0:
+        return {
+            "status": "evidence store is empty",
+            "detail": "Run ingest_logs first; no behaviour can be reported for this indicator.",
+        }
+
+    lowered = value.lower()
+    matches = []
+    for event in store.iter_events():
+        if kind == "ip" and value in (event.src_ip, event.dst_ip):
+            matches.append(event)
+        elif kind == "hash" and any(lowered == h.lower() for h in event.hashes.values()):
+            matches.append(event)
+        elif kind == "domain" and lowered in (
+            f"{event.app_id} {event.command_line} {event.raw_excerpt}".lower()
+        ):
+            matches.append(event)
+
+    if not matches:
+        return {
+            "status": "not observed",
+            "detail": (
+                f"No ingested event references '{value}'. It must NOT appear in the report "
+                "as an involved indicator or a containment target."
+            ),
+        }
+
+    times = sorted(e.timestamp for e in matches if e.timestamp)
+    return {
+        "status": "observed",
+        "event_count": len(matches),
+        "first_seen": times[0] if times else "unknown",
+        "last_seen": times[-1] if times else "unknown",
+        "hosts": sorted({e.host for e in matches if e.host})[:20],
+        "users": sorted({e.user for e in matches if e.user})[:20],
+        "processes": sorted({e.process for e in matches if e.process})[:20],
+        "destination_ports": sorted({e.dst_port for e in matches if e.dst_port})[:20],
+        "total_bytes_sent": sum(e.bytes_sent or 0 for e in matches),
+        "evidence": [e.ev_id for e in matches if e.ev_id][:20],
+    }
 
 
 LOOKUP_THREAT_SPEC = ToolSpec(
     tool_id="soc_lookup_threat",
     name="lookup_threat_indicators",
-    description="Check threat intelligence and reputation for an IP address, domain, or file hash.",
+    description=(
+        "Report what the ingested evidence actually shows about an IP, domain or file "
+        "hash: which hosts, users and processes touched it, when, how often and how much "
+        "data moved. Does NOT assign reputation or attribution — no external feed is "
+        "configured, so those are returned as UNVERIFIED rather than guessed."
+    ),
     skills_provided=["threat_discovery", "threat_intel", "ioc_lookup", "reputation_check"],
     parameters={
         "indicator": {
@@ -669,129 +438,117 @@ LOOKUP_THREAT_SPEC = ToolSpec(
     function=lookup_threat_indicators,
     risk_level=RiskLevel.LOW,
     source_type="native",
+    needs_run_context=True,
 )
 
 
-# ─── 4. IMPACT ANALYSIS & BLAST RADIUS SKILL ────────────────────────────────
+#  4. IMPACT ANALYSIS & BLAST RADIUS SKILL 
 
 async def analyze_incident_impact(
     target_path: str = "",
     evidence_text: str = "",
+    _run_id: str = "",
 ) -> str:
-    """Map enterprise blast radius, affected hosts, compromised accounts, and lateral movement paths.
-    
+    """Derive blast radius from the evidence store: which assets and accounts are involved.
+
     Args:
-        target_path: Optional path to log directory to analyze directly.
-        evidence_text: Gathered forensic telemetry or task outputs to evaluate.
-        
+        target_path: Unused legacy parameter, retained for compatibility.
+        evidence_text: Unused legacy parameter, retained for compatibility.
+
     Returns:
-        Structured blast radius assessment with affected endpoints, abused privileges, and lateral movement paths.
+        A blast-radius assessment built entirely from stored events, with citations.
+        Every host and account listed is one that genuinely appears in the evidence.
     """
-    text_to_eval = evidence_text
-    if target_path and not text_to_eval:
-        clean = str(target_path).strip().strip('"').strip("'")
-        p = Path(clean)
-        if not p.exists():
-            p = Path(clean.replace("\\", "/"))
-        if p.exists():
-            # Ingest up to 50KB for analysis
-            parts = []
-            for f in p.glob("*"):
-                if f.is_file():
-                    try:
-                        parts.append(f.read_text(encoding="utf-8", errors="replace")[:10000])
-                    except Exception:
-                        pass
-            text_to_eval = "\n".join(parts)
+    store = get_store(_run_id)
+    if store.count() == 0:
+        return (
+            "Cannot assess impact: the evidence store is empty. Run `ingest_logs` on the "
+            "target path first. Do NOT describe an impact that is not backed by evidence."
+        )
 
-    hosts: set[str] = set()
-    accounts: set[str] = set()
-    services: set[str] = set()
-    lateral_paths: list[str] = []
+    hosts: dict[str, int] = {}
+    accounts: dict[str, int] = {}
+    internal_pairs: set[tuple[str, str]] = set()
+    external_egress: dict[str, int] = {}
+    total = 0
 
-    # Extract hostnames
-    for m in re.finditer(r"\b(WKSTN-[A-Z0-9\-]+|DC\d+|WIN-[A-Z0-9\-]+|[a-zA-Z0-9\-]+\.corp\.contoso\.com)\b", text_to_eval, re.IGNORECASE):
-        hosts.add(m.group(1))
+    for event in store.iter_events():
+        total += 1
+        if event.host:
+            hosts[event.host] = hosts.get(event.host, 0) + 1
+        if event.user and not event.user.endswith("$"):
+            accounts[event.user] = accounts.get(event.user, 0) + 1
+        if event.src_ip and event.dst_ip:
+            if _is_internal_ip(event.src_ip) and _is_internal_ip(event.dst_ip):
+                if event.src_ip != event.dst_ip:
+                    internal_pairs.add((event.src_ip, event.dst_ip))
+            elif _is_internal_ip(event.src_ip) and not _is_internal_ip(event.dst_ip):
+                external_egress[event.dst_ip] = (
+                    external_egress.get(event.dst_ip, 0) + (event.bytes_sent or 0)
+                )
 
-    # Extract compromised or abused accounts
-    for m in re.finditer(r"\b(?:CONTOSO\\|TargetUser:\s*|Subject:\s*|Account:\s*)([a-zA-Z0-9_\-\$]+)\b", text_to_eval, re.IGNORECASE):
-        acc = m.group(1)
-        if not acc.endswith("$") and acc.lower() not in ("system", "localsystem", "networkservice"):
-            accounts.add(acc)
-
-    # Detect credential harvesting & service tampering
-    if "lsass" in text_to_eval.lower() or "0x1010" in text_to_eval or "mimikatz" in text_to_eval.lower():
-        services.add("Local Security Authority Subsystem Service (lsass.exe - In-Memory Credential Dumping)")
-    if "psexesvc" in text_to_eval.lower() or "7045" in text_to_eval:
-        services.add("Service Control Manager (PSEXESVC - Remote Execution Service)")
-    if "svc_backup_admin" in text_to_eval.lower() or "4720" in text_to_eval:
-        accounts.add("svc_backup_admin (Backdoor Persistence Account)")
-        services.add("Active Directory Domain Services (Builtin Administrators Group)")
-
-    # Detect lateral movement
-    if "4624" in text_to_eval or "logon (type 3)" in text_to_eval.lower() or "runas" in text_to_eval.lower():
-        lateral_paths.append("WKSTN-FIN-04 (10.20.10.45) -> SMB Logon Type 3 -> DC01.corp.contoso.com (10.20.10.10)")
-
-    output = [
-        "=== [ENTERPRISE BLAST RADIUS & IMPACT ANALYSIS] ===",
-        f"Compromised / Impacted Endpoints: {len(hosts)} host(s)",
-    ]
-    for h in sorted(hosts):
-        output.append(f"  * {h}")
-
-    output.append(f"\nPrivileged Accounts Abused or Created: {len(accounts)} account(s)")
-    for a in sorted(accounts):
-        output.append(f"  * {a}")
-
-    output.append(f"\nCritical Systems / Services Impacted: {len(services)} service(s)")
-    for s in sorted(services):
-        output.append(f"  * {s}")
-
-    output.append(f"\nLateral Movement Paths Verified: {len(lateral_paths)} path(s)")
-    for lp in lateral_paths:
-        output.append(f"  * {lp}")
-
-    output.append(
-        "\nData Impact Assessment:\n"
-        "  - Confidentiality: HIGH (452.8 MB proprietary archive exfiltrated over SSL to 198.51.100.240)\n"
-        "  - Integrity: HIGH (Backdoor Domain Admin account svc_backup_admin provisioned)\n"
-        "  - Availability: LOW-MEDIUM (Domain Controller operational, no ransomware encryption detected)"
-    )
-
-    return "\n".join(output)
+    payload = {
+        "analysis": "blast_radius",
+        "events_examined": total,
+        "hosts_observed": [
+            {"host": h, "events": n} for h, n in sorted(hosts.items(), key=lambda kv: -kv[1])
+        ],
+        "accounts_observed": [
+            {"account": a, "events": n} for a, n in sorted(accounts.items(), key=lambda kv: -kv[1])
+        ],
+        "internal_to_internal_connections": [
+            {"from": src, "to": dst} for src, dst in sorted(internal_pairs)
+        ],
+        "external_egress_destinations": [
+            {"destination": ip, "bytes_sent": b}
+            for ip, b in sorted(external_egress.items(), key=lambda kv: -kv[1])
+        ][:25],
+        "note": (
+            "This is an inventory of what the evidence contains, not a verdict on what was "
+            "compromised. Presence here means 'observed', not 'breached'. Use "
+            "analyze_auth_sequences, actor_pivot and analyze_traffic_patterns to establish "
+            "which of these entities were actually affected, and cite the evidence ids. "
+            "Confidentiality / integrity / availability impact must be stated only where a "
+            "specific cited event supports it."
+        ),
+    }
+    return "```json\n" + json.dumps(payload, indent=2, ensure_ascii=False, default=str) + "\n```"
 
 
 ANALYZE_IMPACT_SPEC = ToolSpec(
     tool_id="soc_analyze_impact",
     name="analyze_incident_impact",
-    description="Analyze enterprise blast radius, identify compromised hosts, abused credentials, and lateral movement paths.",
+    description=(
+        "Inventory the blast radius from the evidence store: every host and account that "
+        "appears, internal-to-internal connections that may indicate lateral movement, and "
+        "external egress destinations ranked by bytes sent. Returns only entities that "
+        "genuinely exist in the ingested evidence."
+    ),
     skills_provided=[
         "impact_analysis",
         "blast_radius",
         "environment_discovery",
-        "filesystem_inspection",
-        "directory_listing",
-        "file_reading",
     ],
     parameters={
         "target_path": {
             "type": "string",
-            "description": "Path to target directory containing forensic logs",
+            "description": "Deprecated; impact is derived from the ingested evidence store.",
             "required": False,
         },
         "evidence_text": {
             "type": "string",
-            "description": "Extracted evidence text from previous tasks to evaluate",
+            "description": "Deprecated; impact is derived from the ingested evidence store.",
             "required": False,
         },
     },
     function=analyze_incident_impact,
     risk_level=RiskLevel.LOW,
     source_type="native",
+    needs_run_context=True,
 )
 
 
-# ─── 5. COMPRESSION SKILL ─────────────────────────────────────────────────────
+#  5. COMPRESSION SKILL 
 
 def _parse_event_timestamp(line: str) -> str:
     """Extract ISO or syslog timestamp from an event line for chronological sorting."""
@@ -880,7 +637,7 @@ COMPRESS_TIMELINE_SPEC = ToolSpec(
 )
 
 
-# ─── 5. RESPONSE SKILL (HIGH RISK - HITL GATED) ───────────────────────────────
+#  5. RESPONSE SKILL (HIGH RISK - HITL GATED) 
 
 async def propose_containment_response(
     target_entity: str,

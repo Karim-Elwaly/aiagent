@@ -45,24 +45,34 @@ async def test_gather_log_evidence_file_and_dir(tmp_path):
     assert "=== [EVIDENCE COLLECTION:" in res_str
     assert "auth.log" in res_str
     assert "Total Artifacts Analyzed: 1 files" in res_str
-    assert "Failed password" in res_str
+
+    # The tool now stores every record and returns a navigable summary with
+    # citation ids, instead of pasting raw log text into the model's context.
+    # Dumping raw text was what forced truncation and let findings be
+    # reconstructed from memory rather than from the source.
+    assert "EV-000001" in res_str
+    assert "citable" in res_str.lower()
+    assert "query_evidence" in res_str
 
 
 @pytest.mark.asyncio
 async def test_lookup_threat_indicators():
+    """Reputation is never invented: with no feed and no evidence, say so."""
     res_pub = await lookup_threat_indicators("198.51.100.44")
-    assert "=== [THREAT DISCOVERY: 198.51.100.44] ===" in res_pub
-    assert "Type: IP" in res_pub
-    assert "Public WAN Address" in res_pub
-    assert "Suspected External C2" in res_pub
+    assert '"type": "ip"' in res_pub
+    assert "UNVERIFIED" in res_pub
+    assert "no threat intelligence feed is configured" in res_pub
+    # The old implementation asserted a C2 attribution from the address alone.
+    assert "Suspected External C2" not in res_pub
+    assert "externally routable" in res_pub
 
     res_priv = await lookup_threat_indicators("10.0.0.1")
-    assert "RFC 1918 Private Internal Address" in res_priv
-    assert "Risk Level: LOW" in res_priv
+    assert "internal (RFC 1918" in res_priv
+    assert "carries no reputation" in res_priv
 
     res_hash = await lookup_threat_indicators("44d88612fea8a8f36de82e1278abb02f")
-    assert "Type: HASH" in res_hash
-    assert "Potential malicious binary" in res_hash
+    assert '"type": "hash"' in res_hash
+    assert "Do not name a malware family" in res_hash
 
 
 @pytest.mark.asyncio

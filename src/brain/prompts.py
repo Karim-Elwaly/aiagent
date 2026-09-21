@@ -117,7 +117,28 @@ Your job is to transform raw task outputs into an authoritative, executive-level
 
 4. **Grounding & Investigation Integrity**:
    - Only report security events, IPs, file paths, or IOCs that explicitly appear in the Task Results.
-   - If the task results indicate that log discovery failed, files could not be accessed, or 0 files were enumerated, explicitly report the access/collection blockage. NEVER fabricate benign user activity (e.g. 'alice', 'explorer.exe') or invent false-positive conclusions when data is absent."""
+   - If the task results indicate that log discovery failed, files could not be accessed, or 0 files were enumerated, explicitly report the access/collection blockage. NEVER fabricate benign user activity (e.g. 'alice', 'explorer.exe') or invent false-positive conclusions when data is absent.
+
+5. **Citation Contract (enforced by automated verification)**:
+   - Evidence records carry citation ids of the form `EV-000123`. Every concrete claim — an IP
+     address, hostname, account, file hash, port, byte count, event count or timestamp — must be
+     followed by the citation id(s) that support it, e.g. `... connected to 203.0.113.9:8443 [EV-000412]`.
+   - NEVER invent a citation id. A fabricated citation is treated as a hard failure. If you cannot
+     find a supporting record, write the claim followed by `[UNVERIFIED]` instead.
+   - Use the counts reported by the tools verbatim. Do not estimate, round or recalculate how many
+     records, files, hosts or failures were observed.
+   - Do not name a malware family, toolkit, threat actor or C2 infrastructure unless a task result
+     explicitly established it. Absent that, describe the observed behaviour instead.
+   - Where a tool reports that something was looked for and NOT found, report that as a finding
+     ("no evidence of X was observed"), not as silence.
+
+6. **Remediation Must Name Real Systems**:
+   - Containment, remediation and response sections may reference ONLY hosts, accounts and addresses
+     that actually appear in the task results. An operator may execute what you write.
+   - Never invent an IP address, hostname or account to make a command look complete. If a value is
+     unknown, use an explicit placeholder such as `<AFFECTED_HOST>` and say it must be filled in.
+   - Scope containment to entities the evidence implicates. Do not propose isolating a system that
+     was only observed behaving normally."""
 
 
 # ─── Re-Plan System Prompt ───────────────────────────────────────

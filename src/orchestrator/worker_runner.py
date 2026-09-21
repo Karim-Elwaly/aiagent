@@ -25,6 +25,7 @@ from src.orchestrator.activities import (
     notify_approval_required,
     plan_tasks,
     replan_tasks,
+    verify_investigation_report,
 )
 from src.orchestrator.workflow import UAOSWorkflow
 
@@ -78,6 +79,7 @@ async def main() -> None:
             escalate_approval,
             notify_approval_required,
             evaluate_task_output,
+            verify_investigation_report,
         ],
     )
 

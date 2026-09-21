@@ -60,6 +60,7 @@ from src.orchestrator.activities import (
     evaluate_task_output,
     assemble_response,
     clean_assembled_solution,
+    verify_investigation_report,
 )
 from src.core.path_utils import extract_target_path, resolve_target_path
 from src.registry.auto_discover import register_all_tools
@@ -389,6 +390,34 @@ async def run_direct_workflow(
             task_dict["_workflow_id"] = workflow_id
             task_dict["_user_query"] = user_query
 
+            # Dependency cascade: a task whose upstream dependency failed has no
+            # evidence to work from. Running it anyway is how ungrounded
+            # narrative gets produced. The Temporal path already skips these;
+            # this mirrors that behaviour for direct execution.
+            failed_deps = [
+                dep
+                for dep in (task.dependencies or [])
+                if state["task_statuses"].get(dep) in ("failed", "skipped")
+            ]
+            if failed_deps:
+                logger.warning(
+                    "Skipping task '%s': dependencies failed: %s", task.name, failed_deps
+                )
+                state["task_statuses"][task_id] = "skipped"
+                bus.publish(
+                    workflow_id,
+                    {
+                        "type": "task_failed",
+                        "task_id": task_id,
+                        "task_name": task.name,
+                        "error": (
+                            f"Skipped — required upstream task(s) {', '.join(failed_deps)} "
+                            f"did not complete, so no evidence is available for this step."
+                        ),
+                    },
+                )
+                continue
+
             risk_level = task.risk_level.value if hasattr(task.risk_level, "value") else str(task.risk_level)
             if risk_level in ("high", "critical"):
                 logger.info(
@@ -545,12 +574,24 @@ async def run_direct_workflow(
         # Phase 3: Assembly
         raw_solution = await assemble_response(user_query, dag_dict, completed)
         final_solution = clean_assembled_solution(raw_solution)
+
+        # Phase 4: Evidence verification gate. Mirrors the Temporal path so both
+        # execution modes apply the same grounding checks.
+        verification: dict = {}
+        try:
+            verification = await verify_investigation_report(final_solution, workflow_id)
+            if verification.get("report"):
+                final_solution = verification["report"]
+        except Exception as verify_err:
+            logger.warning("Report verification skipped: %s", verify_err)
+
         workflow_result = {
             "response": final_solution,
             "tasks_completed": sum(1 for s in state["task_statuses"].values() if s == "completed"),
             "tasks_failed": sum(1 for s in state["task_statuses"].values() if s == "failed"),
             "replans": 0,
             "supervisor_evaluations": state["supervisor_evaluations"],
+            "verification": {k: v for k, v in verification.items() if k != "report"},
         }
         state["result"] = workflow_result
         state["status"] = "completed"
@@ -728,54 +769,99 @@ async def get_workflow_templates():
     """Return pre-configured enterprise workflow templates."""
     return [
         {
-            "id": "soc-5-phase-investigation",
-            "name": "🚨 5-Phase Autonomous SOC Investigation",
-            "description": "Enterprise security incident response pipeline: Triage, Evidence Collection, Threat Discovery, Timeline Compression, and Containment Playbook.",
-            "goal": "Execute systematic incident investigation across triage, evidence, discovery, compression, and response.",
+            "id": "soc-10-phase-investigation",
+            "name": "🚨 10-Phase Autonomous SOC Investigation",
+            "description": "Evidence-grounded incident response: ingestion, coverage audit, triage, network and identity analytics, blast radius, kill-chain validation, timeline, cross-examination, and containment.",
+            "goal": "Execute a systematic, fully cited incident investigation in which every claim traces to an ingested evidence record.",
             "tasks": [
                 {
                     "id": "t1",
-                    "name": "Forensic Evidence Gathering & Log Ingestion",
-                    "description": "Inspect and parse all security logs in target directory or file (CloudTrail, WAF ModSecurity, Nginx, MySQL, Sysmon, Windows events, firewall). Ingest content, extract line counts, anomalous events, and external network indicators.",
-                    "required_skills": ["evidence_gathering", "log_forensics"],
-                    "expected_output": "List of inspected log files, record counts, raw suspicious lines, and extracted candidate IoCs.",
+                    "name": "Evidence Ingestion & Indexing",
+                    "description": "Ingest EVERY log file under the target path into the structured evidence store using ingest_logs. Handles JSON, JSONL, CSV, syslog, XML, EVTX and plain text. Report the authoritative record count per source and list any file that could not be parsed. Do not analyse or interpret yet — this phase exists to make the data queryable and citable.",
+                    "required_skills": ["evidence_gathering", "log_ingestion", "log_forensics"],
+                    "expected_output": "Authoritative per-source record counts, the evidence id range assigned, and an explicit list of any files that failed to parse.",
                     "dependencies": [],
                     "risk_level": "low",
                 },
                 {
                     "id": "t2",
-                    "name": "Alert Triage & Threat Intelligence",
-                    "description": "Analyze the log evidence gathered in Phase 1. Extract IoCs (IPs, hashes, domains), score incident severity, evaluate false-positive probability, and cross-reference external IPs/hashes against threat intelligence.",
-                    "required_skills": ["alert_triage", "threat_intel", "ioc_extraction"],
-                    "expected_output": "Structured triage assessment with assigned severity score, verified external C2 indicators, and threat classification.",
+                    "name": "Coverage & Baseline Audit",
+                    "description": "Run evidence_coverage_report. State the authoritative totals: how many records, from which sources, covering which hosts, accounts and time range. Identify blind spots — telemetry types absent from the dataset, and gaps in the timeline. Every later count in this investigation must match these figures.",
+                    "required_skills": ["evidence_coverage", "coverage_audit", "evidence_query"],
+                    "expected_output": "Authoritative totals for records, sources, hosts, accounts and time range, plus a named list of telemetry blind spots.",
                     "dependencies": ["t1"],
                     "risk_level": "low",
                 },
                 {
                     "id": "t3",
-                    "name": "Environment Discovery & Blast Radius Mapping",
-                    "description": "Analyze filesystem impact, identify affected services, detect credential dumping attempts (Mimikatz, LSASS), and map attack blast radius across the system.",
-                    "required_skills": ["impact_analysis", "blast_radius", "directory_listing", "file_reading"],
-                    "expected_output": "Blast radius assessment including compromised accounts, affected services, and lateral movement traces.",
+                    "name": "Alert Triage & IoC Extraction",
+                    "description": "Identify the indicators present in the evidence: addresses, hashes, accounts, hosts and processes. Use lookup_threat_indicators to report what the data shows about each. Do NOT assign reputation or attribution that the evidence does not establish. Cite EV ids for every indicator.",
+                    "required_skills": ["alert_triage", "ioc_extraction", "threat_intel", "evidence_retrieval"],
+                    "expected_output": "Indicator inventory with observed behaviour and EV citations, and an explicit statement that external reputation is unverified.",
                     "dependencies": ["t2"],
-                    "risk_level": "medium",
+                    "risk_level": "low",
                 },
                 {
                     "id": "t4",
-                    "name": "Incident Timeline Compression",
-                    "description": "Deduplicate and condense voluminous logs into a concise, chronological milestone attack timeline.",
-                    "required_skills": ["log_compression", "timeline_synthesis"],
-                    "expected_output": "Clean chronological step-by-step incident timeline highlighting the attack progression.",
+                    "name": "Network Behaviour Analysis",
+                    "description": "Run analyze_traffic_patterns to detect periodic beaconing and outbound volume outliers, and detect_lolbin_activity to find dual-use system binaries and abuse idioms. Report the largest outbound transfers explicitly — data leaving the environment is the highest-impact finding and is routinely overlooked. Cite EV ids.",
+                    "required_skills": ["traffic_analysis", "exfiltration_analysis", "lolbin_detection"],
+                    "expected_output": "Beaconing flows with interval and jitter, ranked outbound transfers with byte counts, and dual-use binary executions — all with EV citations.",
                     "dependencies": ["t3"],
                     "risk_level": "low",
                 },
                 {
                     "id": "t5",
+                    "name": "Identity & Access Analysis",
+                    "description": "Run analyze_auth_sequences, analyze_identity_velocity, analyze_device_posture, and actor_pivot on each suspicious source. Identify the exact moment any account was actually compromised — a success following a failure burst, or an approval following rejected second-factor prompts. Distinguish attempts from successes. Cite EV ids.",
+                    "required_skills": ["auth_sequence_analysis", "geo_velocity_analysis", "device_posture_analysis", "actor_correlation"],
+                    "expected_output": "Classified authentication patterns, the timestamp of each account compromise, geographic velocity findings with benign rotations suppressed, and device posture deviations — all cited.",
+                    "dependencies": ["t3"],
+                    "risk_level": "low",
+                },
+                {
+                    "id": "t6",
+                    "name": "Impact & Blast Radius",
+                    "description": "Run analyze_incident_impact and correlate_events to establish which hosts and accounts are genuinely implicated, which internal connections suggest lateral movement, and what left the environment. Separate 'observed in the data' from 'demonstrably affected'.",
+                    "required_skills": ["impact_analysis", "blast_radius", "event_correlation"],
+                    "expected_output": "Implicated hosts and accounts with citations, candidate lateral movement paths, and ranked external egress — clearly separating observed from affected.",
+                    "dependencies": ["t4", "t5"],
+                    "risk_level": "medium",
+                },
+                {
+                    "id": "t7",
+                    "name": "Kill-Chain Hypothesis Validation",
+                    "description": "Run build_attack_hypothesis with the findings so far, then work through EVERY MITRE tactic it lists. For each stage either cite the evidence establishing it or state explicitly that no evidence was observed. Use query_evidence and classify_technique to test the stages the investigation has not yet addressed. This phase exists to find what was missed.",
+                    "required_skills": ["hypothesis_testing", "mitre_mapping", "evidence_query"],
+                    "expected_output": "Every ATT&CK tactic marked evidenced (with citations), not observed, or not observable with the available telemetry — with no stage left unaddressed.",
+                    "dependencies": ["t6"],
+                    "risk_level": "low",
+                },
+                {
+                    "id": "t8",
+                    "name": "Timeline Reconstruction",
+                    "description": "Build a single chronological timeline across all sources using correlate_events, ordered by timestamp, with an EV citation on every entry. Timestamps must come from the records themselves — never reconstruct or infer a time. Mark the initial access, the compromise moment, and any exfiltration.",
+                    "required_skills": ["timeline_synthesis", "event_correlation", "evidence_retrieval"],
+                    "expected_output": "A single cross-source chronological timeline, every entry carrying a real timestamp and an EV citation, with initial access, compromise and exfiltration marked.",
+                    "dependencies": ["t7"],
+                    "risk_level": "low",
+                },
+                {
+                    "id": "t9",
+                    "name": "Cross-Examination & False-Positive Review",
+                    "description": "Challenge the investigation's own conclusions. Run check_benign_baseline against each finding and rule out benign explanations on evidence. Run verify_claims_against_evidence on the draft findings and correct everything it flags. Score each confirmed finding with score_severity. Remove any claim that cannot be cited.",
+                    "required_skills": ["report_verification", "false_positive_analysis", "severity_scoring", "evidence_query"],
+                    "expected_output": "Each finding either confirmed with citations and a computed severity, or withdrawn as a false positive with the benign rule that explains it.",
+                    "dependencies": ["t8"],
+                    "risk_level": "low",
+                },
+                {
+                    "id": "t10",
                     "name": "Containment & Remediation Playbook",
-                    "description": "Formulate targeted containment steps (firewall rules, host quarantine commands, token revocation) and request operator approval.",
+                    "description": "Produce containment and remediation steps naming ONLY hosts, accounts and addresses that appear in the evidence with citations. Never invent a value to complete a command — use an explicit placeholder and say it must be filled in. Scope actions to entities the evidence implicates; do not isolate systems only observed behaving normally.",
                     "required_skills": ["incident_response", "containment_playbook", "firewall_rule"],
-                    "expected_output": "Actionable containment recipes and firewall command rules for operator review.",
-                    "dependencies": ["t4"],
+                    "expected_output": "Containment actions targeting only evidenced entities, each with its citation, and explicit placeholders wherever a value is unknown.",
+                    "dependencies": ["t9"],
                     "risk_level": "high",
                 },
             ],

@@ -34,6 +34,7 @@ with workflow.unsafe.imports_passed_through():
         notify_approval_required,
         plan_tasks,
         replan_tasks,
+        verify_investigation_report,
     )
 
 logger = logging.getLogger(__name__)
@@ -487,12 +488,31 @@ class UAOSWorkflow:
             retry_policy=RetryPolicy(maximum_attempts=2),
         )
 
+        # Evidence verification gate: annotate any claim the ingested evidence
+        # cannot substantiate before the report reaches a human. Never allowed
+        # to fail the workflow — an unverified report is still a result.
+        verification: dict = {}
+        try:
+            verification = await workflow.execute_activity(
+                verify_investigation_report,
+                args=[final_response, workflow.info().workflow_id],
+                start_to_close_timeout=timedelta(seconds=60),
+                retry_policy=RetryPolicy(maximum_attempts=1),
+            )
+            if verification.get("report"):
+                final_response = verification["report"]
+        except Exception as verify_err:
+            workflow.logger.warning("Report verification skipped: %s", verify_err)
+
         self._result = {
             "response": final_response,
             "tasks_completed": len(completed),
             "tasks_failed": len(failed),
             "replans": replan_count,
             "supervisor_evaluations": self._supervisor_evaluations,
+            "verification": {
+                k: v for k, v in verification.items() if k != "report"
+            },
         }
         return self._result
 

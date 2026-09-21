@@ -42,10 +42,26 @@ class MetaPlanner:
         llm: LocalLLMClient,
         available_skills: list[str],
         max_retries: int = 3,
+        skill_descriptions: dict[str, str] | None = None,
     ):
         self.llm = llm
         self.available_skills = available_skills
         self.max_retries = max_retries
+        # Skill name -> what it actually does. A planner choosing from bare
+        # names routinely picks a plausible-sounding skill over the right one.
+        self.skill_descriptions = skill_descriptions or {}
+
+    def _skills_block(self) -> str:
+        """Render the skill catalogue, with descriptions where available."""
+        if not self.skill_descriptions:
+            return json.dumps(self.available_skills, indent=2)
+        return json.dumps(
+            {
+                skill: self.skill_descriptions.get(skill, "")
+                for skill in self.available_skills
+            },
+            indent=2,
+        )
 
     async def plan(self, user_query: str) -> TaskDAG:
         """Generate a TaskDAG from a user query.
@@ -75,9 +91,7 @@ class MetaPlanner:
                 {
                     "role": "system",
                     "content": PLANNER_SYSTEM_PROMPT.format(
-                        available_skills=json.dumps(
-                            self.available_skills, indent=2
-                        )
+                        available_skills=self._skills_block()
                     ),
                 },
                 {"role": "user", "content": user_query},
@@ -194,7 +208,7 @@ class MetaPlanner:
                     original_query=original_query,
                     completed_summary=completed_summary,
                     failed_summary=failed_summary,
-                    available_skills=json.dumps(self.available_skills),
+                    available_skills=self._skills_block(),
                 ),
             },
             {

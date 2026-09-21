@@ -541,12 +541,15 @@ class UniversalWorkerAgent:
                     if "\n\nAnalyze this result" in body:
                         body = body.split("\n\nAnalyze this result")[0].strip()
                     lines = [line.strip() for line in body.splitlines() if line.strip()]
-                    summary_snippet = " | ".join(lines[:3])
-                    if len(summary_snippet) > 160:
-                        summary_snippet = summary_snippet[:160] + "..."
+                    summary_snippet = " | ".join(lines[:12])
+                    # Evidence ids are the handles the agent needs to re-query
+                    # detail later, so they survive compression verbatim.
+                    if len(summary_snippet) > 900:
+                        summary_snippet = summary_snippet[:900] + "..."
                     compact_content = (
                         f"Tool `{tool_name}` [Historical output compressed]: {summary_snippet}\n\n"
-                        f"[Detailed evidence preserved in execution log]"
+                        f"[Full detail remains retrievable — re-run the tool or use "
+                        f"query_evidence/get_evidence with the EV ids above]"
                     )
                     compressed.append({"role": "user", "content": compact_content})
                     continue

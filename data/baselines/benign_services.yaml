@@ -1,0 +1,103 @@
+# Generic benign-pattern rules.
+#
+# These describe SHAPES of legitimate activity, expressed as properties rather
+# than literals. There are deliberately NO IP addresses, hostnames, account
+# names or vendor endpoints in this file — an allowlist of literals would only
+# suppress false positives in the environment it was written for, and would
+# silently suppress a real attack that happened to reuse one of those values.
+#
+# Each rule states what to check and what would invalidate the benign reading,
+# so an analyst can accept or reject it on evidence rather than on trust.
+
+rules:
+  - id: cloud_service_address_rotation
+    title: "Traffic to a large cloud provider's published address ranges"
+    check: >
+      The destination address belongs to a range the organisation's own asset
+      inventory or the provider's published range list attributes to a
+      first-party SaaS or platform service, and the traffic profile matches
+      that service (TLS on 443, sustained rather than periodic, initiated by a
+      signed client process).
+    invalidated_by: >
+      Periodic low-jitter callbacks, a non-standard port, an unsigned or
+      unexpected initiating process, or egress volume far above that host's
+      baseline. Cloud infrastructure is routinely abused for C2 and staging, so
+      the provider alone never clears the traffic.
+
+  - id: operating_system_maintenance_traffic
+    title: "Update, telemetry and time-synchronisation traffic"
+    check: >
+      The initiating process is an OS-signed binary running from a system
+      directory under a system-level parent, on the protocol and cadence that
+      service normally uses.
+    invalidated_by: >
+      The same binary name running from a user-writable path, an unexpected
+      parent process, or command-line arguments that transfer or execute
+      remote content.
+
+  - id: credential_typo_self_corrected
+    title: "One or two authentication failures immediately followed by success"
+    check: >
+      The failures and the success share the same account AND the same source
+      address, the failure count is at or below the configured typo threshold,
+      and the success falls inside the configured self-correction window.
+    invalidated_by: >
+      A different source address for the success, more failures than the
+      threshold, other accounts failing from the same source, or a second-factor
+      denial in the sequence.
+
+  - id: mobile_carrier_address_rotation
+    title: "Sign-ins from changing addresses within one network operator"
+    check: >
+      Consecutive sign-ins resolve to the same ASN and remain within the
+      configured metropolitan radius. Mobile and residential carriers reassign
+      addresses from regional pools continuously.
+    invalidated_by: >
+      A different ASN, a distance beyond the metropolitan radius, a change of
+      country, or a device/client fingerprint that does not match the account's
+      baseline.
+
+  - id: scheduled_automation_periodicity
+    title: "Regular intervals produced by legitimate scheduled work"
+    check: >
+      The periodic flow is initiated by a known scheduled task or service
+      account, the destination is an internal or inventoried system, and the
+      cadence matches a documented schedule.
+    invalidated_by: >
+      An external destination that is not in the inventory, a user-context
+      process, or transferred volume that grows over time.
+
+  - id: administrative_tooling_in_expected_context
+    title: "Administrative utilities run by administrators"
+    check: >
+      The dual-use binary was executed by an account whose role includes that
+      administration, from a management host, during a change window, with
+      arguments consistent with routine operations.
+    invalidated_by: >
+      Execution by a standard user account, a parent process associated with
+      document handling or a browser, encoded or obfuscated arguments, or a
+      remote content reference in the command line.
+
+  - id: service_account_behaviour_within_baseline
+    title: "Service account activity matching its own historical pattern"
+    check: >
+      The account's hosts, logon types, times and destinations match what the
+      evidence shows for that same account across the collection window.
+    invalidated_by: >
+      Interactive logon for an account that is otherwise non-interactive, a new
+      source host, or activity outside its established time profile.
+
+# Guidance the analyst must apply to every rule above.
+principles:
+  - >
+    A benign explanation must be EVIDENCED, not assumed. State which records
+    support it and cite them.
+  - >
+    Never dismiss an event because the destination is a well-known company or
+    because the binary is signed. Both are routinely abused.
+  - >
+    If a benign reading and a malicious reading both fit, report both and say
+    what additional evidence would separate them.
+  - >
+    Suppressing a true positive is more costly than escalating a false one.
+    When the invalidating conditions are present, escalate.

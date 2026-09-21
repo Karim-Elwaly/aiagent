@@ -878,48 +878,88 @@ document.addEventListener("DOMContentLoaded", () => {
   const tplClearBtn = document.getElementById("tpl-clear-btn");
 
   const BUILTIN_WORKFLOW_TEMPLATES = {
-    "soc-5-phase-investigation": {
-      name: "5-Phase SOC Autonomous Investigation Pipeline",
-      description: "Enterprise security triage, forensic evidence gathering, blast radius discovery, timeline compression, and containment response.",
+    "soc-10-phase-investigation": {
+      name: "10-Phase SOC Autonomous Investigation Pipeline",
+      description: "Evidence-grounded investigation: ingestion, coverage audit, triage, network and identity analytics, blast radius, kill-chain validation, timeline, cross-examination, and containment.",
       tasks: [
         {
           id: "t1",
-          name: "Forensic Evidence Gathering & Log Ingestion",
-          description: "Inspect and parse all security logs in target directory or file (CloudTrail, WAF ModSecurity, Nginx, MySQL, Sysmon, Windows events, firewall). Ingest content, extract line counts, anomalous events, and external network indicators.",
-          required_skills: ["evidence_gathering", "log_forensics"],
+          name: "Evidence Ingestion & Indexing",
+          description: "Ingest EVERY log file under the target path into the structured evidence store using ingest_logs. Handles JSON, JSONL, CSV, syslog, XML, EVTX and plain text. Report the authoritative record count per source and list any file that could not be parsed. Do not analyse or interpret yet — this phase exists to make the data queryable and citable.",
+          required_skills: ["evidence_gathering", "log_ingestion", "log_forensics"],
           dependencies: [],
           risk_level: "low",
         },
         {
           id: "t2",
-          name: "Alert Triage & Threat Intelligence",
-          description: "Analyze the log evidence gathered in Phase 1. Extract IoCs (IPs, hashes, domains), score incident severity, evaluate false-positive probability, and cross-reference external IPs/hashes against threat intelligence.",
-          required_skills: ["alert_triage", "threat_intel", "ioc_extraction"],
+          name: "Coverage & Baseline Audit",
+          description: "Run evidence_coverage_report. State the authoritative totals: how many records, from which sources, covering which hosts, accounts and time range. Identify blind spots — telemetry types absent from the dataset, and gaps in the timeline. Every later count in this investigation must match these figures.",
+          required_skills: ["evidence_coverage", "coverage_audit", "evidence_query"],
           dependencies: ["t1"],
           risk_level: "low",
         },
         {
           id: "t3",
-          name: "Environment Discovery & Blast Radius Mapping",
-          description: "Analyze filesystem impact, identify affected services, detect credential dumping attempts (Mimikatz, LSASS), and map attack blast radius across the system.",
-          required_skills: ["impact_analysis", "blast_radius", "directory_listing", "file_reading"],
+          name: "Alert Triage & IoC Extraction",
+          description: "Identify the indicators present in the evidence: addresses, hashes, accounts, hosts and processes. Use lookup_threat_indicators to report what the data shows about each. Do NOT assign reputation or attribution that the evidence does not establish. Cite EV ids for every indicator.",
+          required_skills: ["alert_triage", "ioc_extraction", "threat_intel", "evidence_retrieval"],
           dependencies: ["t2"],
-          risk_level: "medium",
+          risk_level: "low",
         },
         {
           id: "t4",
-          name: "Timeline Compression & MITRE ATT&CK RCA",
-          description: "Synthesize gathered forensic events into a chronological timeline and correlate with MITRE ATT&CK tactics.",
-          required_skills: ["timeline_synthesis", "log_compression", "incident_compression"],
+          name: "Network Behaviour Analysis",
+          description: "Run analyze_traffic_patterns to detect periodic beaconing and outbound volume outliers, and detect_lolbin_activity to find dual-use system binaries and abuse idioms. Report the largest outbound transfers explicitly — data leaving the environment is the highest-impact finding and is routinely overlooked. Cite EV ids.",
+          required_skills: ["traffic_analysis", "exfiltration_analysis", "lolbin_detection"],
           dependencies: ["t3"],
           risk_level: "low",
         },
         {
           id: "t5",
-          name: "Response Action & Containment Rules",
-          description: "Generate firewall isolation rules, IP blocklists, and immediate remediation steps for administrator approval.",
+          name: "Identity & Access Analysis",
+          description: "Run analyze_auth_sequences, analyze_identity_velocity, analyze_device_posture, and actor_pivot on each suspicious source. Identify the exact moment any account was actually compromised — a success following a failure burst, or an approval following rejected second-factor prompts. Distinguish attempts from successes. Cite EV ids.",
+          required_skills: ["auth_sequence_analysis", "geo_velocity_analysis", "device_posture_analysis", "actor_correlation"],
+          dependencies: ["t3"],
+          risk_level: "low",
+        },
+        {
+          id: "t6",
+          name: "Impact & Blast Radius",
+          description: "Run analyze_incident_impact and correlate_events to establish which hosts and accounts are genuinely implicated, which internal connections suggest lateral movement, and what left the environment. Separate 'observed in the data' from 'demonstrably affected'.",
+          required_skills: ["impact_analysis", "blast_radius", "event_correlation"],
+          dependencies: ["t4", "t5"],
+          risk_level: "medium",
+        },
+        {
+          id: "t7",
+          name: "Kill-Chain Hypothesis Validation",
+          description: "Run build_attack_hypothesis with the findings so far, then work through EVERY MITRE tactic it lists. For each stage either cite the evidence establishing it or state explicitly that no evidence was observed. Use query_evidence and classify_technique to test the stages the investigation has not yet addressed. This phase exists to find what was missed.",
+          required_skills: ["hypothesis_testing", "mitre_mapping", "evidence_query"],
+          dependencies: ["t6"],
+          risk_level: "low",
+        },
+        {
+          id: "t8",
+          name: "Timeline Reconstruction",
+          description: "Build a single chronological timeline across all sources using correlate_events, ordered by timestamp, with an EV citation on every entry. Timestamps must come from the records themselves — never reconstruct or infer a time. Mark the initial access, the compromise moment, and any exfiltration.",
+          required_skills: ["timeline_synthesis", "event_correlation", "evidence_retrieval"],
+          dependencies: ["t7"],
+          risk_level: "low",
+        },
+        {
+          id: "t9",
+          name: "Cross-Examination & False-Positive Review",
+          description: "Challenge the investigation's own conclusions. Run check_benign_baseline against each finding and rule out benign explanations on evidence. Run verify_claims_against_evidence on the draft findings and correct everything it flags. Score each confirmed finding with score_severity. Remove any claim that cannot be cited.",
+          required_skills: ["report_verification", "false_positive_analysis", "severity_scoring", "evidence_query"],
+          dependencies: ["t8"],
+          risk_level: "low",
+        },
+        {
+          id: "t10",
+          name: "Containment & Remediation Playbook",
+          description: "Produce containment and remediation steps naming ONLY hosts, accounts and addresses that appear in the evidence with citations. Never invent a value to complete a command — use an explicit placeholder and say it must be filled in. Scope actions to entities the evidence implicates; do not isolate systems only observed behaving normally.",
           required_skills: ["containment_playbook", "firewall_rule", "containment_actions"],
-          dependencies: ["t4"],
+          dependencies: ["t9"],
           risk_level: "high",
         },
       ],
@@ -960,7 +1000,7 @@ document.addEventListener("DOMContentLoaded", () => {
     if (workflowBuilderModal) {
       workflowBuilderModal.classList.add("active");
       if (!currentWorkflowTasks || currentWorkflowTasks.length === 0) {
-        loadWorkflowTemplate("soc-5-phase-investigation");
+        loadWorkflowTemplate("soc-10-phase-investigation");
       } else {
         renderPipelineEditor(currentWorkflowTasks);
       }
@@ -1020,7 +1060,7 @@ document.addEventListener("DOMContentLoaded", () => {
   }
 
   function updateTemplateButtonStates(activeId) {
-    if (tplSocBtn) tplSocBtn.classList.toggle("active", activeId === "soc-5-phase-investigation");
+    if (tplSocBtn) tplSocBtn.classList.toggle("active", activeId === "soc-10-phase-investigation");
     if (tplAuditBtn) tplAuditBtn.classList.toggle("active", activeId === "code-vulnerability-audit");
     if (tplClearBtn) tplClearBtn.classList.toggle("active", activeId === "blank");
   }
@@ -1455,7 +1495,7 @@ document.addEventListener("DOMContentLoaded", () => {
   }
 
   if (tplSocBtn) {
-    tplSocBtn.addEventListener("click", () => loadWorkflowTemplate("soc-5-phase-investigation"));
+    tplSocBtn.addEventListener("click", () => loadWorkflowTemplate("soc-10-phase-investigation"));
   }
   if (tplAuditBtn) {
     tplAuditBtn.addEventListener("click", () => loadWorkflowTemplate("code-vulnerability-audit"));

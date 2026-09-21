@@ -29,6 +29,7 @@ from __future__ import annotations
 
 import json
 import logging
+import os
 import re
 import threading
 from datetime import datetime
@@ -41,7 +42,19 @@ from src.core.config import ROOT_DIR
 
 logger = logging.getLogger(__name__)
 
-EVIDENCE_ROOT = ROOT_DIR / "data" / "evidence"
+
+def _evidence_root() -> Path:
+    """Base directory for per-run evidence.
+
+    Overridable via ``UAOS_EVIDENCE_DIR`` so tests and CI can redirect writes
+    away from the repository, and so deployments can place evidence on a
+    dedicated (ideally write-once) volume.
+    """
+    override = os.environ.get("UAOS_EVIDENCE_DIR", "").strip()
+    return Path(override) if override else ROOT_DIR / "data" / "evidence"
+
+
+EVIDENCE_ROOT = _evidence_root()
 
 # Citation ids look like EV-000001. Used by the report verifier to find claims.
 EVIDENCE_ID_PATTERN = re.compile(r"\bEV-\d{6}\b")
@@ -204,7 +217,7 @@ class EvidenceStore:
 
     def __init__(self, run_id: str, root: Path | None = None):
         self.run_id = _sanitize_run_id(run_id)
-        base = root or EVIDENCE_ROOT
+        base = root or _evidence_root()
         self.dir = base / self.run_id
         self.events_path = self.dir / "events.jsonl"
         self.index_path = self.dir / "index.json"

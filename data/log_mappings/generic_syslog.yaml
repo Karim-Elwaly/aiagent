@@ -1,0 +1,62 @@
+id: generic_syslog
+description: >
+  Fallback mapping for RFC 3164 style syslog lines (sshd, sudo, cron, daemons
+  and most Unix services). Extracts the host, program, message and any
+  user/address literals actually present in the line.
+format: syslog
+priority: 0
+
+match:
+  filename_patterns:
+    - "*.log"
+    - "*syslog*"
+    - "*auth*"
+    - "*secure*"
+  content_patterns:
+    - "sshd["
+    - "sudo:"
+    - "systemd["
+    - "cron["
+
+record_pattern: >-
+  ^(?P<ts>\w{3}\s+\d{1,2}\s+\d{2}:\d{2}:\d{2}|\d{4}-\d{2}-\d{2}[T ]\d{2}:\d{2}:\d{2}\S*)
+  \s+(?P<hostname>\S+)\s+(?P<program>[\w\-/.]+)(?:\[(?P<pid>\d+)\])?:\s*(?P<message>.*)$
+
+fields:
+  timestamp: ts
+  host: hostname
+  process: program
+  extra.pid: pid
+
+  user:
+    paths: [message]
+    regex: "(?:for(?:\\s+invalid\\s+user)?|user)\\s+([A-Za-z_][\\w.\\-]*)"
+
+  src_ip:
+    paths: [message]
+    regex: "from\\s+((?:\\d{1,3}\\.){3}\\d{1,3})"
+
+  src_port:
+    paths: [message]
+    regex: "port\\s+(\\d+)"
+
+  # Outcome is taken from the wording the service itself emitted.
+  status:
+    paths: [message]
+    regex: "\\b(Failed|Accepted|Invalid|Successful|failure|success|error|denied)\\b"
+
+  action:
+    paths: [message]
+    regex: "^(\\w+)"
+
+value_maps:
+  status:
+    Failed: failure
+    Invalid: failure
+    failure: failure
+    denied: failure
+    error: failure
+    Accepted: success
+    Successful: success
+    success: success
+    "*": info

@@ -1,0 +1,439 @@
+"""
+UAOS Report Verifier
+
+The last line of defence against fabrication.
+
+An investigation report is only worth what its evidence supports. This module
+takes a finished report and mechanically checks every concrete claim in it
+against the run's evidence store:
+
+  * **Entity grounding** — every IP address, file hash and account named in the
+    report must appear somewhere in the ingested evidence.
+  * **Citation coverage** — statements asserting a fact should carry an
+    ``EV-xxxxxx`` citation. Coverage below a threshold means the report is
+    narrative rather than evidential.
+  * **Remediation grounding** — this one is a HARD FAIL. Containment and
+    remediation sections contain commands an operator may actually run. An
+    invented hostname or IP address in that section is not a wording problem, it
+    is an instruction to act on a machine that was never implicated.
+
+The verifier never rewrites a conclusion. It annotates unverifiable claims and
+reports a verdict, so a human sees exactly which statements the data supports.
+"""
+
+from __future__ import annotations
+
+import logging
+import re
+from dataclasses import dataclass, field
+from typing import Iterable
+
+from src.core.evidence import EVIDENCE_ID_PATTERN, EvidenceStore, get_store
+
+logger = logging.getLogger(__name__)
+
+IPV4 = re.compile(
+    r"\b(?:(?:25[0-5]|2[0-4]\d|[01]?\d?\d)\.){3}(?:25[0-5]|2[0-4]\d|[01]?\d?\d)\b"
+)
+HASH = re.compile(r"\b[a-fA-F0-9]{32}\b|\b[a-fA-F0-9]{40}\b|\b[a-fA-F0-9]{64}\b")
+
+# Headings that introduce actionable instructions rather than analysis.
+REMEDIATION_HEADING = re.compile(
+    r"^#{1,6}\s*.*\b("
+    r"containment|remediation|response|eradication|mitigation|recovery|"
+    r"action plan|next steps|playbook|hardening"
+    r")\b.*$",
+    re.IGNORECASE,
+)
+
+# Sentences that assert a fact are the ones that need a citation. Purely
+# structural lines (headings, table rules, bullets with no verb) are exempt.
+_MIN_CLAIM_CHARS = 40
+
+# Version-like dotted numbers and similar constructs that are not addresses.
+_NOT_AN_IP_CONTEXT = re.compile(r"(?:v|version\s*)\d", re.IGNORECASE)
+
+
+@dataclass
+class Issue:
+    """One verification problem found in the report."""
+
+    kind: str
+    severity: str  # "fail" | "warn"
+    value: str
+    detail: str
+    line_no: int = 0
+
+    def as_dict(self) -> dict:
+        return {
+            "kind": self.kind,
+            "severity": self.severity,
+            "value": self.value,
+            "detail": self.detail,
+            "line": self.line_no,
+        }
+
+
+@dataclass
+class VerificationResult:
+    """Outcome of verifying a report against the evidence store."""
+
+    verdict: str = "pass"  # "pass" | "warn" | "fail"
+    issues: list[Issue] = field(default_factory=list)
+    annotated_report: str = ""
+    evidence_events: int = 0
+    citations_found: int = 0
+    invalid_citations: list[str] = field(default_factory=list)
+    claim_sentences: int = 0
+    cited_claim_sentences: int = 0
+
+    @property
+    def citation_coverage(self) -> float:
+        if not self.claim_sentences:
+            return 1.0
+        return self.cited_claim_sentences / self.claim_sentences
+
+    def as_dict(self) -> dict:
+        return {
+            "verdict": self.verdict,
+            "evidence_events": self.evidence_events,
+            "citations_found": self.citations_found,
+            "invalid_citations": self.invalid_citations,
+            "claim_sentences": self.claim_sentences,
+            "cited_claim_sentences": self.cited_claim_sentences,
+            "citation_coverage": round(self.citation_coverage, 3),
+            "issues": [i.as_dict() for i in self.issues],
+        }
+
+    def summary_table(self) -> str:
+        """A compact markdown summary suitable for appending to the report."""
+        rows = [
+            "| Check | Result |",
+            "| :--- | :--- |",
+            f"| Verdict | **{self.verdict.upper()}** |",
+            f"| Evidence events available | {self.evidence_events} |",
+            f"| Citations in report | {self.citations_found} |",
+            f"| Invalid citations | {len(self.invalid_citations)} |",
+            f"| Citation coverage | {self.citation_coverage:.0%} |",
+            f"| Issues | {len(self.issues)} |",
+        ]
+        if self.issues:
+            rows.append("")
+            rows.append("| Severity | Issue | Value |")
+            rows.append("| :--- | :--- | :--- |")
+            for issue in self.issues[:40]:
+                rows.append(f"| {issue.severity.upper()} | {issue.kind} | `{issue.value}` |")
+        return "\n".join(rows)
+
+
+def verify_report(
+    report: str,
+    run_id: str = "",
+    *,
+    store: EvidenceStore | None = None,
+    min_citation_coverage: float = 0.5,
+) -> VerificationResult:
+    """Check a report's concrete claims against the run's evidence.
+
+    Args:
+        report: The assembled report text.
+        run_id: Investigation run id used to locate the evidence store.
+        store: Optional pre-built store (used by tests).
+        min_citation_coverage: Fraction of factual sentences that must carry a
+            citation before the report is considered evidential.
+
+    Returns:
+        A ``VerificationResult`` carrying the verdict, the issue list and an
+        annotated copy of the report.
+    """
+    result = VerificationResult(annotated_report=report)
+    if not report or not report.strip():
+        result.verdict = "fail"
+        result.issues.append(
+            Issue("empty_report", "fail", "", "The report is empty; nothing to verify.")
+        )
+        return result
+
+    evidence = store or get_store(run_id)
+    result.evidence_events = evidence.count()
+
+    if result.evidence_events == 0:
+        # Without evidence, no concrete claim in the report can be substantiated.
+        result.verdict = "fail"
+        result.issues.append(
+            Issue(
+                "no_evidence",
+                "fail",
+                "",
+                "The evidence store is empty, so no claim in this report is "
+                "substantiated. Ingest the logs and re-run the investigation.",
+            )
+        )
+        return result
+
+    known = _known_entities(evidence)
+    valid_ids = {e.ev_id for e in evidence.iter_events() if e.ev_id}
+
+    _check_citations(report, valid_ids, result)
+    remediation_lines = _remediation_line_numbers(report)
+    _check_entities(report, known, remediation_lines, result)
+    _check_coverage(report, min_citation_coverage, result)
+
+    result.annotated_report = _annotate(report, result)
+    result.verdict = _verdict(result)
+    return result
+
+
+# ── Individual checks ────────────────────────────────────
+
+
+def _known_entities(store: EvidenceStore) -> dict[str, set[str]]:
+    """Collect every entity literal the evidence actually contains."""
+    ips: set[str] = set()
+    hashes: set[str] = set()
+    accounts: set[str] = set()
+    hosts: set[str] = set()
+
+    for event in store.iter_events():
+        for value in (event.src_ip, event.dst_ip):
+            if value:
+                ips.add(value)
+        for value in event.hashes.values():
+            if value:
+                hashes.add(value.lower())
+        if event.user:
+            accounts.add(event.user.lower())
+        if event.host:
+            hosts.add(event.host.lower())
+        # Raw text is authoritative too: an address mentioned inside a log line
+        # is genuinely present in the source data even if no field captured it.
+        for match in IPV4.findall(event.raw_excerpt or ""):
+            ips.add(match)
+        for match in HASH.findall(event.raw_excerpt or ""):
+            hashes.add(match.lower())
+
+    return {"ips": ips, "hashes": hashes, "accounts": accounts, "hosts": hosts}
+
+
+def _check_citations(report: str, valid_ids: set[str], result: VerificationResult) -> None:
+    cited = EVIDENCE_ID_PATTERN.findall(report)
+    result.citations_found = len(cited)
+    for ev_id in sorted(set(cited)):
+        if ev_id not in valid_ids:
+            result.invalid_citations.append(ev_id)
+            result.issues.append(
+                Issue(
+                    "invalid_citation",
+                    "fail",
+                    ev_id,
+                    f"Citation {ev_id} does not exist in the evidence store. "
+                    "A fabricated citation is worse than none.",
+                )
+            )
+
+
+def _remediation_line_numbers(report: str) -> set[int]:
+    """Line numbers that fall inside a containment/remediation section."""
+    lines = report.splitlines()
+    inside = False
+    current_depth = 0
+    flagged: set[int] = set()
+
+    for index, line in enumerate(lines):
+        heading = re.match(r"^(#{1,6})\s", line)
+        if heading:
+            depth = len(heading.group(1))
+            if REMEDIATION_HEADING.match(line):
+                inside = True
+                current_depth = depth
+                continue
+            # A heading at the same or shallower level ends the section.
+            if inside and depth <= current_depth:
+                inside = False
+        if inside:
+            flagged.add(index)
+
+    return flagged
+
+
+def _check_entities(
+    report: str,
+    known: dict[str, set[str]],
+    remediation_lines: set[int],
+    result: VerificationResult,
+) -> None:
+    """Every address, hash and account named must exist in the evidence."""
+    for index, line in enumerate(report.splitlines()):
+        in_remediation = index in remediation_lines
+
+        for ip in set(IPV4.findall(line)):
+            if _NOT_AN_IP_CONTEXT.search(line) and ip not in known["ips"]:
+                continue
+            if ip in known["ips"]:
+                continue
+            result.issues.append(
+                Issue(
+                    "ungrounded_ip",
+                    "fail" if in_remediation else "warn",
+                    ip,
+                    (
+                        f"Address {ip} appears in a containment/remediation section but "
+                        "is absent from the evidence. Acting on it would target a system "
+                        "this investigation never implicated."
+                        if in_remediation
+                        else f"Address {ip} is not present in any ingested event."
+                    ),
+                    index + 1,
+                )
+            )
+
+        for digest in set(HASH.findall(line)):
+            if digest.lower() in known["hashes"]:
+                continue
+            result.issues.append(
+                Issue(
+                    "ungrounded_hash",
+                    "fail" if in_remediation else "warn",
+                    digest,
+                    f"Hash {digest} does not appear in any ingested event. "
+                    "Do not attribute a file to a hash the data does not contain.",
+                    index + 1,
+                )
+            )
+
+        if in_remediation:
+            for account in _quoted_or_backticked(line):
+                lowered = account.lower()
+                if (
+                    lowered in known["accounts"]
+                    or lowered in known["hosts"]
+                    or not _looks_like_identifier(account)
+                ):
+                    continue
+                result.issues.append(
+                    Issue(
+                        "ungrounded_remediation_target",
+                        "fail",
+                        account,
+                        f"'{account}' is named as a remediation target but never appears "
+                        "in the evidence as an account or host.",
+                        index + 1,
+                    )
+                )
+
+
+def _quoted_or_backticked(line: str) -> set[str]:
+    values: set[str] = set()
+    for pattern in (r"`([^`]{2,64})`", r"'([^']{2,64})'", r'"([^"]{2,64})"'):
+        values.update(re.findall(pattern, line))
+    return values
+
+
+def _looks_like_identifier(value: str) -> bool:
+    """True for account/host-shaped tokens, false for prose or commands."""
+    candidate = value.strip()
+    if " " in candidate or len(candidate) < 3:
+        return False
+    return bool(re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9._\\\-]{2,63}", candidate))
+
+
+def _check_coverage(report: str, minimum: float, result: VerificationResult) -> None:
+    """Measure how much of the report's factual content is cited."""
+    in_code = False
+    for raw_line in report.splitlines():
+        line = raw_line.strip()
+        if line.startswith("```"):
+            in_code = not in_code
+            continue
+        if in_code or not line:
+            continue
+        if line.startswith("#") or set(line) <= set("|-: "):
+            continue
+        if not _is_claim(line):
+            continue
+        result.claim_sentences += 1
+        if EVIDENCE_ID_PATTERN.search(line) or "[UNVERIFIED]" in line:
+            result.cited_claim_sentences += 1
+
+    if result.claim_sentences and result.citation_coverage < minimum:
+        result.issues.append(
+            Issue(
+                "low_citation_coverage",
+                "warn",
+                f"{result.citation_coverage:.0%}",
+                (
+                    f"Only {result.cited_claim_sentences} of {result.claim_sentences} "
+                    f"factual statements carry an evidence citation (minimum "
+                    f"{minimum:.0%}). Cite the EV ids that support each finding, or mark "
+                    "the statement [UNVERIFIED]."
+                ),
+            )
+        )
+
+
+def _is_claim(line: str) -> bool:
+    """A line asserting something concrete, as opposed to structure or prose filler."""
+    stripped = re.sub(r"^[\-\*\d\.\)\s]+", "", line)
+    if len(stripped) < _MIN_CLAIM_CHARS:
+        return False
+    # Concrete claims contain a specific: an address, a number, a time, a code.
+    return bool(re.search(r"\d", stripped))
+
+
+def _annotate(report: str, result: VerificationResult) -> str:
+    """Mark unverifiable values inline so a reader sees them in context."""
+    flagged = {
+        issue.value
+        for issue in result.issues
+        if issue.kind in ("ungrounded_ip", "ungrounded_hash", "ungrounded_remediation_target")
+        and issue.value
+    }
+    if not flagged:
+        return report
+
+    annotated = report
+    for value in sorted(flagged, key=len, reverse=True):
+        pattern = re.compile(rf"(?<!\[UNVERIFIED: ){re.escape(value)}")
+        annotated = pattern.sub(f"{value} [UNVERIFIED: not in evidence]", annotated)
+    return annotated
+
+
+def _verdict(result: VerificationResult) -> str:
+    if any(i.severity == "fail" for i in result.issues):
+        return "fail"
+    if result.issues:
+        return "warn"
+    return "pass"
+
+
+def format_verification_section(result: VerificationResult) -> str:
+    """Render the verification outcome as a markdown section for the report."""
+    lines = ["", "---", "", "## Evidence Verification", "", result.summary_table(), ""]
+
+    if result.verdict == "fail":
+        lines.append(
+            "**This report did not pass verification.** The items marked FAIL above are "
+            "not supported by the ingested evidence. Ungrounded entities inside a "
+            "containment or remediation section must be removed before any action is "
+            "taken — they name systems this investigation never implicated."
+        )
+    elif result.verdict == "warn":
+        lines.append(
+            "Verification completed with warnings. Review the items above: each names a "
+            "value or a statement the ingested evidence does not directly support."
+        )
+    else:
+        lines.append(
+            "Every address, hash and citation in this report was matched to an ingested "
+            "evidence record."
+        )
+    return "\n".join(lines)
+
+
+def collect_report_entities(report: str) -> dict[str, Iterable[str]]:
+    """Extract the concrete entities a report names. Useful for diagnostics."""
+    return {
+        "ips": sorted(set(IPV4.findall(report))),
+        "hashes": sorted({h.lower() for h in HASH.findall(report)}),
+        "citations": sorted(set(EVIDENCE_ID_PATTERN.findall(report))),
+    }

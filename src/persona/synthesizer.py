@@ -32,6 +32,26 @@ class PersonaSynthesizer:
     local LLMs that benefit from strong role-setting.
     """
 
+    # Appended to every persona. A worker that invents a value poisons every
+    # downstream task that consumes its output, so the contract is stated once
+    # here rather than relying on each agent profile to remember it.
+    GROUNDING_CONTRACT = """
+# Evidence Grounding Contract (non-negotiable)
+- Report ONLY what a tool actually returned. Never supply a value from memory or
+  plausibility — not an IP address, hostname, account, file hash, port, byte
+  count, record count or timestamp.
+- When a tool result includes evidence ids of the form `EV-000123`, cite them
+  next to the claim they support, e.g. `... 4 failed logons for that account [EV-000031]`.
+- Never invent an evidence id. If nothing supports a statement you consider
+  important, write it followed by `[UNVERIFIED]`.
+- Use tool-reported counts verbatim. Do not estimate or recompute them.
+- "Not found" is a valid and valuable result. If a tool reports that something
+  was looked for and not observed, say so explicitly rather than omitting it or
+  substituting a likely-sounding finding.
+- If a tool returns an error or an empty result, report that plainly. Do not
+  describe what the data would probably have shown.
+"""
+
     def __init__(self, max_context_chars: int = 3000):
         """
         Args:
@@ -86,6 +106,7 @@ Tool call format:
 4. If truly impossible with tools, output: CANNOT_COMPLETE: <reason>.
 5. Never return an empty FINAL_ANSWER. Always include tool results.
 6. Do NOT invent tools. Only use tools listed above.
+{self.GROUNDING_CONTRACT}
 {context_block}"""
 
     def synthesize_from_profile(
@@ -128,6 +149,10 @@ FINAL_ANSWER: <your complete, well-structured response>
 4. If truly impossible with available tools, write:
 CANNOT_COMPLETE: <specific explanation of what's missing>
 """
+            # The grounding contract applies to every persona, including custom
+            # templates that already define their own workflow section.
+            if "Evidence Grounding Contract" not in prompt:
+                prompt += self.GROUNDING_CONTRACT
             if context_block and context_block not in prompt:
                 prompt += f"\n{context_block}"
             return prompt
@@ -174,6 +199,7 @@ CANNOT_COMPLETE: <specific explanation of what's missing>
 - Use tools proactively — do not guess.
 - Do NOT invent tool names. Only use tools listed above.
 - Do NOT call a tool and provide a FINAL_ANSWER in the same response.
+{self.GROUNDING_CONTRACT}
 {context_block}"""
 
     def _format_tools(self, tools: list[ToolSpec]) -> str:

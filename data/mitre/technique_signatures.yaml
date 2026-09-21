@@ -1,0 +1,175 @@
+# MITRE ATT&CK technique signatures.
+#
+# Each entry maps a PUBLICLY DOCUMENTED technique to conditions evaluated
+# against normalized EvidenceEvent fields. Conditions are deliberately generic
+# behavioural descriptions — they are not tuned to any particular dataset.
+#
+# Condition grammar (all keys within a condition are ANDed):
+#   process_in:        basename of the process matches one of these
+#   command_contains_any: command line contains any of these substrings
+#   command_contains_all: command line contains all of these substrings
+#   dst_port_in:       destination port matches one of these
+#   event_code_in:     normalized event code matches one of these
+#   action_contains_any / status_contains_any: outcome field substrings
+#   field_present:     the named EvidenceEvent field is non-empty
+#   min_events:        this many matching events are required (default 1)
+#
+# A technique is reported only when a condition set fully matches real stored
+# events, and the matching events' citation ids are always returned.
+
+techniques:
+  - id: T1059.001
+    name: "Command and Scripting Interpreter: PowerShell"
+    tactic: Execution
+    conditions:
+      process_in: [powershell.exe, pwsh.exe]
+
+  - id: T1027
+    name: "Obfuscated Files or Information"
+    tactic: "Defense Evasion"
+    conditions:
+      command_contains_any:
+        - "-enc"
+        - "-encodedcommand"
+        - "frombase64string"
+        - "-decode"
+
+  - id: T1105
+    name: "Ingress Tool Transfer"
+    tactic: "Command and Control"
+    conditions:
+      process_in: [certutil.exe, bitsadmin.exe, curl.exe, wget.exe]
+      command_contains_any: ["http://", "https://", "-urlcache", "/transfer", "downloadfile", "downloadstring"]
+
+  - id: T1218.010
+    name: "System Binary Proxy Execution: Regsvr32"
+    tactic: "Defense Evasion"
+    conditions:
+      process_in: [regsvr32.exe]
+
+  - id: T1218.011
+    name: "System Binary Proxy Execution: Rundll32"
+    tactic: "Defense Evasion"
+    conditions:
+      process_in: [rundll32.exe]
+
+  - id: T1218.005
+    name: "System Binary Proxy Execution: Mshta"
+    tactic: "Defense Evasion"
+    conditions:
+      process_in: [mshta.exe]
+
+  - id: T1053.005
+    name: "Scheduled Task/Job: Scheduled Task"
+    tactic: Persistence
+    conditions:
+      process_in: [schtasks.exe, at.exe]
+
+  - id: T1543.003
+    name: "Create or Modify System Process: Windows Service"
+    tactic: Persistence
+    conditions:
+      event_code_in: ["7045", "4697"]
+
+  - id: T1003
+    name: "OS Credential Dumping"
+    tactic: "Credential Access"
+    conditions:
+      command_contains_any: ["lsass", "ntds.dit", "sekurlsa", "\\sam ", "hklm\\sam"]
+
+  - id: T1003.003
+    name: "OS Credential Dumping: NTDS"
+    tactic: "Credential Access"
+    conditions:
+      process_in: [ntdsutil.exe, vssadmin.exe, esentutl.exe]
+      command_contains_any: ["ntds", "shadow", "create"]
+
+  - id: T1087
+    name: "Account Discovery"
+    tactic: Discovery
+    conditions:
+      process_in: [net.exe, net1.exe, nltest.exe, whoami.exe]
+
+  - id: T1110.003
+    name: "Brute Force: Password Spraying"
+    tactic: "Credential Access"
+    pattern: password_spray
+
+  - id: T1110.001
+    name: "Brute Force: Password Guessing"
+    tactic: "Credential Access"
+    pattern: brute_force
+
+  - id: T1621
+    name: "Multi-Factor Authentication Request Generation"
+    tactic: "Credential Access"
+    pattern: mfa_fatigue
+
+  - id: T1078
+    name: "Valid Accounts"
+    tactic: "Initial Access"
+    pattern: successful_authentication_after_failure_burst
+
+  - id: T1071.001
+    name: "Application Layer Protocol: Web Protocols"
+    tactic: "Command and Control"
+    pattern: periodic_beaconing
+
+  - id: T1041
+    name: "Exfiltration Over C2 Channel"
+    tactic: Exfiltration
+    pattern: large_outbound_transfer
+
+  - id: T1550
+    name: "Use Alternate Authentication Material"
+    tactic: "Defense Evasion"
+    pattern: token_replay
+
+  - id: T1136
+    name: "Create Account"
+    tactic: Persistence
+    conditions:
+      event_code_in: ["4720", "4728", "4732"]
+
+  - id: T1098
+    name: "Account Manipulation"
+    tactic: Persistence
+    conditions:
+      event_code_in: ["4738", "4724", "4670", "4728", "4732", "4756"]
+
+  - id: T1021.002
+    name: "Remote Services: SMB/Windows Admin Shares"
+    tactic: "Lateral Movement"
+    conditions:
+      dst_port_in: [445, 139]
+
+  - id: T1021.001
+    name: "Remote Services: Remote Desktop Protocol"
+    tactic: "Lateral Movement"
+    conditions:
+      dst_port_in: [3389]
+
+  - id: T1021.006
+    name: "Remote Services: Windows Remote Management"
+    tactic: "Lateral Movement"
+    conditions:
+      dst_port_in: [5985, 5986]
+
+  - id: T1047
+    name: "Windows Management Instrumentation"
+    tactic: Execution
+    conditions:
+      process_in: [wmic.exe]
+
+  - id: T1490
+    name: "Inhibit System Recovery"
+    tactic: Impact
+    conditions:
+      process_in: [vssadmin.exe, wbadmin.exe]
+      command_contains_any: ["delete", "resize"]
+
+  - id: T1070.001
+    name: "Indicator Removal: Clear Windows Event Logs"
+    tactic: "Defense Evasion"
+    conditions:
+      event_code_in: ["1102", "104"]

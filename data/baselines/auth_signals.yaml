@@ -1,0 +1,92 @@
+# Vendor-neutral lexical signals for interpreting normalized authentication
+# events. These are generic outcome vocabularies observed across common log
+# formats (Windows, syslog, identity providers, VPN/firewall appliances).
+#
+# Rules:
+#   - Entries describe HOW products word an outcome, never a specific incident.
+#   - Matching is substring, case-insensitive, against the normalized
+#     status / action / error_code fields of an EvidenceEvent.
+#   - Extend this file to support a new vendor; no code change is required.
+
+success_markers:
+  - success
+  - succeeded
+  - succeed
+  - allow
+  - allowed
+  - accept
+  - accepted
+  - granted
+  - permit
+  - authorized
+  - "logon type"
+  - "4624"   # Windows Security: an account was successfully logged on
+  - "0"      # many providers report result code 0 for success
+
+failure_markers:
+  - failure
+  - failed
+  - fail
+  - deny
+  - denied
+  - reject
+  - rejected
+  - blocked
+  - block
+  - invalid
+  - incorrect
+  - unauthorized
+  - "bad password"
+  - lockout
+  - "4625"   # Windows Security: an account failed to log on
+  - "4771"   # Windows Security: Kerberos pre-authentication failed
+
+auth_action_markers:
+  - logon
+  - login
+  - log-on
+  - signin
+  - "sign-in"
+  - "sign in"
+  - authentication
+  - authenticate
+  - auth
+  - credential
+  - kerberos
+  - ntlm
+  - "4624"
+  - "4625"
+  - "4768"
+  - "4771"
+  - "4776"
+
+# Markers that distinguish a rejected second-factor prompt from a plain
+# password failure. Public, documented provider codes only.
+mfa_denial_markers:
+  - "mfa denied"
+  - "mfa_denied"
+  - "mfa required"
+  - "multifactor"
+  - "multi-factor"
+  - "second factor"
+  - "strong authentication"
+  - "authentication requirement"
+  - "user declined"
+  - "declined by user"
+  - "denied by user"
+  - "push denied"
+  - "push rejected"
+  - "verification denied"
+  - "50074"   # strong authentication required
+  - "50076"   # MFA required due to policy
+  - "500121"  # authentication failed during strong authentication request
+
+# Markers indicating a token/session was presented instead of a fresh
+# interactive authentication. Useful for spotting replayed session artifacts.
+token_replay_markers:
+  - "primary refresh token"
+  - "refresh token"
+  - "session token"
+  - "sso token"
+  - "token issued"
+  - "seamless sso"

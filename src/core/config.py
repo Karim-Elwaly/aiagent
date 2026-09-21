@@ -41,6 +41,38 @@ class Settings(BaseSettings):
     planner_max_retries: int = 3  # retries on JSON parse failure
     planner_max_tasks: int = 12  # maximum tasks in a single DAG
 
+    # ── Detection Analytics Thresholds ───────────────────
+    # These are tunable parameters with documented rationale, deliberately not
+    # magic numbers embedded in the analytics functions. They describe generic
+    # behavioural properties and must never be tuned to make a specific
+    # dataset score better.
+
+    # Beaconing: automated callbacks repeat on a near-fixed cycle. Human and
+    # application traffic has far higher relative variance in its intervals.
+    beacon_min_events: int = 4  # too few samples cannot establish a cycle
+    beacon_max_jitter_ratio: float = 0.15  # stddev/mean below this reads as machine-timed
+    beacon_max_interval_seconds: int = 3600  # ignore cycles slower than hourly
+
+    # Authentication sequences.
+    auth_burst_window_seconds: int = 600  # window for grouping related attempts
+    auth_spray_min_accounts: int = 3  # one source failing against N accounts
+    auth_bruteforce_min_failures: int = 5  # repeated failures against one account
+    auth_fatigue_min_denials: int = 3  # rejected prompts before an approval
+    auth_fatigue_max_interval_seconds: int = 120  # rapid re-prompting, not user retries
+    auth_typo_max_failures: int = 2  # a genuine typo is one or two attempts...
+    auth_typo_success_window_seconds: int = 120  # ...immediately self-corrected
+
+    # Impossible travel. Commercial aviation cruises near 900 km/h; the
+    # threshold sits above it so legitimate air travel is not flagged.
+    velocity_impossible_kmh: float = 1000.0
+    velocity_min_distance_km: float = 100.0  # ignore jitter within a metro area
+    velocity_same_metro_km: float = 150.0  # carrier/NAT pools span a region
+
+    # Data transfer outliers, expressed in standard deviations above the mean
+    # for the same source, so each environment sets its own baseline.
+    transfer_outlier_sigma: float = 3.0
+    transfer_min_bytes: int = 10_000_000  # ignore small transfers regardless of sigma
+
     # ── API Configuration ────────────────────────────────
     api_host: str = "0.0.0.0"
     api_port: int = 8000

@@ -21,6 +21,7 @@ from src.brain.prompts import ASSEMBLER_SYSTEM_PROMPT, SUPERVISOR_EVALUATION_PRO
 from src.core.config import get_settings
 from src.core.llm_client import LocalLLMClient
 from src.core.models import Task, TaskDAG
+from src.core.report_verifier import format_verification_section, verify_report
 from src.orchestrator.event_bus import get_event_bus
 from src.persona.synthesizer import PersonaSynthesizer
 from src.registry.auto_discover import register_all_tools
@@ -143,10 +144,25 @@ async def plan_tasks(user_query: str, agent_id: str = "") -> dict:
                 "Could not filter planner skills for agent '%s': %s", agent_id, e
             )
 
+    # Give the planner a one-line purpose for each skill. Choosing between
+    # "traffic_analysis" and "threat_intel" from bare names is guesswork.
+    skill_descriptions: dict[str, str] = {}
+    try:
+        for spec in registry.get_all_tools():
+            for skill in spec.skills_provided:
+                if skill in skill_descriptions:
+                    continue
+                summary = (spec.description or "").strip().split(". ")[0]
+                if summary:
+                    skill_descriptions[skill] = summary[:200]
+    except Exception as e:
+        logger.debug("Could not build skill descriptions: %s", e)
+
     planner = MetaPlanner(
         llm=llm,
         available_skills=available_skills,
         max_retries=settings.planner_max_retries,
+        skill_descriptions=skill_descriptions,
     )
 
     dag = await planner.plan(user_query)
@@ -435,6 +451,71 @@ async def assemble_response(
     return response
 
 
+@activity.defn
+async def verify_investigation_report(report: str, run_id: str = "") -> dict:
+    """Check every concrete claim in the assembled report against the evidence store.
+
+    This is the last gate before a report reaches a human. It does not rewrite
+    conclusions — it annotates values the evidence cannot substantiate and
+    returns a verdict, so nobody acts on an invented hostname or address.
+
+    Runs are skipped silently when no evidence was ingested (for example a
+    non-investigative workflow), because there is nothing to verify against.
+
+    Args:
+        report: The assembled final report.
+        run_id: Workflow id used to locate the run's evidence store.
+
+    Returns:
+        A dict with the verdict, the issue list and the annotated report.
+    """
+    if not run_id:
+        try:
+            run_id = activity.info().workflow_id
+        except Exception:
+            run_id = "default"
+
+    try:
+        from src.core.evidence import get_store
+
+        if get_store(run_id).count() == 0:
+            logger.info("No evidence ingested for run '%s'; skipping verification", run_id)
+            return {"verdict": "skipped", "report": report, "reason": "no evidence ingested"}
+
+        result = verify_report(report, run_id)
+    except Exception as exc:
+        # Verification must never destroy a completed investigation.
+        logger.error("Report verification failed for run '%s': %s", run_id, exc)
+        return {"verdict": "error", "report": report, "reason": str(exc)}
+
+    annotated = result.annotated_report + "\n" + format_verification_section(result)
+
+    logger.info(
+        "Report verification for run '%s': verdict=%s issues=%d coverage=%.0f%%",
+        run_id,
+        result.verdict,
+        len(result.issues),
+        result.citation_coverage * 100,
+    )
+
+    try:
+        get_event_bus().publish(
+            run_id,
+            {
+                "type": "report_verification",
+                "verdict": result.verdict,
+                "issues": [i.as_dict() for i in result.issues],
+                "citation_coverage": round(result.citation_coverage, 3),
+            },
+        )
+    except Exception as bus_err:
+        logger.debug("Failed to publish verification event: %s", bus_err)
+
+    payload = result.as_dict()
+    payload["report"] = annotated
+    return payload
+
+
 def clean_assembled_solution(response: str) -> str:
     """Sanitize assembled response by removing apologetic meta-commentary, disclaimers, and awkward placeholders."""
     if not response:
@@ -537,6 +618,21 @@ async def notify_approval_required(task_dict: dict) -> bool:
     return True
 
 
+def _context_digest(output: str, max_chars: int = 600) -> str:
+    """Condense a prior task output for supervisor context.
+
+    Keeps the head and the tail rather than clipping at a fixed offset: the
+    conclusion of a task output is usually its most informative part, and the
+    previous fixed 150-character clip discarded it entirely.
+    """
+    text = (output or "").strip()
+    if len(text) <= max_chars:
+        return text
+    head = max_chars * 2 // 3
+    tail = max_chars - head
+    return f"{text[:head].rstrip()}\n[...]\n{text[-tail:].lstrip()}"
+
+
 @activity.defn
 async def evaluate_task_output(
     task_dict: dict,
@@ -559,8 +655,10 @@ async def evaluate_task_output(
 
     llm = _get_planner_llm()
 
+    # Prior context is summarised structurally rather than by clipping each
+    # output to a fixed character count, which used to cut evidence mid-sentence.
     prior_summary = "\n".join(
-        f"- Task {tid}: {out[:150]}..."
+        f"- Task {tid}: {_context_digest(out)}"
         for tid, out in prior_completed.items()
         if tid != task_id
     )
@@ -571,7 +669,7 @@ async def evaluate_task_output(
         task_description=task_desc,
         expected_output=expected_output or "Complete actionable task results",
         prior_context=prior_summary or "None",
-        worker_output=worker_output[:2500],
+        worker_output=worker_output,
     )
 
     try:
@@ -609,12 +707,22 @@ async def evaluate_task_output(
         feedback = data.get("feedback", "")
         missing_info = data.get("missing_info", [])
     except Exception as e:
+        # A supervisor whose verdict could not be parsed has NOT approved
+        # anything. Defaulting to "pass" here silently disabled the quality gate
+        # whenever the model returned malformed JSON.
         logger.warning(
-            "Supervisor evaluation parsing fallback for task '%s': %s", task_name, e
+            "Supervisor evaluation could not be parsed for task '%s': %s - "
+            "defaulting to retry rather than approval",
+            task_name,
+            e,
         )
-        decision = "pass"
-        confidence = 0.8
-        feedback = ""
+        decision = "needs_retry"
+        confidence = 0.0
+        feedback = (
+            "The supervisor's evaluation could not be parsed, so this output has not "
+            "been reviewed. Re-state the findings clearly, citing the evidence ids that "
+            "support each claim."
+        )
         missing_info = []
 
     # Domain-agnostic circuit breaker: evaluate if critical discovery yielded 0 target artifacts

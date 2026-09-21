@@ -78,9 +78,12 @@ async def test_evaluate_task_output_activity_fallback_on_error():
         mock_llm = mock_get_llm.return_value
         mock_llm.chat = AsyncMock(side_effect=RuntimeError("LLM timeout"))
 
-        # Should fallback gracefully without crashing
+        # An unparseable supervisor verdict is NOT an approval. The gate
+        # must fail closed and ask for a retry rather than silently passing.
         evaluation = await evaluate_task_output(task_dict, worker_output, user_query, prior_completed)
-        assert evaluation["decision"] in ["pass", "accurate"]
+        assert evaluation["decision"] == "needs_retry"
+        assert evaluation["confidence"] == 0.0
+        assert evaluation["feedback"]
 
 
 @pytest.mark.asyncio
@@ -92,12 +95,14 @@ async def test_workflow_templates_endpoint():
         data = res.json()
         assert isinstance(data, list)
         template_ids = [t["id"] for t in data]
-        assert "soc-5-phase-investigation" in template_ids
+        assert "soc-10-phase-investigation" in template_ids
         assert "code-vulnerability-audit" in template_ids
-        soc_tpl = next(t for t in data if t["id"] == "soc-5-phase-investigation")
-        assert len(soc_tpl["tasks"]) == 5
+        soc_tpl = next(t for t in data if t["id"] == "soc-10-phase-investigation")
+        assert len(soc_tpl["tasks"]) == 10
         assert soc_tpl["tasks"][0]["id"] == "t1"
-        assert soc_tpl["tasks"][4]["risk_level"] == "high"
+        # Containment is the only high-risk phase and gates on human approval.
+        assert soc_tpl["tasks"][9]["risk_level"] == "high"
+        assert [t["risk_level"] for t in soc_tpl["tasks"]].count("high") == 1
 
 
 @pytest.mark.asyncio
