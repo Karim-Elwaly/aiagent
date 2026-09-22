@@ -95,6 +95,26 @@ def resolve_target_path(path_input: str | Path) -> Path:
     return candidate_stripped if candidate_stripped.is_absolute() else candidate_stripped.resolve()
 
 
+def _longest_existing_prefix(raw: str) -> str | None:
+    """Trim whitespace-delimited tokens off the right until the path exists on disk.
+
+    Path regexes allow spaces (for "C:\\Program Files\\..."), so a match often runs
+    past the path into following prose or a second path.
+    """
+    tokens = raw.split(" ")
+    for end in range(len(tokens), 0, -1):
+        candidate = " ".join(tokens[:end]).rstrip(",;.:)]}")
+        if not candidate:
+            continue
+        try:
+            p = Path(candidate)
+            if p.exists():
+                return str(p.resolve())
+        except Exception:
+            continue
+    return None
+
+
 def extract_target_path(text: str) -> str | None:
     """Extract and heal a target filesystem path from a user query or prompt string.
     
@@ -115,6 +135,9 @@ def extract_target_path(text: str) -> str | None:
     m_win = re.search(r'([a-zA-Z]:[\\/][^"\'\n\r\t<>|]+)', healed_text)
     if m_win:
         raw_p = m_win.group(1).rstrip(",;.:)]}")
+        existing = _longest_existing_prefix(raw_p)
+        if existing:
+            return existing
         resolved = resolve_target_path(raw_p)
         return str(resolved)
 
@@ -122,6 +145,9 @@ def extract_target_path(text: str) -> str | None:
     m_unix = re.search(r'(/(?:[a-zA-Z0-9._-]+/)+[a-zA-Z0-9._-]+)', healed_text)
     if m_unix:
         raw_u = m_unix.group(1).rstrip(",;.:)]}")
+        existing = _longest_existing_prefix(raw_u)
+        if existing:
+            return existing
         resolved = resolve_target_path(raw_u)
         return str(resolved)
 

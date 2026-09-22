@@ -37,6 +37,9 @@ from src.registry.tool_registry import ToolSpec
 
 logger = logging.getLogger(__name__)
 
+# Steering retries before the worker executes a tool itself with derived arguments.
+MAX_STEERING_ATTEMPTS = 2
+
 
 class UniversalWorkerAgent:
     """A blank-slate agent with a guarded ReAct loop.
@@ -103,6 +106,7 @@ class UniversalWorkerAgent:
         start_time = time.monotonic()
         tool_map = {t.name: t for t in tools}
         tool_calls_made: list[str] = []
+        steering_attempts = 0
 
         # Set execution contextvars for clarification dialogue
         try:
@@ -242,27 +246,48 @@ class UniversalWorkerAgent:
 
             # ── Step 2: Extract tool call ───────────────────
             tool_call = self._extract_tool_call(response)
+            forced_call = False
 
             # If tools are available for this task and no tool has been executed yet,
-            # we MUST NOT exit prematurely on early iterations.
-            # Instead, steer the model directly to call a tool with concrete task arguments.
-            if tool_call is None and tools and not tool_calls_made and iteration < (self.max_iterations - 1):
-                logger.info(
-                    "Task '%s' iteration %d produced no tool call; steering model to execute available tools",
+            # we MUST NOT exit. Unverified output would be pure model recall, not evidence.
+            if tool_call is None and tools and not tool_calls_made:
+                steering_attempts += 1
+
+                if steering_attempts <= MAX_STEERING_ATTEMPTS:
+                    logger.info(
+                        "Task '%s' iteration %d produced no tool call; steering model to execute available tools",
+                        task.id,
+                        iteration,
+                    )
+                    messages.append({"role": "assistant", "content": response})
+                    steering_msg = self._build_tool_steering_message(task, tools, user_query)
+                    messages.append({"role": "user", "content": steering_msg})
+                    continue
+
+                # The model cannot emit a parseable tool call. Run the tool ourselves
+                # rather than letting the task proceed on ungrounded model recall.
+                tool_call = self._build_forced_tool_call(tools, task, user_query)
+                if tool_call is None:
+                    messages.append({"role": "assistant", "content": response})
+                    steering_msg = self._build_tool_steering_message(task, tools, user_query)
+                    messages.append({"role": "user", "content": steering_msg})
+                    continue
+
+                logger.warning(
+                    "Task '%s' failed to emit a tool call after %d steering attempts; "
+                    "force-executing '%s' with derived arguments",
                     task.id,
-                    iteration,
+                    steering_attempts,
+                    tool_call["tool"],
                 )
-                messages.append({"role": "assistant", "content": response})
-                steering_msg = self._build_tool_steering_message(task, tools, user_query)
-                messages.append({"role": "user", "content": steering_msg})
-                continue
+                forced_call = True
 
             # ── Step 3: Check for explicit completion ───────
-            final = self._extract_final_answer(response)
+            final = None if forced_call else self._extract_final_answer(response)
             if final is not None and final.strip():
                 # Guardrail: If tools are provided and none have been executed yet,
                 # reject premature conclusions and force the agent to use its tools first
-                if tools and not tool_calls_made and iteration < (self.max_iterations - 1):
+                if tool_call is None and tools and not tool_calls_made:
                     logger.info(
                         "Task '%s' attempted final answer without executing tools; steering to execute tools",
                         task.id,
@@ -300,8 +325,8 @@ class UniversalWorkerAgent:
 
             # ── Step 4: Handle implicit final answer ────────
             if tool_call is None:
-                # If tools are required and not yet run, don't accept implicit answer early
-                if tools and not tool_calls_made and iteration < (self.max_iterations - 1):
+                # If tools are required and not yet run, don't accept implicit answer
+                if tools and not tool_calls_made:
                     messages.append({"role": "assistant", "content": response})
                     steering_msg = self._build_tool_steering_message(task, tools, user_query)
                     messages.append({"role": "user", "content": steering_msg})
@@ -439,6 +464,18 @@ class UniversalWorkerAgent:
                     pass
 
             # ── Step 5: Append to conversation and loop ─────
+            followup = (
+                "Analyze this result. Either call another tool "
+                "or provide your FINAL_ANSWER."
+            )
+            if forced_call:
+                followup = (
+                    "This tool output is the ONLY verified evidence for this task. "
+                    "Discard every IP, domain, hash, CVE, hostname, account, and timestamp "
+                    "you assumed before seeing it — those were guesses, not data. "
+                    "Base your FINAL_ANSWER strictly and exclusively on the output above."
+                )
+
             messages.append(
                 {"role": "assistant", "content": response}
             )
@@ -448,8 +485,7 @@ class UniversalWorkerAgent:
                     "content": (
                         f"Tool `{tool_name}` returned:\n\n"
                         f"{result_str}\n\n"
-                        f"Analyze this result. Either call another tool "
-                        f"or provide your FINAL_ANSWER."
+                        f"{followup}"
                     ),
                 }
             )
@@ -480,6 +516,29 @@ class UniversalWorkerAgent:
                 if body:
                     tool_outputs_list.append(body)
         accum_tools = "\n\n---\n\n".join(tool_outputs_list)
+
+        # Never surface unverified model prose as task output: it is hallucination, not evidence.
+        if tools and not tool_calls_made:
+            logger.error(
+                "Task '%s' exhausted %d iterations without executing any of its %d tools; "
+                "discarding ungrounded output",
+                task.id,
+                self.max_iterations,
+                len(tools),
+            )
+            return TaskResult(
+                task_id=task.id,
+                status=TaskStatus.FAILED,
+                output="",
+                error=(
+                    f"No evidence collected: the agent never executed any of its "
+                    f"{len(tools)} available tools across {self.max_iterations} iterations. "
+                    f"Any findings it produced would be unverified model recall, not data "
+                    f"from the investigation target."
+                ),
+                tool_calls_made=tool_calls_made,
+                execution_time_ms=elapsed,
+            )
 
         output_content = last_assistant
         if accum_tools:
@@ -587,6 +646,47 @@ class UniversalWorkerAgent:
         # Fallback to current working directory (cross-platform)
         return os.getcwd()
 
+    _PATH_PARAM_HINTS = (
+        "path", "dir", "folder", "target",
+        "alert_text", "raw_evidence", "evidence_summary",
+    )
+
+    def _build_forced_tool_call(
+        self, tools: list[ToolSpec], task: Task, user_query: str = ""
+    ) -> dict | None:
+        """Deterministically construct a tool call for models that cannot emit one.
+
+        Last-resort grounding: better to run the most relevant tool with derived
+        arguments than to let the task conclude without touching the target.
+        """
+        if not tools:
+            return None
+
+        detected_path = self._extract_task_path_or_default(task, user_query)
+
+        def _relevance(t: ToolSpec) -> int:
+            return sum(
+                1 for p in t.parameters
+                if any(h in p.lower() for h in self._PATH_PARAM_HINTS)
+            )
+
+        best = max(tools, key=_relevance)
+
+        args: dict[str, Any] = {}
+        for pname, pmeta in best.parameters.items():
+            pl = pname.lower()
+            required = bool(pmeta.get("required")) if isinstance(pmeta, dict) else False
+            if any(h in pl for h in self._PATH_PARAM_HINTS):
+                args[pname] = detected_path
+            elif "recursive" in pl:
+                args[pname] = True
+            elif "command" in pl or "cmd" in pl:
+                args[pname] = f'dir "{detected_path}"'
+            elif required:
+                args[pname] = f"{task.name}: {task.description}"[:1000]
+
+        return {"tool": best.name, "args": args}
+
     def _build_tool_steering_message(self, task: Task, tools: list[ToolSpec], user_query: str = "") -> str:
         """Build an imperative steering message forcing the LLM to output a valid tool call."""
         detected_path = self._extract_task_path_or_default(task, user_query)
@@ -605,8 +705,9 @@ class UniversalWorkerAgent:
                     args_example[pname] = f"dir \"{detected_path}\""
                 elif "recursive" in pname_lower:
                     args_example[pname] = True
-                elif "alert_text" in pname_lower or "raw_evidence" in pname_lower:
-                    args_example[pname] = f"Investigating logs at {detected_path}"
+                elif "alert_text" in pname_lower or "raw_evidence" in pname_lower or "evidence_summary" in pname_lower:
+                    # Pass the path itself; these tools load the real log content from disk.
+                    args_example[pname] = detected_path
             examples.append(json.dumps({"tool": t.name, "args": args_example}))
 
         examples_text = "\n".join(f"- `{ex}`" for ex in examples)

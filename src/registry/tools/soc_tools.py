@@ -29,7 +29,7 @@ from pathlib import Path
 from typing import Any
 
 from src.core.models import RiskLevel
-from src.core.path_utils import resolve_target_path
+from src.core.path_utils import extract_target_path, resolve_target_path
 from src.registry.tool_registry import ToolSpec
 
 logger = logging.getLogger(__name__)
@@ -91,6 +91,55 @@ def _detect_log_type(file_name: str, sample_text: str) -> str:
     return "Standard Forensic Text Log"
 
 
+# ─── EVIDENCE MATERIALIZATION ─────────────────────────────────────────────────
+MAX_INLINE_EVIDENCE_CHARS = 200_000
+MAX_INLINE_EVIDENCE_FILES = 25
+
+
+def _materialize_evidence(raw_text: str) -> str:
+    """Load real log content when an analysis tool is handed a path instead of log text.
+
+    LLMs frequently pass a directory path (or a sentence containing one) into text-based
+    analysis tools. Without this, the analyzer sees no events and reports a false negative.
+    """
+    text = str(raw_text or "")
+    candidate = extract_target_path(text)
+    if not candidate:
+        return text
+
+    p = Path(candidate)
+    try:
+        if not p.exists():
+            return text
+        files = [p] if p.is_file() else [f for f in sorted(p.rglob("*")) if f.is_file()][:MAX_INLINE_EVIDENCE_FILES]
+    except Exception:
+        return text
+
+    chunks: list[str] = []
+    budget = MAX_INLINE_EVIDENCE_CHARS
+    for f in files:
+        if budget <= 0:
+            break
+        try:
+            if f.suffix.lower() == ".evtx":
+                _, events = _parse_evtx_records(f, max_records=2000)
+                content = "\n".join(events)
+            else:
+                content = f.read_text(encoding="utf-8", errors="replace")
+        except Exception as e:
+            logger.warning("Could not load evidence file '%s': %s", f, e)
+            continue
+        content = content[:budget]
+        budget -= len(content)
+        chunks.append(f"----- [{f.name}] -----\n{content}")
+
+    if not chunks:
+        return text
+
+    logger.info("Materialized %d evidence file(s) from '%s' for text analysis", len(chunks), p)
+    return f"{text}\n\n" + "\n\n".join(chunks)
+
+
 # ─── 1. UNIVERSAL TRIAGE SKILL ────────────────────────────────────────────────
 
 async def triage_security_alert(alert_text: str) -> str:
@@ -109,6 +158,8 @@ async def triage_security_alert(alert_text: str) -> str:
     Returns:
         Structured triage assessment with extracted IoCs, MITRE mapping, and severity classification.
     """
+    alert_text = _materialize_evidence(alert_text)
+
     raw_ips = sorted(list(set(re.findall(IPV4_REGEX, alert_text))))
     external_ips = [ip for ip in raw_ips if not _is_private_ip(ip)]
     internal_ips = [ip for ip in raw_ips if _is_private_ip(ip)]
@@ -256,7 +307,7 @@ TRIAGE_ALERT_SPEC = ToolSpec(
     parameters={
         "alert_text": {
             "type": "string",
-            "description": "The alert payload, log excerpt, or event description to triage",
+            "description": "The alert payload, log excerpt, or event description to triage. A file or directory path may be passed instead; its log content is loaded automatically.",
             "required": True,
         }
     },
@@ -1209,6 +1260,7 @@ def _parse_event_timestamp(text: str) -> datetime | None:
 
 async def compress_security_timeline(raw_evidence_text: str, max_timeline_events: int = 20) -> str:
     """Filter log noise and build a clean, chronological incident timeline across any log format."""
+    raw_evidence_text = _materialize_evidence(raw_evidence_text)
     lines = [l.strip() for l in raw_evidence_text.splitlines() if l.strip()]
 
     timeline_keywords = [
@@ -1274,7 +1326,7 @@ COMPRESS_TIMELINE_SPEC = ToolSpec(
     parameters={
         "raw_evidence_text": {
             "type": "string",
-            "description": "Raw evidence or verbose log content to compress",
+            "description": "Raw evidence or verbose log content to compress. A file or directory path may be passed instead; its log content is loaded automatically.",
             "required": True,
         },
         "max_timeline_events": {
