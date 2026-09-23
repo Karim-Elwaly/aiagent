@@ -575,7 +575,7 @@ async def run_direct_workflow(
                 state["approval_event"] = approval_event
                 state["approval_response"] = None
 
-                approval_timeout = task.approval_timeout_seconds or 900
+                approval_timeout = getattr(task, "approval_timeout_seconds", None) or 900
                 bus.publish(
                     workflow_id,
                     {
@@ -803,9 +803,9 @@ async def solve(request: SolveRequest):
     4. Assemble and return the final response
     """
     workflow_id = f"uaos-{uuid4().hex[:12]}"
-    level = normalize_level(request.resilience or getattr(app.state.settings, "default_resilience", "standard"))
+    level = normalize_level(request.resilience or getattr(getattr(app.state, "settings", None), "default_resilience", "standard"))
 
-    if not app.state.temporal:
+    if not getattr(app.state, "temporal", None):
         logger.info(
             "Solving (sync via Standalone Engine): workflow=%s, query=%s, agent_id=%s, resilience=%s",
             workflow_id,
@@ -867,9 +867,9 @@ async def solve_async(request: SolveRequest):
     Use GET /status/{workflow_id} to check progress.
     """
     workflow_id = f"uaos-{uuid4().hex[:12]}"
-    level = normalize_level(request.resilience or getattr(app.state.settings, "default_resilience", "standard"))
+    level = normalize_level(request.resilience or getattr(getattr(app.state, "settings", None), "default_resilience", "standard"))
 
-    if not app.state.temporal:
+    if not getattr(app.state, "temporal", None):
         logger.info(
             "Solving (async via Standalone Engine): workflow=%s, query=%s, agent_id=%s, custom_dag=%s, resilience=%s",
             workflow_id,
@@ -921,7 +921,7 @@ async def solve_async(request: SolveRequest):
 @app.get("/api/resilience")
 async def get_resilience_options():
     """Return the available outage-tolerance levels for the UI selector."""
-    default = normalize_level(getattr(app.state.settings, "default_resilience", "standard"))
+    default = normalize_level(getattr(getattr(app.state, "settings", None), "default_resilience", "standard"))
     return {
         "default": default,
         "options": [

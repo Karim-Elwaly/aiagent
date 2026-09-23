@@ -52,7 +52,7 @@ def test_task_model_with_customized_parameters_and_guidance():
 
 
 @pytest.mark.asyncio
-async def test_solve_endpoint_with_customized_pre_execution_dag():
+async def test_solve_endpoint_with_customized_pre_execution_dag(clean_app_state):
     """Verify POST /solve accepts pre-execution customized DAG with parameters and executes cleanly."""
     custom_dag = {
         "goal": "Customized Investigation",
