@@ -30,6 +30,7 @@ from collections.abc import Callable
 from typing import Any
 
 from src.core.llm_client import LocalLLMClient
+from src.core.exceptions import TransientLLMError
 from src.core.models import Task, TaskResult, TaskStatus
 from src.core.path_utils import extract_target_path, resolve_target_path, sanitize_json_string_backslashes
 from src.core.text_utils import smart_truncate
@@ -193,11 +194,26 @@ class UniversalWorkerAgent:
             active_messages = self._compress_context_history(messages)
             try:
                 if on_token:
-                    tokens_list: list[str] = []
-                    async for token in self.llm.chat_stream(active_messages):
-                        tokens_list.append(token)
-                        on_token(token)
-                    response = "".join(tokens_list)
+                    try:
+                        tokens_list: list[str] = []
+                        async for token in self.llm.chat_stream(active_messages):
+                            tokens_list.append(token)
+                            on_token(token)
+                        response = "".join(tokens_list)
+                    except Exception as stream_err:
+                        # Streams drop mid-flight on server reloads or context overflow.
+                        logger.warning(
+                            "Task '%s' token stream failed at iteration %d (%s: %s); "
+                            "retrying without streaming",
+                            task.id,
+                            iteration,
+                            type(stream_err).__name__,
+                            stream_err,
+                        )
+                        response = await asyncio.wait_for(
+                            self.llm.chat(active_messages),
+                            timeout=task.timeout_seconds,
+                        )
                 else:
                     response = await asyncio.wait_for(
                         self.llm.chat(active_messages),
@@ -219,18 +235,23 @@ class UniversalWorkerAgent:
                     execution_time_ms=elapsed,
                 )
             except Exception as e:
-                elapsed = int((time.monotonic() - start_time) * 1000)
+                detail = str(e) or "no detail returned by the inference server"
+                prompt_chars = sum(len(m.get("content", "")) for m in active_messages)
                 logger.error(
-                    "Task '%s' LLM call failed: %s", task.id, e
+                    "Task '%s' LLM call failed at iteration %d (%s: %s), prompt was %d chars",
+                    task.id,
+                    iteration,
+                    type(e).__name__,
+                    detail,
+                    prompt_chars,
+                    exc_info=True,
                 )
-                return TaskResult(
-                    task_id=task.id,
-                    status=TaskStatus.FAILED,
-                    output="",
-                    error=f"LLM call failed: {e}",
-                    tool_calls_made=tool_calls_made,
-                    execution_time_ms=elapsed,
-                )
+                # Raise rather than return: lets Temporal retry from the last heartbeat.
+                raise TransientLLMError(
+                    f"LLM call failed [{type(e).__name__}]: {detail} "
+                    f"(task {task.id}, iteration {iteration}, prompt {prompt_chars} chars)",
+                    original_error=e,
+                ) from e
 
             def _get_accumulated_tool_outputs() -> str:
                 tool_outputs: list[str] = []

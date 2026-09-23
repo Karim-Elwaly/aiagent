@@ -94,6 +94,18 @@ class WorkerTimeoutError(WorkerError):
         )
 
 
+class TransientLLMError(WorkerError):
+    """Raised when the inference server is unreachable or drops the response.
+
+    Signals the orchestrator that a retry may succeed, unlike deterministic
+    failures such as an unparseable response or an exhausted ReAct loop.
+    """
+
+    def __init__(self, detail: str, original_error: Exception | None = None):
+        self.original_error = original_error
+        super().__init__(detail)
+
+
 # ─── Orchestration Errors ────────────────────────────────────────
 
 

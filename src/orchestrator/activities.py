@@ -17,10 +17,12 @@ import logging
 from typing import Any
 
 from temporalio import activity
+from temporalio.exceptions import ApplicationError
 
 from src.brain.meta_planner import MetaPlanner
 from src.brain.prompts import ASSEMBLER_SYSTEM_PROMPT, SUPERVISOR_EVALUATION_PROMPT
 from src.core.config import get_settings
+from src.core.exceptions import TransientLLMError
 from src.core.llm_client import LocalLLMClient
 from src.core.models import Task, TaskDAG
 from src.orchestrator.event_bus import get_event_bus
@@ -335,6 +337,11 @@ async def execute_task(
         )
 
         return result.to_serializable()
+
+    except TransientLLMError as exc:
+        # Surfaced as an activity failure so Temporal retries from the last heartbeat.
+        logger.warning("Task '%s' hit a transient LLM fault: %s", task_id, exc)
+        raise ApplicationError(str(exc), type="TransientLLMError") from exc
 
     except Exception as exc:
         logger.exception("Task '%s' execution crashed with exception: %s", task_id, exc)

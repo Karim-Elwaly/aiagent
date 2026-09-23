@@ -41,6 +41,22 @@ with workflow.unsafe.imports_passed_through():
 
 logger = logging.getLogger(__name__)
 
+# A ReAct loop makes up to worker_max_iterations LLM calls, so the budget covers all of them.
+TASK_ACTIVITY_TIMEOUT_SECONDS = 900
+
+TASK_RETRY_POLICY = RetryPolicy(
+    maximum_attempts=3,
+    initial_interval=timedelta(seconds=2),
+    backoff_coefficient=2.0,
+    # Deterministic failures repeat identically; only transient faults are worth retrying.
+    non_retryable_error_types=[
+        "ValueError",
+        "ToolNotFoundError",
+        "DAGValidationError",
+        "ApprovalRejectedError",
+    ],
+)
+
 
 @workflow.defn
 class UAOSWorkflow:
@@ -453,12 +469,8 @@ class UAOSWorkflow:
             result_dict = await workflow.execute_activity(
                 execute_task,
                 args=[task_dict, dict(completed), agent_id],
-                start_to_close_timeout=timedelta(seconds=300),
-                retry_policy=RetryPolicy(
-                    maximum_attempts=3,
-                    initial_interval=timedelta(seconds=2),
-                    backoff_coefficient=2.0,
-                ),
+                start_to_close_timeout=timedelta(seconds=TASK_ACTIVITY_TIMEOUT_SECONDS),
+                retry_policy=TASK_RETRY_POLICY,
                 heartbeat_timeout=timedelta(seconds=120),
             )
         except Exception as exc:
@@ -511,12 +523,8 @@ class UAOSWorkflow:
                         retry_result = await workflow.execute_activity(
                             execute_task,
                             args=[retry_task_dict, dict(completed), agent_id],
-                            start_to_close_timeout=timedelta(seconds=300),
-                            retry_policy=RetryPolicy(
-                                maximum_attempts=3,
-                                initial_interval=timedelta(seconds=2),
-                                backoff_coefficient=2.0,
-                            ),
+                            start_to_close_timeout=timedelta(seconds=TASK_ACTIVITY_TIMEOUT_SECONDS),
+                            retry_policy=TASK_RETRY_POLICY,
                             heartbeat_timeout=timedelta(seconds=120),
                         )
                         if retry_result.get("status") == "completed":

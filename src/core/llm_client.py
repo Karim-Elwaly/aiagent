@@ -164,7 +164,13 @@ class LocalLLMClient:
                         choices = chunk.get("choices", [])
                         if choices:
                             delta = choices[0].get("delta", {})
-                            content = delta.get("content") or delta.get("text") or ""
+                            # Harmony models (gpt-oss) emit most output on the reasoning channel.
+                            content = (
+                                delta.get("content")
+                                or delta.get("reasoning_content")
+                                or delta.get("text")
+                                or ""
+                            )
                             if content:
                                 yield str(content)
                     except json.JSONDecodeError:
