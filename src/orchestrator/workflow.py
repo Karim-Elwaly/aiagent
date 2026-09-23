@@ -29,6 +29,7 @@ from temporalio.common import RetryPolicy
 with workflow.unsafe.imports_passed_through():
     from src.core.config import get_settings
     from src.core.path_utils import extract_target_path
+    from src.core.resilience import ResilienceProfile, get_profile
     from src.orchestrator.activities import (
         assemble_response,
         escalate_approval,
@@ -44,18 +45,51 @@ logger = logging.getLogger(__name__)
 # A ReAct loop makes up to worker_max_iterations LLM calls, so the budget covers all of them.
 TASK_ACTIVITY_TIMEOUT_SECONDS = 900
 
+# Deterministic failures repeat identically; only transient faults are worth retrying.
+_NON_RETRYABLE_ERROR_TYPES = [
+    "ValueError",
+    "ToolNotFoundError",
+    "DAGValidationError",
+    "ApprovalRejectedError",
+]
+
 TASK_RETRY_POLICY = RetryPolicy(
     maximum_attempts=3,
     initial_interval=timedelta(seconds=2),
     backoff_coefficient=2.0,
-    # Deterministic failures repeat identically; only transient faults are worth retrying.
-    non_retryable_error_types=[
-        "ValueError",
-        "ToolNotFoundError",
-        "DAGValidationError",
-        "ApprovalRejectedError",
-    ],
+    non_retryable_error_types=_NON_RETRYABLE_ERROR_TYPES,
 )
+
+
+def _task_retry_policy(profile: ResilienceProfile) -> RetryPolicy:
+    """Build the execute_task RetryPolicy for a resilience profile.
+
+    Keeps the deterministic-failure exclusions (those never benefit from a
+    retry) while letting transient LLM/model outages retry for as long as the
+    chosen outage window allows. Deterministic and replay-safe.
+    """
+    return RetryPolicy(
+        maximum_attempts=profile.max_attempts,
+        initial_interval=timedelta(seconds=profile.initial_interval_seconds),
+        backoff_coefficient=profile.backoff_coefficient,
+        maximum_interval=timedelta(seconds=profile.max_interval_seconds),
+        non_retryable_error_types=_NON_RETRYABLE_ERROR_TYPES,
+    )
+
+
+def _llm_activity_retry_policy(profile: ResilienceProfile) -> RetryPolicy:
+    """Build a RetryPolicy for planning/assembly LLM activities.
+
+    Same outage tolerance as tasks, but without the task-specific non-retryable
+    list so a transient planning/synthesis outage rides through instead of
+    hard-failing the run.
+    """
+    return RetryPolicy(
+        maximum_attempts=profile.max_attempts,
+        initial_interval=timedelta(seconds=profile.initial_interval_seconds),
+        backoff_coefficient=profile.backoff_coefficient,
+        maximum_interval=timedelta(seconds=profile.max_interval_seconds),
+    )
 
 
 @workflow.defn
@@ -90,6 +124,11 @@ class UAOSWorkflow:
         self._task_statuses: dict[str, str] = {}
         self._supervisor_evaluations: list[dict[str, Any]] = []
         self._result: dict[str, Any] | None = None
+        # Per-run outage tolerance; set from the request in run(), used for every
+        # execute_task/planning/assembly activity so a long LLM outage retries
+        # rather than failing the investigation.
+        self._resilience: str = "standard"
+        self._task_retry_policy: RetryPolicy = TASK_RETRY_POLICY
 
     @workflow.signal
     async def approve_task(self, payload: bool | dict[str, Any]) -> None:
@@ -173,6 +212,7 @@ class UAOSWorkflow:
         user_query: str,
         agent_id: str = "",
         custom_dag: dict[str, Any] | None = None,
+        resilience: str = "standard",
     ) -> dict[str, Any]:
         """Main workflow execution entry point.
 
@@ -180,16 +220,25 @@ class UAOSWorkflow:
             user_query: The raw user request.
             agent_id: Optional AgentProfile ID to steer persona and restrict tools.
             custom_dag: Optional user-defined TaskDAG to execute directly without auto-planning.
+            resilience: Outage-tolerance level (brief|standard|extended|unlimited)
+                controlling how long each activity retries through an LLM/model
+                outage before giving up.
 
         Returns:
             Dict with 'response', 'tasks_completed', 'tasks_failed',
             and 'replans' counts.
         """
+        profile = get_profile(resilience)
+        self._resilience = profile.level
+        self._task_retry_policy = _task_retry_policy(profile)
+        llm_retry_policy = _llm_activity_retry_policy(profile)
+
         workflow.logger.info(
-            "Starting UAOS workflow for: %s (agent_id: %s, custom_dag: %s)",
+            "Starting UAOS workflow for: %s (agent_id: %s, custom_dag: %s, resilience: %s)",
             user_query[:100],
             agent_id or "default",
             "yes" if custom_dag else "no",
+            profile.level,
         )
 
         # ── Phase 1: Plan ────────────────────────────────
@@ -200,16 +249,22 @@ class UAOSWorkflow:
             )
             dag_dict = custom_dag
         else:
-            dag_dict = await workflow.execute_activity(
-                plan_tasks,
-                args=[user_query, agent_id],
-                start_to_close_timeout=timedelta(seconds=180),
-                retry_policy=RetryPolicy(
-                    maximum_attempts=3,
-                    initial_interval=timedelta(seconds=2),
-                    backoff_coefficient=2.0,
-                ),
-            )
+            try:
+                dag_dict = await workflow.execute_activity(
+                    plan_tasks,
+                    args=[user_query, agent_id],
+                    start_to_close_timeout=timedelta(seconds=180),
+                    retry_policy=llm_retry_policy,
+                )
+            except Exception as plan_err:
+                # Planning exhausted its retries (e.g. a long model outage). Rather
+                # than failing the whole run, fall back to a minimal single-task
+                # investigation so the request still makes progress.
+                workflow.logger.error(
+                    "Planning failed after retries (%s); using deterministic single-task fallback",
+                    plan_err,
+                )
+                dag_dict = self._fallback_single_task_dag(user_query)
 
         target_path = extract_target_path(user_query)
         if target_path:
@@ -261,7 +316,7 @@ class UAOSWorkflow:
                         replan_tasks,
                         args=[user_query, completed, failed],
                         start_to_close_timeout=timedelta(seconds=180),
-                        retry_policy=RetryPolicy(maximum_attempts=2),
+                        retry_policy=llm_retry_policy,
                     )
                     # Keep completed results, clear failures for the new plan
                     failed.clear()
@@ -328,7 +383,7 @@ class UAOSWorkflow:
             assemble_response,
             args=[user_query, dag_dict, completed],
             start_to_close_timeout=timedelta(seconds=120),
-            retry_policy=RetryPolicy(maximum_attempts=2),
+            retry_policy=llm_retry_policy,
         )
 
         self._result = {
@@ -470,7 +525,7 @@ class UAOSWorkflow:
                 execute_task,
                 args=[task_dict, dict(completed), agent_id],
                 start_to_close_timeout=timedelta(seconds=TASK_ACTIVITY_TIMEOUT_SECONDS),
-                retry_policy=TASK_RETRY_POLICY,
+                retry_policy=self._task_retry_policy,
                 heartbeat_timeout=timedelta(seconds=120),
             )
         except Exception as exc:
@@ -524,7 +579,7 @@ class UAOSWorkflow:
                             execute_task,
                             args=[retry_task_dict, dict(completed), agent_id],
                             start_to_close_timeout=timedelta(seconds=TASK_ACTIVITY_TIMEOUT_SECONDS),
-                            retry_policy=TASK_RETRY_POLICY,
+                            retry_policy=self._task_retry_policy,
                             heartbeat_timeout=timedelta(seconds=120),
                         )
                         if retry_result.get("status") == "completed":
@@ -554,6 +609,28 @@ class UAOSWorkflow:
             failed[task_id] = result_dict.get("error", "Task execution failed")
 
         return False
+
+    def _fallback_single_task_dag(self, user_query: str) -> dict[str, Any]:
+        """Minimal deterministic DAG used when auto-planning is unavailable.
+
+        Planning itself needs the LLM, so a long model outage can exhaust its
+        retries. Instead of failing the whole run, we synthesize a single
+        general-purpose task from the raw request; the worker's own resilient
+        retries then carry it once the model recovers. No LLM call, fully
+        deterministic — safe inside workflow replay.
+        """
+        return {
+            "tasks": [
+                {
+                    "id": "t1",
+                    "name": "Fulfill request",
+                    "description": user_query,
+                    "dependencies": [],
+                    "parameters": {},
+                    "risk_level": "low",
+                }
+            ]
+        }
 
     def _get_ready_tasks(
         self,

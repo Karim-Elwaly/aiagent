@@ -12,6 +12,7 @@ Compatible with any server exposing the OpenAI-compatible
 
 from __future__ import annotations
 
+import asyncio
 import json
 import logging
 from collections.abc import AsyncIterator
@@ -19,6 +20,37 @@ from collections.abc import AsyncIterator
 import httpx
 
 logger = logging.getLogger(__name__)
+
+# HTTP statuses worth retrying: the server is momentarily unavailable/overloaded.
+# 4xx like 400/413 are deterministic (e.g. context overflow) — retrying is futile.
+_RETRYABLE_STATUS_CODES = frozenset({408, 425, 429, 500, 502, 503, 504})
+
+
+def _is_retryable_error(exc: BaseException) -> bool:
+    """True when an LLM call failure is transient and worth retrying.
+
+    Connection drops, timeouts, protocol errors and 5xx/overload statuses are
+    transient (server restarting, model reloading, network blip). Malformed
+    requests (4xx other than the throttle codes) and empty-choice ``ValueError``
+    are deterministic and would just repeat.
+    """
+    if isinstance(
+        exc,
+        (
+            httpx.ConnectError,
+            httpx.ConnectTimeout,
+            httpx.ReadTimeout,
+            httpx.WriteTimeout,
+            httpx.PoolTimeout,
+            httpx.RemoteProtocolError,
+            httpx.ReadError,
+            httpx.NetworkError,
+        ),
+    ):
+        return True
+    if isinstance(exc, httpx.HTTPStatusError):
+        return exc.response.status_code in _RETRYABLE_STATUS_CODES
+    return False
 
 
 class LocalLLMClient:
@@ -35,19 +67,32 @@ class LocalLLMClient:
         temperature: float = 0.1,
         max_tokens: int = 4096,
         timeout: float = 120.0,
+        max_retries: int = 2,
+        retry_initial_interval: float = 1.0,
+        retry_backoff: float = 2.0,
+        retry_max_interval: float = 30.0,
     ):
         self.base_url = base_url.rstrip("/")
         self.model = model
         self.temperature = temperature
         self.max_tokens = max_tokens
         self.timeout = timeout
+        # Baseline per-call resilience so a brief server blip (model reload,
+        # network hiccup) is absorbed transparently. Long outages are handled by
+        # the outer retry layer (Temporal activity policy / direct-engine task
+        # retry) which knows the per-request resilience level.
+        self.max_retries = max(0, max_retries)
+        self.retry_initial_interval = retry_initial_interval
+        self.retry_backoff = retry_backoff
+        self.retry_max_interval = retry_max_interval
 
     async def chat(self, messages: list[dict[str, str]]) -> str:
-        """Send a chat completion request.
+        """Send a chat completion request with bounded retry on transient faults.
 
-        Uses streaming internally to receive response headers immediately
-        from local inference servers (avoiding ReadTimeout on large models like 27B/70B),
-        and falls back to non-streaming if needed.
+        Each attempt streams first (fast headers, avoids ReadTimeout on large
+        models) and falls back to a non-streaming POST. Transient failures
+        (connection drop, timeout, 5xx) are retried with exponential backoff;
+        deterministic failures propagate immediately.
 
         Args:
             messages: List of message dicts with 'role' and 'content' keys.
@@ -55,6 +100,31 @@ class LocalLLMClient:
         Returns:
             The assistant's response text.
         """
+        interval = self.retry_initial_interval
+        last_exc: Exception | None = None
+        for attempt in range(self.max_retries + 1):
+            try:
+                return await self._chat_once(messages)
+            except Exception as exc:
+                last_exc = exc
+                if attempt >= self.max_retries or not _is_retryable_error(exc):
+                    raise
+                logger.warning(
+                    "LLM chat transient failure (%s: %s); retry %d/%d in %.1fs",
+                    type(exc).__name__,
+                    exc,
+                    attempt + 1,
+                    self.max_retries,
+                    interval,
+                )
+                await asyncio.sleep(interval)
+                interval = min(interval * self.retry_backoff, self.retry_max_interval)
+        # Unreachable in practice (loop either returns or raises), but keep mypy happy.
+        assert last_exc is not None
+        raise last_exc
+
+    async def _chat_once(self, messages: list[dict[str, str]]) -> str:
+        """One chat attempt: stream first, then non-streaming POST fallback."""
         # First attempt: stream accumulation to avoid long header wait timeouts
         try:
             tokens = []
@@ -65,6 +135,10 @@ class LocalLLMClient:
                 logger.debug("LLM stream completed: %d chars", len(content))
                 return content
         except Exception as stream_err:
+            # Re-raise transient stream failures so the retry loop can back off;
+            # otherwise fall through to a single non-streaming attempt.
+            if _is_retryable_error(stream_err):
+                raise
             logger.debug("Streaming chat attempt failed, trying direct POST: %s", stream_err)
 
         # Fallback to direct POST

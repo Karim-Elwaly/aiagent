@@ -61,6 +61,8 @@ from src.orchestrator.activities import (
     assemble_response,
     clean_assembled_solution,
 )
+from src.orchestrator import direct_checkpoint
+from src.core.resilience import get_profile, normalize_level, all_profiles
 from src.registry.auto_discover import register_all_tools
 from src.registry.mcp.mcp_adapter import mcp_tool_to_tool_spec
 from src.registry.mcp.mcp_client import MCPClient
@@ -84,6 +86,9 @@ class SolveRequest(BaseModel):
     query: str
     agent_id: str | None = None
     custom_dag: dict[str, Any] | None = None
+    # Outage tolerance for this run (brief|standard|extended|unlimited).
+    # None → fall back to settings.default_resilience.
+    resilience: str | None = None
 
 
 class SolveAsyncResponse(BaseModel):
@@ -254,6 +259,33 @@ async def lifespan(app: FastAPI):
     app.state.scheduler = cron_scheduler
     await cron_scheduler.start()
 
+    # Resume any in-process runs interrupted by a restart (direct engine only —
+    # Temporal resumes its own workflows automatically from event history).
+    if not app.state.temporal:
+        try:
+            resumable = direct_checkpoint.list_resumable()
+            if resumable:
+                logger.info(
+                    "Found %d interrupted direct workflow(s); resuming from checkpoints",
+                    len(resumable),
+                )
+            for cp in resumable:
+                w_id = cp.get("workflow_id")
+                if not w_id:
+                    continue
+                asyncio.create_task(
+                    run_direct_workflow(
+                        w_id,
+                        cp.get("query", ""),
+                        cp.get("agent_id", "") or "",
+                        cp.get("custom_dag"),
+                        cp.get("resilience"),
+                        True,  # resume
+                    )
+                )
+        except Exception as resume_err:
+            logger.warning("Failed to scan/resume direct checkpoints: %s", resume_err)
+
     logger.info("UAOS API ready at http://%s:%d", settings.api_host, settings.api_port)
 
     yield
@@ -339,17 +371,95 @@ except Exception as _dump_err:
 # ── Endpoints ────────────────────────────────────────────────────
 
 
+async def _execute_task_with_retries(
+    task_dict: dict[str, Any],
+    completed: dict[str, str],
+    agent_id: str,
+    profile,
+) -> dict[str, Any]:
+    """Run a task in the direct engine, retrying transient LLM outages.
+
+    ``execute_task`` returns a failed dict for deterministic errors but *raises*
+    (ApplicationError/TransientLLMError) for transient LLM faults so Temporal can
+    retry. The direct engine has no Temporal, so we apply the same resilience
+    budget here: retry with exponential backoff up to the profile's attempt cap,
+    then return a failed result so the run can degrade gracefully instead of
+    crashing the whole workflow.
+    """
+    task_id = task_dict.get("id", "t")
+    max_attempts = profile.max_attempts if profile.max_attempts > 0 else 1_000_000
+    interval = profile.initial_interval_seconds
+    for attempt in range(1, max_attempts + 1):
+        try:
+            return await execute_task(task_dict, completed, agent_id)
+        except Exception as exc:
+            err_type = getattr(exc, "type", "") or ""
+            is_transient = "TransientLLMError" in err_type or "TransientLLMError" in type(exc).__name__
+            if attempt >= max_attempts or not is_transient:
+                return {
+                    "task_id": task_id,
+                    "status": "failed",
+                    "output": "",
+                    "error": f"Task failed after {attempt} attempt(s): {exc}",
+                    "tool_calls_made": [],
+                    "execution_time_ms": 0,
+                }
+            logger.warning(
+                "Direct task '%s' transient failure (%s); retry %d/%d in %.1fs",
+                task_id,
+                exc,
+                attempt,
+                max_attempts if profile.max_attempts > 0 else 0,
+                interval,
+            )
+            await asyncio.sleep(interval)
+            interval = min(interval * profile.backoff_coefficient, profile.max_interval_seconds)
+    # Loop always returns; this satisfies type checkers.
+    return {
+        "task_id": task_id,
+        "status": "failed",
+        "output": "",
+        "error": "Task failed: retries exhausted",
+        "tool_calls_made": [],
+        "execution_time_ms": 0,
+    }
+
+
 async def run_direct_workflow(
     workflow_id: str,
     user_query: str,
     agent_id: str = "",
     custom_dag: dict[str, Any] | None = None,
+    resilience: str | None = None,
+    resume: bool = False,
 ) -> dict[str, Any]:
     """Execute a full UAOS workflow directly in-process without Temporal.
 
-    Provides high-reliability standalone execution with live event bus streaming.
+    Provides standalone execution with live event bus streaming, per-task
+    resilience retries, and disk checkpointing so a process restart can resume
+    an in-flight run from the last completed task.
     """
     bus = get_event_bus()
+    settings = app.state.settings if getattr(app.state, "settings", None) else get_settings()
+    level = normalize_level(resilience or getattr(settings, "default_resilience", "standard"))
+    profile = get_profile(level)
+
+    # Restore prior progress if resuming after a restart.
+    checkpoint = direct_checkpoint.load_checkpoint(workflow_id) if resume else None
+    resumed_completed: dict[str, str] = {}
+    resumed_dag: dict[str, Any] | None = None
+    if checkpoint:
+        resumed_completed = dict(checkpoint.get("completed") or {})
+        resumed_dag = checkpoint.get("dag")
+        level = normalize_level(checkpoint.get("resilience") or level)
+        profile = get_profile(level)
+        agent_id = agent_id or checkpoint.get("agent_id") or ""
+        logger.info(
+            "Resuming direct workflow %s from checkpoint (%d task(s) already completed)",
+            workflow_id,
+            len(resumed_completed),
+        )
+
     state = app.state.direct_workflows.setdefault(
         workflow_id,
         {
@@ -365,14 +475,33 @@ async def run_direct_workflow(
             "supervisor_evaluations": [],
             "result": None,
             "error": None,
+            "resilience": level,
         },
     )
+    state["resilience"] = level
+
+    def _persist_checkpoint(status: str, dag_dict: dict[str, Any] | None, completed: dict[str, str]) -> None:
+        """Write the run's resumable state to disk (best-effort)."""
+        direct_checkpoint.save_checkpoint({
+            "workflow_id": workflow_id,
+            "query": user_query,
+            "agent_id": agent_id,
+            "resilience": level,
+            "custom_dag": custom_dag,
+            "dag": dag_dict,
+            "completed": completed,
+            "task_statuses": state.get("task_statuses", {}),
+            "supervisor_evaluations": state.get("supervisor_evaluations", []),
+            "status": status,
+        })
 
     try:
         bus.publish(workflow_id, {"type": "workflow_started", "query": user_query})
 
-        # Phase 1: Planning
-        if custom_dag and custom_dag.get("tasks"):
+        # Phase 1: Planning (skip if resuming — reuse the checkpointed DAG)
+        if resumed_dag and resumed_dag.get("tasks"):
+            dag_dict = resumed_dag
+        elif custom_dag and custom_dag.get("tasks"):
             dag_dict = custom_dag
         else:
             dag_dict = await plan_tasks(user_query, agent_id)
@@ -381,6 +510,10 @@ async def run_direct_workflow(
         dag = TaskDAG.from_serializable(dag_dict)
         state["dag"] = dag_dict
         state["task_statuses"] = {t.id: "pending" for t in dag.tasks}
+        # Re-mark any tasks already completed in a prior (pre-restart) run.
+        for done_id in resumed_completed:
+            if done_id in state["task_statuses"]:
+                state["task_statuses"][done_id] = "completed"
 
         # Inject target path into tasks if detected in query
         target_path = extract_target_path(user_query)
@@ -402,12 +535,23 @@ async def run_direct_workflow(
             },
         )
 
-        completed: dict[str, str] = {}
+        completed: dict[str, str] = dict(resumed_completed)
+        failed_errors: dict[str, str] = {}
         execution_order = dag.topological_sort()
+
+        # Persist an initial checkpoint now that the DAG is fixed, so a restart
+        # before the first task still has the plan to resume from.
+        _persist_checkpoint(direct_checkpoint.STATUS_RUNNING, dag_dict, completed)
 
         # Phase 2: Execution
         for task in execution_order:
             task_id = task.id
+
+            # Skip tasks already completed in a prior run we're resuming.
+            if task_id in completed:
+                logger.info("Skipping already-completed task '%s' (resumed)", task_id)
+                continue
+
             task_dict = task.model_dump()
             task_dict["_workflow_id"] = workflow_id
             task_dict["_user_query"] = user_query
@@ -497,7 +641,7 @@ async def run_direct_workflow(
                 },
             )
 
-            result_dict = await execute_task(task_dict, completed, agent_id)
+            result_dict = await _execute_task_with_retries(task_dict, completed, agent_id, profile)
 
             if result_dict.get("status") == "completed":
                 task_output = result_dict.get("output", "")
@@ -521,7 +665,7 @@ async def run_direct_workflow(
                                 f"{task_dict.get('description', '')}\n\n"
                                 f"[SUPERVISOR EVALUATION FEEDBACK - PLEASE GATHER MORE INFO]: {feedback}"
                             )
-                            retry_result = await execute_task(task_dict, completed, agent_id)
+                            retry_result = await _execute_task_with_retries(task_dict, completed, agent_id, profile)
                             if retry_result.get("status") == "completed":
                                 task_output = retry_result.get("output", "")
                                 result_dict = retry_result
@@ -543,6 +687,7 @@ async def run_direct_workflow(
 
                 completed[task_id] = task_output
                 state["task_statuses"][task_id] = "completed"
+                _persist_checkpoint(direct_checkpoint.STATUS_RUNNING, dag_dict, completed)
                 bus.publish(
                     workflow_id,
                     {
@@ -556,6 +701,8 @@ async def run_direct_workflow(
                 )
             else:
                 state["task_statuses"][task_id] = "failed"
+                failed_errors[task_id] = result_dict.get("error", "Task execution failed")
+                _persist_checkpoint(direct_checkpoint.STATUS_RUNNING, dag_dict, completed)
                 bus.publish(
                     workflow_id,
                     {
@@ -564,6 +711,28 @@ async def run_direct_workflow(
                         "error": result_dict.get("error", "Task failed"),
                     },
                 )
+
+        # If nothing succeeded, surface the failure instead of assembling an
+        # empty (nonsense) report — mirrors the Temporal workflow's behavior.
+        if not completed:
+            err_response = (
+                "I was unable to complete any tasks for your request. "
+                f"Errors: {json.dumps(failed_errors)}"
+            )
+            workflow_result = {
+                "response": err_response,
+                "tasks_completed": 0,
+                "tasks_failed": sum(1 for s in state["task_statuses"].values() if s == "failed"),
+                "replans": 0,
+                "supervisor_evaluations": state["supervisor_evaluations"],
+            }
+            state["result"] = workflow_result
+            state["status"] = "failed"
+            state["error"] = err_response
+            direct_checkpoint.mark_status(workflow_id, direct_checkpoint.STATUS_FAILED)
+            bus.publish(workflow_id, {"type": "final_solution", "response": err_response})
+            bus.publish(workflow_id, {"type": "workflow_completed", "result": workflow_result})
+            return workflow_result
 
         # Phase 3: Assembly
         raw_solution = await assemble_response(user_query, dag_dict, completed)
@@ -577,6 +746,9 @@ async def run_direct_workflow(
         }
         state["result"] = workflow_result
         state["status"] = "completed"
+        # Run finished — mark the checkpoint done and drop it (no longer resumable).
+        _persist_checkpoint(direct_checkpoint.STATUS_COMPLETED, dag_dict, completed)
+        direct_checkpoint.delete_checkpoint(workflow_id)
 
         bus.publish(
             workflow_id,
@@ -606,6 +778,7 @@ async def run_direct_workflow(
         state["status"] = "failed"
         state["error"] = str(e)
         state["result"] = err_res
+        direct_checkpoint.mark_status(workflow_id, direct_checkpoint.STATUS_FAILED)
         bus.publish(
             workflow_id,
             {
@@ -628,16 +801,18 @@ async def solve(request: SolveRequest):
     4. Assemble and return the final response
     """
     workflow_id = f"uaos-{uuid4().hex[:12]}"
+    level = normalize_level(request.resilience or getattr(app.state.settings, "default_resilience", "standard"))
 
     if not app.state.temporal:
         logger.info(
-            "Solving (sync via Standalone Engine): workflow=%s, query=%s, agent_id=%s",
+            "Solving (sync via Standalone Engine): workflow=%s, query=%s, agent_id=%s, resilience=%s",
             workflow_id,
             request.query[:100],
             request.agent_id or "default",
+            level,
         )
         result = await run_direct_workflow(
-            workflow_id, request.query, request.agent_id or "", request.custom_dag
+            workflow_id, request.query, request.agent_id or "", request.custom_dag, level
         )
         return SolveResponse(
             workflow_id=workflow_id,
@@ -649,16 +824,15 @@ async def solve(request: SolveRequest):
         )
 
     logger.info(
-        "Solving (sync via Temporal): workflow=%s, query=%s, agent_id=%s",
+        "Solving (sync via Temporal): workflow=%s, query=%s, agent_id=%s, resilience=%s",
         workflow_id,
         request.query[:100],
         request.agent_id or "default",
+        level,
     )
 
     try:
-        workflow_args = [request.query, request.agent_id or ""]
-        if request.custom_dag:
-            workflow_args.append(request.custom_dag)
+        workflow_args = [request.query, request.agent_id or "", request.custom_dag, level]
 
         handle = await app.state.temporal.start_workflow(
             UAOSWorkflow.run,
@@ -690,18 +864,20 @@ async def solve_async(request: SolveRequest):
     Use GET /status/{workflow_id} to check progress.
     """
     workflow_id = f"uaos-{uuid4().hex[:12]}"
+    level = normalize_level(request.resilience or getattr(app.state.settings, "default_resilience", "standard"))
 
     if not app.state.temporal:
         logger.info(
-            "Solving (async via Standalone Engine): workflow=%s, query=%s, agent_id=%s, custom_dag=%s",
+            "Solving (async via Standalone Engine): workflow=%s, query=%s, agent_id=%s, custom_dag=%s, resilience=%s",
             workflow_id,
             request.query[:100],
             request.agent_id or "default",
             "yes" if request.custom_dag else "no",
+            level,
         )
         asyncio.create_task(
             run_direct_workflow(
-                workflow_id, request.query, request.agent_id or "", request.custom_dag
+                workflow_id, request.query, request.agent_id or "", request.custom_dag, level
             )
         )
         return SolveAsyncResponse(
@@ -710,17 +886,16 @@ async def solve_async(request: SolveRequest):
         )
 
     logger.info(
-        "Solving (async via Temporal): workflow=%s, query=%s, agent_id=%s, custom_dag=%s",
+        "Solving (async via Temporal): workflow=%s, query=%s, agent_id=%s, custom_dag=%s, resilience=%s",
         workflow_id,
         request.query[:100],
         request.agent_id or "default",
         "yes" if request.custom_dag else "no",
+        level,
     )
 
     try:
-        workflow_args = [request.query, request.agent_id or ""]
-        if request.custom_dag:
-            workflow_args.append(request.custom_dag)
+        workflow_args = [request.query, request.agent_id or "", request.custom_dag, level]
 
         await app.state.temporal.start_workflow(
             UAOSWorkflow.run,
@@ -737,6 +912,23 @@ async def solve_async(request: SolveRequest):
     except Exception as e:
         logger.error("Failed to start workflow: %s", e)
         raise HTTPException(500, f"Failed to start workflow: {e}")
+
+
+@app.get("/api/resilience")
+async def get_resilience_options():
+    """Return the available outage-tolerance levels for the UI selector."""
+    default = normalize_level(getattr(app.state.settings, "default_resilience", "standard"))
+    return {
+        "default": default,
+        "options": [
+            {
+                "level": p.level,
+                "label": p.label,
+                "approx_outage_seconds": p.approx_outage_seconds,
+            }
+            for p in all_profiles()
+        ],
+    }
 
 
 @app.get("/api/workflows/templates")

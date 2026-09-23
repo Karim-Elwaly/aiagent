@@ -1,12 +1,61 @@
 services:
-  # ── Temporal Local Dev Server (Server + Web UI) ────────────────
+  # ── PostgreSQL (Temporal persistent datastore) ─────────────────
+  # Durable storage for all workflow history. The named volume survives
+  # container/VM restarts, so in-flight investigations resume instead of
+  # being lost (which is what a dev-mode, volume-less server would do).
+  postgresql:
+    image: postgres:16-alpine
+    container_name: uaos-postgres
+    environment:
+      POSTGRES_USER: temporal
+      POSTGRES_PASSWORD: temporal
+      POSTGRES_DB: temporal
+    volumes:
+      - temporal-pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U temporal"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+    restart: unless-stopped
+
+  # ── Temporal Server (production auto-setup, Postgres-backed) ────
   temporal:
-    image: temporalio/temporal:latest
+    image: temporalio/auto-setup:1.25.2
     container_name: uaos-temporal
-    command: ["server", "start-dev", "--ip", "0.0.0.0", "--ui-port", "8233"]
+    depends_on:
+      postgresql:
+        condition: service_healthy
+    environment:
+      - DB=postgres12
+      - DB_PORT=5432
+      - POSTGRES_USER=temporal
+      - POSTGRES_PWD=temporal
+      - POSTGRES_SEEDS=postgresql
+      - DYNAMIC_CONFIG_FILE_PATH=config/dynamicconfig/development-sql.yaml
     ports:
       - "7234:7233"  # gRPC API (Host 7234 -> Container 7233)
-      - "8234:8233"  # Temporal Web UI (Host 8234 -> Container 8233)
+    volumes:
+      - ./dynamicconfig:/etc/temporal/config/dynamicconfig
+    healthcheck:
+      test: ["CMD", "tctl", "--address", "temporal:7233", "cluster", "health"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+    restart: unless-stopped
+
+  # ── Temporal Web UI (separate service; auto-setup has no bundled UI) ──
+  temporal-ui:
+    image: temporalio/ui:2.31.2
+    container_name: uaos-temporal-ui
+    depends_on:
+      temporal:
+        condition: service_started
+    environment:
+      - TEMPORAL_ADDRESS=temporal:7233
+      - TEMPORAL_CORS_ORIGINS=http://localhost:8234
+    ports:
+      - "8234:8080"  # Temporal Web UI
     restart: unless-stopped
 
   # ── SearXNG (Self-Hosted Private Search Backend) ───────────────
@@ -34,7 +83,8 @@ services:
     extra_hosts:
       - "host.docker.internal:host-gateway"
     depends_on:
-      - temporal
+      temporal:
+        condition: service_healthy
     restart: unless-stopped
 
   # ── UAOS Temporal Worker Runner ────────────────────────────────
@@ -51,5 +101,10 @@ services:
     extra_hosts:
       - "host.docker.internal:host-gateway"
     depends_on:
-      - temporal
+      temporal:
+        condition: service_healthy
     restart: unless-stopped
+
+volumes:
+  temporal-pgdata:
+

@@ -281,6 +281,7 @@ document.addEventListener("DOMContentLoaded", () => {
   fetchAgents();
   updateSchedulesBadge();
   fetchWorkflowTemplates();
+  fetchResilienceOptions();
   setInterval(fetchHealth, 10000);
 
   // 2. Preset Queries
@@ -291,6 +292,29 @@ document.addEventListener("DOMContentLoaded", () => {
       promptInput.focus();
     });
   });
+
+  // Populate the outage-tolerance (resilience) selector from the backend.
+  async function fetchResilienceOptions() {
+    const sel = document.getElementById("resilience-selector");
+    if (!sel) return;
+    try {
+      const res = await fetch("/api/resilience");
+      if (!res.ok) return;
+      const data = await res.json();
+      const options = data.options || [];
+      const defaultLevel = data.default || "standard";
+      sel.innerHTML = "";
+      options.forEach((opt) => {
+        const el = document.createElement("option");
+        el.value = opt.level;
+        el.textContent = opt.label || opt.level;
+        if (opt.level === defaultLevel) el.selected = true;
+        sel.appendChild(el);
+      });
+    } catch (_) {
+      // Leave the static "Default" option in place if the fetch fails.
+    }
+  }
 
   // 3. Problem Submission
   solveBtn.addEventListener("click", async () => {
@@ -306,6 +330,8 @@ document.addEventListener("DOMContentLoaded", () => {
     const isAsync = modeAsyncEl ? modeAsyncEl.checked : true;
     const agentSelectorEl = document.getElementById("agent-selector");
     const selectedAgentId = agentSelectorEl ? agentSelectorEl.value : "";
+    const resilienceEl = document.getElementById("resilience-selector");
+    const selectedResilience = resilienceEl ? resilienceEl.value : null;
     const customDagPayload = (isCustomWorkflowMode && activeCustomDag && activeCustomDag.tasks && activeCustomDag.tasks.length > 0)
       ? { ...activeCustomDag, goal: query }
       : null;
@@ -313,6 +339,7 @@ document.addEventListener("DOMContentLoaded", () => {
       query,
       agent_id: selectedAgentId || null,
       custom_dag: customDagPayload,
+      resilience: selectedResilience || null,
     };
 
     try {

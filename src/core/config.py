@@ -42,6 +42,11 @@ class Settings(BaseSettings):
     planner_max_retries: int = 3  # retries on JSON parse failure
     planner_max_tasks: int = 12  # maximum tasks in a single DAG
 
+    # ── Durability / Resilience ──────────────────────────
+    # Default outage tolerance when a request doesn't specify one.
+    # One of: brief | standard | extended | unlimited (see src/core/resilience.py)
+    default_resilience: str = "standard"
+
     # ── API Configuration ────────────────────────────────
     api_host: str = "0.0.0.0"
     api_port: int = 8000

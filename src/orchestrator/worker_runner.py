@@ -12,6 +12,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
+from datetime import timedelta
 
 from temporalio.client import Client
 from temporalio.worker import Worker
@@ -79,6 +80,11 @@ async def main() -> None:
             notify_approval_required,
             evaluate_task_output,
         ],
+        # On SIGTERM/SIGINT (container stop, redeploy), let in-flight activities
+        # finish a final heartbeat/checkpoint before the process exits so Temporal
+        # can resume them cleanly on the next worker rather than waiting for the
+        # heartbeat timeout to lapse.
+        graceful_shutdown_timeout=timedelta(seconds=30),
     )
 
     logger.info("UAOS Worker is running. Press Ctrl+C to stop.")

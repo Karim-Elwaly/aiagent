@@ -1,6 +1,6 @@
 {
   "llm_base_url": "http://10.7.75.103:1234/v1",
-  "llm_model": "openai/gpt-oss-20b",
+  "llm_model": "google/gemma-4-e4b",
   "llm_temperature": 0.1,
   "llm_max_tokens": 4096,
   "llm_timeout_seconds": 300.0,

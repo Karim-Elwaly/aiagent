@@ -219,21 +219,25 @@ class UniversalWorkerAgent:
                         self.llm.chat(active_messages),
                         timeout=task.timeout_seconds,
                     )
-            except TimeoutError:
+            except TimeoutError as e:
                 elapsed = int((time.monotonic() - start_time) * 1000)
                 logger.warning(
-                    "Task '%s' LLM call timed out at iteration %d",
+                    "Task '%s' LLM call timed out at iteration %d after %dms; "
+                    "raising for retry",
                     task.id,
                     iteration,
+                    elapsed,
                 )
-                return TaskResult(
-                    task_id=task.id,
-                    status=TaskStatus.FAILED,
-                    output="",
-                    error=f"LLM call timed out after {task.timeout_seconds}s",
-                    tool_calls_made=tool_calls_made,
-                    execution_time_ms=elapsed,
-                )
+                # A timeout usually means the model is hung, overloaded, or
+                # restarting. Raise (don't return FAILED) so the outer retry
+                # layer — Temporal from the last heartbeat, or the direct
+                # engine's per-task retry — rides through the outage instead of
+                # failing the whole task.
+                raise TransientLLMError(
+                    f"LLM call timed out after {task.timeout_seconds}s "
+                    f"(task {task.id}, iteration {iteration})",
+                    original_error=e,
+                ) from e
             except Exception as e:
                 detail = str(e) or "no detail returned by the inference server"
                 prompt_chars = sum(len(m.get("content", "")) for m in active_messages)
