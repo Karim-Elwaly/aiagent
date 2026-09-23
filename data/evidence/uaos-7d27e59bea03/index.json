@@ -1,0 +1,139 @@
+{
+  "run_id": "uaos-7d27e59bea03",
+  "total_events": 32,
+  "events_by_source_type": {
+    "azure_ad_signins_json": 11,
+    "cisco_asa_syslog": 21
+  },
+  "events_by_source_file": {
+    "azure_ad_signins.json": 11,
+    "cisco_asa_vpn.log": 21
+  },
+  "events_by_status": {
+    "success": 21,
+    "failure": 11
+  },
+  "event_inventory": [
+    {
+      "action": "signin",
+      "event_code": "50126",
+      "status": "failure",
+      "count": 1,
+      "example_ids": [
+        "EV-000004"
+      ]
+    },
+    {
+      "action": "connection_built",
+      "event_code": "%ASA-6-302013",
+      "status": "success",
+      "count": 1,
+      "example_ids": [
+        "EV-000014"
+      ]
+    },
+    {
+      "action": "signin",
+      "event_code": "500121",
+      "status": "failure",
+      "count": 4,
+      "example_ids": [
+        "EV-000006",
+        "EV-000007",
+        "EV-000008"
+      ]
+    },
+    {
+      "action": "signin",
+      "event_code": "0",
+      "status": "success",
+      "count": 6,
+      "example_ids": [
+        "EV-000001",
+        "EV-000002",
+        "EV-000003"
+      ]
+    },
+    {
+      "action": "vpn_auth",
+      "event_code": "%ASA-6-113015",
+      "status": "failure",
+      "count": 6,
+      "example_ids": [
+        "EV-000015",
+        "EV-000022",
+        "EV-000023"
+      ]
+    },
+    {
+      "action": "vpn_auth",
+      "event_code": "%ASA-6-113039",
+      "status": "success",
+      "count": 7,
+      "example_ids": [
+        "EV-000012",
+        "EV-000016",
+        "EV-000018"
+      ]
+    },
+    {
+      "action": "vpn_session",
+      "event_code": "%ASA-4-722051",
+      "status": "success",
+      "count": 7,
+      "example_ids": [
+        "EV-000013",
+        "EV-000017",
+        "EV-000019"
+      ]
+    }
+  ],
+  "top_flows_by_bytes": [],
+  "time_span_by_source_file": {
+    "azure_ad_signins.json": {
+      "earliest": "2026-09-14T08:30:00+00:00",
+      "latest": "2026-09-14T09:40:02+00:00"
+    },
+    "cisco_asa_vpn.log": {
+      "earliest": "2026-09-14T11:45:00",
+      "latest": "2026-09-14T12:33:20"
+    }
+  },
+  "distinct_hosts": [],
+  "distinct_users": [
+    "admin",
+    "administrator",
+    "alice.smith@enterprise.com",
+    "alice.wang",
+    "backup",
+    "cfo.executive@enterprise.com",
+    "charlie.brown",
+    "david.clark",
+    "john.doe",
+    "marketing.lead@enterprise.com",
+    "sarah.jenkins",
+    "senior.engineer@enterprise.com",
+    "service_adm",
+    "sysadmin@enterprise.com",
+    "vpnuser"
+  ],
+  "distinct_source_ips": [
+    "102.164.12.89",
+    "172.56.21.44",
+    "172.56.21.8",
+    "185.196.220.14",
+    "185.220.101.5",
+    "194.165.16.104",
+    "194.26.29.110",
+    "198.51.100.15",
+    "198.51.100.25",
+    "198.51.100.30",
+    "198.51.100.77",
+    "203.0.113.50"
+  ],
+  "distinct_destination_ips": [
+    "10.200.1.15"
+  ],
+  "earliest_timestamp": "2026-09-14T08:30:00+00:00",
+  "latest_timestamp": "2026-09-14T12:33:20"
+}

@@ -1,0 +1,148 @@
+{
+  "run_id": "uaos-6753096deb0c",
+  "total_events": 55,
+  "events_by_source_type": {
+    "cisco_asa_syslog": 30,
+    "palo_alto_traffic_csv": 6,
+    "generic_csv": 19
+  },
+  "events_by_source_file": {
+    "cisco_asa_firewall.log": 30,
+    "fortigate_utm_anomaly.log": 6,
+    "pfsense_filterlog.csv": 19
+  },
+  "events_by_status": {
+    "success": 3,
+    "info": 29,
+    "failure": 4
+  },
+  "event_inventory": [
+    {
+      "action": "vpn_auth",
+      "event_code": "%ASA-2-106001",
+      "status": "info",
+      "count": 1,
+      "example_ids": [
+        "EV-000017"
+      ]
+    },
+    {
+      "action": "vpn_auth",
+      "event_code": "%ASA-6-302013",
+      "status": "success",
+      "count": 3,
+      "example_ids": [
+        "EV-000001",
+        "EV-000002",
+        "EV-000005"
+      ]
+    },
+    {
+      "action": "vpn_auth",
+      "event_code": "%ASA-6-113015",
+      "status": "failure",
+      "count": 4,
+      "example_ids": [
+        "EV-000023",
+        "EV-000025",
+        "EV-000027"
+      ]
+    },
+    {
+      "action": "pass",
+      "event_code": "",
+      "status": "",
+      "count": 4,
+      "example_ids": [
+        "EV-000037",
+        "EV-000038",
+        "EV-000039"
+      ]
+    },
+    {
+      "action": "vpn_auth",
+      "event_code": "%ASA-3-201011",
+      "status": "info",
+      "count": 5,
+      "example_ids": [
+        "EV-000018",
+        "EV-000019",
+        "EV-000020"
+      ]
+    },
+    {
+      "action": "",
+      "event_code": "",
+      "status": "info",
+      "count": 6,
+      "example_ids": [
+        "EV-000031",
+        "EV-000032",
+        "EV-000033"
+      ]
+    },
+    {
+      "action": "vpn_auth",
+      "event_code": "%ASA-6-302014",
+      "status": "info",
+      "count": 7,
+      "example_ids": [
+        "EV-000003",
+        "EV-000004",
+        "EV-000006"
+      ]
+    },
+    {
+      "action": "vpn_auth",
+      "event_code": "%ASA-4-106023",
+      "status": "info",
+      "count": 10,
+      "example_ids": [
+        "EV-000007",
+        "EV-000008",
+        "EV-000009"
+      ]
+    },
+    {
+      "action": "block",
+      "event_code": "",
+      "status": "",
+      "count": 15,
+      "example_ids": [
+        "EV-000041",
+        "EV-000042",
+        "EV-000043"
+      ]
+    }
+  ],
+  "top_flows_by_bytes": [],
+  "time_span_by_source_file": {
+    "cisco_asa_firewall.log": {
+      "earliest": "2026-09-14T11:30:12",
+      "latest": "2026-09-14T12:15:08"
+    },
+    "fortigate_utm_anomaly.log": {
+      "earliest": "15240 > threshold 1000",
+      "latest": "18450 > threshold 1000"
+    }
+  },
+  "distinct_hosts": [],
+  "distinct_users": [
+    "admin",
+    "deploy",
+    "root",
+    "ubnt"
+  ],
+  "distinct_source_ips": [
+    "198.51.100.220",
+    "198.51.100.75",
+    "203.0.113.88",
+    "203.0.113.89",
+    "203.0.113.90",
+    "203.0.113.91",
+    "203.0.113.92"
+  ],
+  "distinct_destination_ips": [],
+  "earliest_timestamp": "15240 > threshold 1000",
+  "latest_timestamp": "2026-09-14T12:15:08"
+}

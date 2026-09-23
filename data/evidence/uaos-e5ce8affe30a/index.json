@@ -1,0 +1,235 @@
+{
+  "run_id": "uaos-e5ce8affe30a",
+  "total_events": 55,
+  "events_by_source_type": {
+    "cisco_asa_syslog": 30,
+    "fortigate_kvp": 6,
+    "generic_csv": 19
+  },
+  "events_by_source_file": {
+    "cisco_asa_firewall.log": 30,
+    "fortigate_utm_anomaly.log": 6,
+    "pfsense_filterlog.csv": 19
+  },
+  "events_by_status": {
+    "success": 5,
+    "info": 7,
+    "failure": 24
+  },
+  "event_inventory": [
+    {
+      "action": "connection_denied",
+      "event_code": "%ASA-2-106001",
+      "status": "failure",
+      "count": 1,
+      "example_ids": [
+        "EV-000017"
+      ]
+    },
+    {
+      "action": "deny",
+      "event_code": "forward",
+      "status": "failure",
+      "count": 1,
+      "example_ids": [
+        "EV-000033"
+      ]
+    },
+    {
+      "action": "dropped",
+      "event_code": "ips",
+      "status": "failure",
+      "count": 1,
+      "example_ids": [
+        "EV-000034"
+      ]
+    },
+    {
+      "action": "accept",
+      "event_code": "forward",
+      "status": "success",
+      "count": 2,
+      "example_ids": [
+        "EV-000031",
+        "EV-000032"
+      ]
+    },
+    {
+      "action": "clear_session",
+      "event_code": "anomaly",
+      "status": "failure",
+      "count": 2,
+      "example_ids": [
+        "EV-000035",
+        "EV-000036"
+      ]
+    },
+    {
+      "action": "connection_built",
+      "event_code": "%ASA-6-302013",
+      "status": "success",
+      "count": 3,
+      "example_ids": [
+        "EV-000001",
+        "EV-000002",
+        "EV-000005"
+      ]
+    },
+    {
+      "action": "vpn_auth",
+      "event_code": "%ASA-6-113015",
+      "status": "failure",
+      "count": 4,
+      "example_ids": [
+        "EV-000023",
+        "EV-000025",
+        "EV-000027"
+      ]
+    },
+    {
+      "action": "pass",
+      "event_code": "",
+      "status": "",
+      "count": 4,
+      "example_ids": [
+        "EV-000037",
+        "EV-000038",
+        "EV-000039"
+      ]
+    },
+    {
+      "action": "connection_limit_exceeded",
+      "event_code": "%ASA-3-201011",
+      "status": "failure",
+      "count": 5,
+      "example_ids": [
+        "EV-000018",
+        "EV-000019",
+        "EV-000020"
+      ]
+    },
+    {
+      "action": "connection_teardown",
+      "event_code": "%ASA-6-302014",
+      "status": "info",
+      "count": 7,
+      "example_ids": [
+        "EV-000003",
+        "EV-000004",
+        "EV-000006"
+      ]
+    },
+    {
+      "action": "acl_deny",
+      "event_code": "%ASA-4-106023",
+      "status": "failure",
+      "count": 10,
+      "example_ids": [
+        "EV-000007",
+        "EV-000008",
+        "EV-000009"
+      ]
+    },
+    {
+      "action": "block",
+      "event_code": "",
+      "status": "",
+      "count": 15,
+      "example_ids": [
+        "EV-000041",
+        "EV-000042",
+        "EV-000043"
+      ]
+    }
+  ],
+  "top_flows_by_bytes": [
+    {
+      "src_ip": "172.16.10.155",
+      "dst_ip": "13.107.42.14",
+      "dst_port": "443",
+      "sessions": 1,
+      "bytes_sent": 18200,
+      "bytes_received": 73800,
+      "app_id": "HTTPS",
+      "user": "",
+      "rule": "",
+      "geo": "United States",
+      "example_ids": [
+        "EV-000032"
+      ]
+    },
+    {
+      "src_ip": "172.16.10.150",
+      "dst_ip": "104.244.42.1",
+      "dst_port": "443",
+      "sessions": 1,
+      "bytes_sent": 4890,
+      "bytes_received": 22450,
+      "app_id": "HTTPS",
+      "user": "",
+      "rule": "",
+      "geo": "United States",
+      "example_ids": [
+        "EV-000031"
+      ]
+    }
+  ],
+  "time_span_by_source_file": {
+    "cisco_asa_firewall.log": {
+      "earliest": "2026-09-14T11:30:12",
+      "latest": "2026-09-14T12:15:08"
+    },
+    "fortigate_utm_anomaly.log": {
+      "earliest": "2026-09-15T09:15:32+00:00",
+      "latest": "2026-09-15T10:10:35+00:00"
+    }
+  },
+  "distinct_hosts": [],
+  "distinct_users": [
+    "admin",
+    "deploy",
+    "root",
+    "ubnt"
+  ],
+  "distinct_source_ips": [
+    "0.0.0.0",
+    "172.16.10.150",
+    "172.16.10.155",
+    "192.168.1.100",
+    "192.168.1.105",
+    "192.168.1.110",
+    "198.51.100.15",
+    "198.51.100.220",
+    "198.51.100.50",
+    "198.51.100.75",
+    "198.51.100.99",
+    "203.0.113.88",
+    "203.0.113.89",
+    "203.0.113.90",
+    "203.0.113.91",
+    "203.0.113.92"
+  ],
+  "distinct_destination_ips": [
+    "10.10.10.20",
+    "10.10.10.25",
+    "10.10.10.5",
+    "10.10.10.85",
+    "10.10.10.90",
+    "10.10.10.99",
+    "104.244.42.1",
+    "13.107.42.14",
+    "142.250.190.36",
+    "172.16.10.5",
+    "172.16.10.80",
+    "192.168.1.1",
+    "192.168.1.2",
+    "192.168.1.200",
+    "192.168.1.3",
+    "192.168.1.4",
+    "192.168.1.5",
+    "192.168.1.50",
+    "198.51.100.10"
+  ],
+  "earliest_timestamp": "2026-09-14T11:30:12",
+  "latest_timestamp": "2026-09-15T10:10:35+00:00"
+}

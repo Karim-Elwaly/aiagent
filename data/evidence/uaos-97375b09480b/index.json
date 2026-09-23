@@ -1,0 +1,81 @@
+{
+  "run_id": "uaos-97375b09480b",
+  "total_events": 57,
+  "events_by_source_type": {
+    "generic_syslog": 24,
+    "palo_alto_traffic_csv": 9,
+    "unmapped": 24
+  },
+  "events_by_source_file": {
+    "bind9_dns_queries.log": 24,
+    "paloalto_traffic.log": 9,
+    "zeek_dns.tsv": 24
+  },
+  "events_by_status": {
+    "info": 9
+  },
+  "event_inventory": [
+    {
+      "action": "allow",
+      "event_code": "",
+      "count": 9,
+      "example_ids": [
+        "EV-000025",
+        "EV-000026",
+        "EV-000027"
+      ]
+    },
+    {
+      "action": "14",
+      "event_code": "",
+      "count": 24,
+      "example_ids": [
+        "EV-000001",
+        "EV-000002",
+        "EV-000003"
+      ]
+    }
+  ],
+  "time_span_by_source_file": {
+    "paloalto_traffic.log": {
+      "earliest": "2026-09-14T11:00:15",
+      "latest": "2026-09-14T12:35:40"
+    }
+  },
+  "distinct_hosts": [
+    "PA-5220"
+  ],
+  "distinct_users": [
+    "domain\\asmith",
+    "domain\\jdoe",
+    "domain\\mfinance",
+    "domain\\svc-backup"
+  ],
+  "distinct_source_ips": [
+    "10.20.10.12",
+    "10.20.10.142",
+    "10.20.10.45",
+    "10.20.10.50",
+    "10.20.10.88",
+    "192.168.10.142",
+    "192.168.10.15",
+    "192.168.10.18",
+    "192.168.10.205",
+    "192.168.10.22",
+    "192.168.10.35",
+    "192.168.10.42",
+    "192.168.10.5",
+    "192.168.10.60",
+    "192.168.10.88"
+  ],
+  "distinct_destination_ips": [
+    "10.0.0.2",
+    "13.107.42.14",
+    "142.250.190.36",
+    "185.220.101.5",
+    "198.51.100.240",
+    "52.216.148.10"
+  ],
+  "earliest_timestamp": "2026-09-14T11:00:15",
+  "latest_timestamp": "2026-09-14T12:35:40"
+}

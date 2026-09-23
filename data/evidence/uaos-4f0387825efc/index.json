@@ -1,0 +1,131 @@
+{
+  "run_id": "uaos-4f0387825efc",
+  "total_events": 95,
+  "events_by_source_type": {
+    "k8s_api_audit_json": 7,
+    "generic_syslog": 88
+  },
+  "events_by_source_file": {
+    "k8s_api_audit.json": 7,
+    "linux_audit.log": 13,
+    "linux_auth.log": 40,
+    "linux_dmesg_syslog.log": 35
+  },
+  "events_by_status": {
+    "success": 12
+  },
+  "event_inventory": [
+    {
+      "action": "get",
+      "event_code": "200",
+      "status": "success",
+      "count": 1,
+      "example_ids": [
+        "EV-000001"
+      ]
+    },
+    {
+      "action": "patch",
+      "event_code": "200",
+      "status": "success",
+      "count": 1,
+      "example_ids": [
+        "EV-000002"
+      ]
+    },
+    {
+      "action": "create",
+      "event_code": "201",
+      "status": "success",
+      "count": 2,
+      "example_ids": [
+        "EV-000005",
+        "EV-000006"
+      ]
+    },
+    {
+      "action": "Sep",
+      "event_code": "",
+      "status": "success",
+      "count": 2,
+      "example_ids": [
+        "EV-000027",
+        "EV-000053"
+      ]
+    },
+    {
+      "action": "list",
+      "event_code": "200",
+      "status": "success",
+      "count": 3,
+      "example_ids": [
+        "EV-000003",
+        "EV-000004",
+        "EV-000007"
+      ]
+    },
+    {
+      "action": "type",
+      "event_code": "",
+      "status": "success",
+      "count": 3,
+      "example_ids": [
+        "EV-000008",
+        "EV-000011",
+        "EV-000016"
+      ]
+    },
+    {
+      "action": "type",
+      "event_code": "",
+      "status": "",
+      "count": 10,
+      "example_ids": [
+        "EV-000009",
+        "EV-000010",
+        "EV-000012"
+      ]
+    },
+    {
+      "action": "Sep",
+      "event_code": "",
+      "status": "",
+      "count": 38,
+      "example_ids": [
+        "EV-000021",
+        "EV-000022",
+        "EV-000023"
+      ]
+    }
+  ],
+  "top_flows_by_bytes": [],
+  "time_span_by_source_file": {
+    "k8s_api_audit.json": {
+      "earliest": "2026-09-14T08:10:15.102384+00:00",
+      "latest": "2026-09-14T08:53:40.119280+00:00"
+    }
+  },
+  "distinct_hosts": [],
+  "distinct_users": [
+    "NOT",
+    "deploy",
+    "deploy.",
+    "kubernetes-admin",
+    "sysadmin",
+    "sysadmin.",
+    "system:kube-controller-manager",
+    "system:node:k8s-worker-node-01",
+    "system:serviceaccount:frontend-apps:webapp-sa",
+    "user"
+  ],
+  "distinct_source_ips": [
+    "10.0.0.10",
+    "10.0.4.15",
+    "10.0.4.21",
+    "10.244.1.45",
+    "127.0.0.1"
+  ],
+  "distinct_destination_ips": [],
+  "earliest_timestamp": "2026-09-14T08:10:15.102384+00:00",
+  "latest_timestamp": "2026-09-14T08:53:40.119280+00:00"
+}

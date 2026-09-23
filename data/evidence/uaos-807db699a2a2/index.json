@@ -1,0 +1,305 @@
+{
+  "run_id": "uaos-807db699a2a2",
+  "total_events": 88,
+  "events_by_source_type": {
+    "email_gateway_syslog": 60,
+    "palo_alto_traffic_csv": 12,
+    "sysmon_xml": 4,
+    "windows_security_evtx": 12
+  },
+  "events_by_source_file": {
+    "email_gateway.log": 60,
+    "firewall_traffic.log": 12,
+    "sysmon_endpoint.xml": 4,
+    "windows_endpoint.xml": 12
+  },
+  "events_by_status": {
+    "info": 16,
+    "success": 8
+  },
+  "event_inventory": [
+    {
+      "action": "process_access",
+      "event_code": "10",
+      "status": "",
+      "count": 1,
+      "example_ids": [
+        "EV-000076"
+      ]
+    },
+    {
+      "action": "explicit_credential_logon",
+      "event_code": "4648",
+      "status": "success",
+      "count": 1,
+      "example_ids": [
+        "EV-000082"
+      ]
+    },
+    {
+      "action": "privilege_assigned",
+      "event_code": "4672",
+      "status": "success",
+      "count": 1,
+      "example_ids": [
+        "EV-000084"
+      ]
+    },
+    {
+      "action": "service_installed",
+      "event_code": "7045",
+      "status": "success",
+      "count": 1,
+      "example_ids": [
+        "EV-000085"
+      ]
+    },
+    {
+      "action": "account_created",
+      "event_code": "4720",
+      "status": "success",
+      "count": 1,
+      "example_ids": [
+        "EV-000086"
+      ]
+    },
+    {
+      "action": "group_member_added",
+      "event_code": "4732",
+      "status": "success",
+      "count": 1,
+      "example_ids": [
+        "EV-000087"
+      ]
+    },
+    {
+      "action": "logoff",
+      "event_code": "4634",
+      "status": "info",
+      "count": 1,
+      "example_ids": [
+        "EV-000088"
+      ]
+    },
+    {
+      "action": "process_create",
+      "event_code": "1",
+      "status": "",
+      "count": 3,
+      "example_ids": [
+        "EV-000073",
+        "EV-000074",
+        "EV-000075"
+      ]
+    },
+    {
+      "action": "logon",
+      "event_code": "4624",
+      "status": "success",
+      "count": 3,
+      "example_ids": [
+        "EV-000077",
+        "EV-000078",
+        "EV-000083"
+      ]
+    },
+    {
+      "action": "process_create",
+      "event_code": "4688",
+      "status": "info",
+      "count": 3,
+      "example_ids": [
+        "EV-000079",
+        "EV-000080",
+        "EV-000081"
+      ]
+    },
+    {
+      "action": "allow",
+      "event_code": "",
+      "status": "info",
+      "count": 12,
+      "example_ids": [
+        "EV-000061",
+        "EV-000062",
+        "EV-000063"
+      ]
+    },
+    {
+      "action": "email",
+      "event_code": "",
+      "status": "",
+      "count": 60,
+      "example_ids": [
+        "EV-000001",
+        "EV-000002",
+        "EV-000003"
+      ]
+    }
+  ],
+  "top_flows_by_bytes": [
+    {
+      "src_ip": "10.20.10.45",
+      "dst_ip": "198.51.100.240",
+      "dst_port": "443",
+      "sessions": 1,
+      "bytes_sent": 451200000,
+      "bytes_received": 1691200,
+      "app_id": "ssl",
+      "user": "CONTOSO\\jdoe",
+      "rule": "Outbound-Web-Allow",
+      "geo": "",
+      "example_ids": [
+        "EV-000072"
+      ]
+    },
+    {
+      "src_ip": "10.20.10.62",
+      "dst_ip": "13.107.136.9",
+      "dst_port": "443",
+      "sessions": 1,
+      "bytes_sent": 350000000,
+      "bytes_received": 35000000,
+      "app_id": "ms-onedrive",
+      "user": "CONTOSO\\mjones",
+      "rule": "Outbound-Web-Allow",
+      "geo": "",
+      "example_ids": [
+        "EV-000064"
+      ]
+    },
+    {
+      "src_ip": "10.20.10.45",
+      "dst_ip": "185.220.101.45",
+      "dst_port": "80",
+      "sessions": 1,
+      "bytes_sent": 1420,
+      "bytes_received": 541470,
+      "app_id": "web-browsing",
+      "user": "CONTOSO\\jdoe",
+      "rule": "Outbound-Web-Allow",
+      "geo": "",
+      "example_ids": [
+        "EV-000065"
+      ]
+    },
+    {
+      "src_ip": "10.20.10.62",
+      "dst_ip": "13.107.42.14",
+      "dst_port": "443",
+      "sessions": 1,
+      "bytes_sent": 18200,
+      "bytes_received": 73800,
+      "app_id": "ms-office365",
+      "user": "CONTOSO\\mjones",
+      "rule": "Outbound-Web-Allow",
+      "geo": "",
+      "example_ids": [
+        "EV-000062"
+      ]
+    },
+    {
+      "src_ip": "10.20.10.50",
+      "dst_ip": "151.101.65.140",
+      "dst_port": "80",
+      "sessions": 1,
+      "bytes_sent": 4200,
+      "bytes_received": 30000,
+      "app_id": "web-browsing",
+      "user": "CONTOSO\\asmith",
+      "rule": "Outbound-Web-Allow",
+      "geo": "",
+      "example_ids": [
+        "EV-000063"
+      ]
+    },
+    {
+      "src_ip": "10.20.10.45",
+      "dst_ip": "142.250.190.36",
+      "dst_port": "443",
+      "sessions": 1,
+      "bytes_sent": 3820,
+      "bytes_received": 11000,
+      "app_id": "ssl",
+      "user": "CONTOSO\\jdoe",
+      "rule": "Outbound-Web-Allow",
+      "geo": "",
+      "example_ids": [
+        "EV-000061"
+      ]
+    },
+    {
+      "src_ip": "10.20.10.45",
+      "dst_ip": "185.220.101.45",
+      "dst_port": "8443",
+      "sessions": 6,
+      "bytes_sent": 2286,
+      "bytes_received": 844,
+      "app_id": "unknown-tcp",
+      "user": "CONTOSO\\jdoe",
+      "rule": "Outbound-Web-Allow",
+      "geo": "",
+      "example_ids": [
+        "EV-000066",
+        "EV-000067",
+        "EV-000068"
+      ]
+    }
+  ],
+  "time_span_by_source_file": {
+    "firewall_traffic.log": {
+      "earliest": "2026-09-14T08:12:15",
+      "latest": "2026-09-14T10:32:45"
+    },
+    "sysmon_endpoint.xml": {
+      "earliest": "2026-09-14T08:02:10.118000",
+      "latest": "2026-09-14T10:20:14.298000"
+    },
+    "windows_endpoint.xml": {
+      "earliest": "2026-09-14T08:00:15.118290+00:00",
+      "latest": "2026-09-14T10:35:10.892104+00:00"
+    }
+  },
+  "distinct_hosts": [
+    "DC01.corp.contoso.com",
+    "WKSTN-FIN-04.corp.contoso.com"
+  ],
+  "distinct_users": [
+    "Administrators",
+    "CONTOSO\\asmith",
+    "CONTOSO\\jdoe",
+    "CONTOSO\\mjones",
+    "NT AUTHORITY\\LOCAL SERVICE",
+    "NT AUTHORITY\\SYSTEM",
+    "SYSTEM",
+    "da_admin",
+    "jdoe",
+    "jdoe@contoso.com",
+    "procurement@contoso.com",
+    "staff-all@contoso.com",
+    "svc_backup_admin"
+  ],
+  "distinct_source_ips": [
+    "-",
+    "10.20.10.10",
+    "10.20.10.25",
+    "10.20.10.45",
+    "10.20.10.50",
+    "10.20.10.62",
+    "127.0.0.1",
+    "198.51.100.82",
+    "203.0.113.119",
+    "209.85.220.41",
+    "40.107.22.84"
+  ],
+  "distinct_destination_ips": [
+    "13.107.136.9",
+    "13.107.42.14",
+    "142.250.190.36",
+    "151.101.65.140",
+    "185.220.101.45",
+    "198.51.100.240"
+  ],
+  "earliest_timestamp": "2026-09-14T08:00:15.118290+00:00",
+  "latest_timestamp": "2026-09-14T10:35:10.892104+00:00"
+}

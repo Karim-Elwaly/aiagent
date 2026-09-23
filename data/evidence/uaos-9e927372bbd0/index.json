@@ -1,0 +1,214 @@
+{
+  "run_id": "uaos-9e927372bbd0",
+  "total_events": 57,
+  "events_by_source_type": {
+    "bind9_querylog": 24,
+    "palo_alto_traffic_csv": 9,
+    "zeek_dns_tsv": 24
+  },
+  "events_by_source_file": {
+    "bind9_dns_queries.log": 24,
+    "paloalto_traffic.log": 9,
+    "zeek_dns.tsv": 24
+  },
+  "events_by_status": {
+    "info": 33,
+    "success": 17,
+    "failure": 7
+  },
+  "event_inventory": [
+    {
+      "action": "dns_query",
+      "event_code": "AAAA",
+      "status": "info",
+      "count": 1,
+      "example_ids": [
+        "EV-000003"
+      ]
+    },
+    {
+      "action": "dns_query",
+      "event_code": "AAAA",
+      "status": "success",
+      "count": 1,
+      "example_ids": [
+        "EV-000036"
+      ]
+    },
+    {
+      "action": "dns_query",
+      "event_code": "TXT",
+      "status": "info",
+      "count": 6,
+      "example_ids": [
+        "EV-000009",
+        "EV-000010",
+        "EV-000011"
+      ]
+    },
+    {
+      "action": "dns_query",
+      "event_code": "TXT",
+      "status": "success",
+      "count": 6,
+      "example_ids": [
+        "EV-000042",
+        "EV-000043",
+        "EV-000044"
+      ]
+    },
+    {
+      "action": "dns_query",
+      "event_code": "A",
+      "status": "failure",
+      "count": 7,
+      "example_ids": [
+        "EV-000039",
+        "EV-000041",
+        "EV-000048"
+      ]
+    },
+    {
+      "action": "allow",
+      "event_code": "",
+      "status": "info",
+      "count": 9,
+      "example_ids": [
+        "EV-000025",
+        "EV-000026",
+        "EV-000027"
+      ]
+    },
+    {
+      "action": "dns_query",
+      "event_code": "A",
+      "status": "success",
+      "count": 10,
+      "example_ids": [
+        "EV-000034",
+        "EV-000035",
+        "EV-000037"
+      ]
+    },
+    {
+      "action": "dns_query",
+      "event_code": "A",
+      "status": "info",
+      "count": 17,
+      "example_ids": [
+        "EV-000001",
+        "EV-000002",
+        "EV-000004"
+      ]
+    }
+  ],
+  "top_flows_by_bytes": [
+    {
+      "src_ip": "10.20.10.12",
+      "dst_ip": "52.216.148.10",
+      "dst_port": "443",
+      "sessions": 1,
+      "bytes_sent": 5420000000,
+      "bytes_received": 12500000,
+      "example_ids": [
+        "EV-000027"
+      ]
+    },
+    {
+      "src_ip": "10.20.10.88",
+      "dst_ip": "198.51.100.240",
+      "dst_port": "443",
+      "sessions": 1,
+      "bytes_sent": 3842109400,
+      "bytes_received": 142050,
+      "example_ids": [
+        "EV-000033"
+      ]
+    },
+    {
+      "src_ip": "10.20.10.50",
+      "dst_ip": "13.107.42.14",
+      "dst_port": "443",
+      "sessions": 1,
+      "bytes_sent": 12400,
+      "bytes_received": 68100,
+      "example_ids": [
+        "EV-000026"
+      ]
+    },
+    {
+      "src_ip": "10.20.10.45",
+      "dst_ip": "142.250.190.36",
+      "dst_port": "443",
+      "sessions": 1,
+      "bytes_sent": 4520,
+      "bytes_received": 28400,
+      "example_ids": [
+        "EV-000025"
+      ]
+    },
+    {
+      "src_ip": "10.20.10.142",
+      "dst_ip": "185.220.101.5",
+      "dst_port": "8443",
+      "sessions": 5,
+      "bytes_sent": 2604,
+      "bytes_received": 702,
+      "example_ids": [
+        "EV-000028",
+        "EV-000029",
+        "EV-000030"
+      ]
+    }
+  ],
+  "time_span_by_source_file": {
+    "bind9_dns_queries.log": {
+      "earliest": "2026-09-14T11:00:01",
+      "latest": "2026-09-14T11:18:01"
+    },
+    "paloalto_traffic.log": {
+      "earliest": "2026-09-14T11:00:15",
+      "latest": "2026-09-14T12:35:40"
+    },
+    "zeek_dns.tsv": {
+      "earliest": "2026-09-15T11:00:01.120000+00:00",
+      "latest": "2026-09-15T11:18:01.940000+00:00"
+    }
+  },
+  "distinct_hosts": [
+    "PA-5220"
+  ],
+  "distinct_users": [
+    "domain\\asmith",
+    "domain\\jdoe",
+    "domain\\mfinance",
+    "domain\\svc-backup"
+  ],
+  "distinct_source_ips": [
+    "10.20.10.12",
+    "10.20.10.142",
+    "10.20.10.45",
+    "10.20.10.50",
+    "10.20.10.88",
+    "192.168.10.142",
+    "192.168.10.15",
+    "192.168.10.18",
+    "192.168.10.205",
+    "192.168.10.22",
+    "192.168.10.35",
+    "192.168.10.42",
+    "192.168.10.5",
+    "192.168.10.60",
+    "192.168.10.88"
+  ],
+  "distinct_destination_ips": [
+    "10.0.0.2",
+    "13.107.42.14",
+    "142.250.190.36",
+    "185.220.101.5",
+    "198.51.100.240",
+    "52.216.148.10"
+  ],
+  "earliest_timestamp": "2026-09-14T11:00:01",
+  "latest_timestamp": "2026-09-15T11:18:01.940000+00:00"
+}

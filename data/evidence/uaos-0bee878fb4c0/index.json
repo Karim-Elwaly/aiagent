@@ -1,0 +1,51 @@
+{
+  "run_id": "uaos-0bee878fb4c0",
+  "total_events": 112,
+  "events_by_source_type": {
+    "email_gateway_syslog": 60,
+    "palo_alto_traffic_csv": 36,
+    "sysmon_xml": 4,
+    "windows_security_evtx": 12
+  },
+  "events_by_source_file": {
+    "email_gateway.log": 60,
+    "firewall_traffic.log": 36,
+    "sysmon_endpoint.xml": 4,
+    "windows_endpoint.xml": 12
+  },
+  "events_by_status": {
+    "info": 40,
+    "success": 8
+  },
+  "distinct_hosts": [
+    "DC01.corp.contoso.com",
+    "WKSTN-FIN-04.corp.contoso.com"
+  ],
+  "distinct_users": [
+    "Administrators",
+    "CONTOSO\\jdoe",
+    "NT AUTHORITY\\LOCAL SERVICE",
+    "NT AUTHORITY\\SYSTEM",
+    "SYSTEM",
+    "da_admin",
+    "jdoe",
+    "jdoe@contoso.com",
+    "procurement@contoso.com",
+    "staff-all@contoso.com",
+    "svc_backup_admin"
+  ],
+  "distinct_source_ips": [
+    "-",
+    "10.20.10.10",
+    "10.20.10.25",
+    "10.20.10.45",
+    "127.0.0.1",
+    "198.51.100.82",
+    "203.0.113.119",
+    "209.85.220.41",
+    "40.107.22.84"
+  ],
+  "distinct_destination_ips": [],
+  "earliest_timestamp": "2026-09-14T08:00:15.118290+00:00",
+  "latest_timestamp": "2026-09-14T10:35:10.892104+00:00"
+}

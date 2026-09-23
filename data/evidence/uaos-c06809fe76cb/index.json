@@ -1,0 +1,84 @@
+{
+  "run_id": "uaos-c06809fe76cb",
+  "total_events": 95,
+  "events_by_source_type": {
+    "generic_json": 7,
+    "generic_syslog": 88
+  },
+  "events_by_source_file": {
+    "k8s_api_audit.json": 7,
+    "linux_audit.log": 13,
+    "linux_auth.log": 40,
+    "linux_dmesg_syslog.log": 35
+  },
+  "events_by_status": {
+    "success": 5
+  },
+  "event_inventory": [
+    {
+      "action": "Sep",
+      "event_code": "",
+      "status": "success",
+      "count": 2,
+      "example_ids": [
+        "EV-000027",
+        "EV-000053"
+      ]
+    },
+    {
+      "action": "type",
+      "event_code": "",
+      "status": "success",
+      "count": 3,
+      "example_ids": [
+        "EV-000008",
+        "EV-000011",
+        "EV-000016"
+      ]
+    },
+    {
+      "action": "type",
+      "event_code": "",
+      "status": "",
+      "count": 10,
+      "example_ids": [
+        "EV-000009",
+        "EV-000010",
+        "EV-000012"
+      ]
+    },
+    {
+      "action": "Sep",
+      "event_code": "",
+      "status": "",
+      "count": 38,
+      "example_ids": [
+        "EV-000021",
+        "EV-000022",
+        "EV-000023"
+      ]
+    }
+  ],
+  "top_flows_by_bytes": [],
+  "time_span_by_source_file": {},
+  "distinct_hosts": [],
+  "distinct_users": [
+    "NOT",
+    "deploy",
+    "deploy.",
+    "sysadmin",
+    "sysadmin.",
+    "user",
+    "{'username': 'kubernetes-admin', 'groups': ['system:masters', 'system:authenticated']}",
+    "{'username': 'system:kube-controller-manager', 'groups': ['system:authenticated']}",
+    "{'username': 'system:node:k8s-worker-node-01', 'groups': ['system:nodes', 'system:authenticated']}",
+    "{'username': 'system:serviceaccount:frontend-apps:webapp-sa', 'uid': '7e8f9a01-2b3c-4d5e-a6f7-890123456789', 'groups': ['system:serviceaccounts', 'system:serviceaccounts:frontend-apps', 'system:authenticated']}"
+  ],
+  "distinct_source_ips": [
+    "10.0.4.15",
+    "127.0.0.1"
+  ],
+  "distinct_destination_ips": [],
+  "earliest_timestamp": "",
+  "latest_timestamp": ""
+}

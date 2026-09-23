@@ -1,0 +1,43 @@
+{
+  "run_id": "uaos-d7258fc0e4ff",
+  "total_events": 120,
+  "events_by_source_type": {
+    "azure_ad_signins_json": 22,
+    "cisco_asa_syslog": 98
+  },
+  "events_by_source_file": {
+    "azure_ad_signins.json": 22,
+    "cisco_asa_vpn.log": 98
+  },
+  "events_by_status": {
+    "success": 42,
+    "failure": 22
+  },
+  "distinct_hosts": [],
+  "distinct_users": [
+    "admin",
+    "administrator",
+    "alice.smith@enterprise.com",
+    "backup",
+    "cfo.executive@enterprise.com",
+    "charlie.brown",
+    "david.clark",
+    "marketing.lead@enterprise.com",
+    "senior.engineer@enterprise.com",
+    "service_adm",
+    "sysadmin@enterprise.com",
+    "vpnuser"
+  ],
+  "distinct_source_ips": [
+    "102.164.12.89",
+    "185.196.220.14",
+    "185.220.101.5",
+    "194.26.29.110",
+    "198.51.100.15",
+    "198.51.100.25",
+    "198.51.100.77"
+  ],
+  "distinct_destination_ips": [],
+  "earliest_timestamp": "2026-09-14T08:30:00+00:00",
+  "latest_timestamp": "2026-09-14T09:40:02+00:00"
+}
