@@ -46,6 +46,11 @@ class Settings(BaseSettings):
     # Default outage tolerance when a request doesn't specify one.
     # One of: brief | standard | extended | unlimited (see src/core/resilience.py)
     default_resilience: str = "standard"
+    # Hard upper bound on total wall-clock time for a single workflow run,
+    # including all retries. Backstop so "unlimited" resilience cannot retry
+    # forever against a permanently-dead LLM — Temporal force-closes the run
+    # once this deadline passes.
+    workflow_execution_timeout_seconds: int = 86400  # 24h
 
     # ── API Configuration ────────────────────────────────
     api_host: str = "0.0.0.0"

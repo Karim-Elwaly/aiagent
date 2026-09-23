@@ -18,6 +18,7 @@ from __future__ import annotations
 import json
 import logging
 from contextlib import asynccontextmanager
+from datetime import timedelta
 from pathlib import Path
 from typing import Any
 from uuid import uuid4
@@ -243,6 +244,7 @@ async def lifespan(app: FastAPI):
                 args=workflow_args,
                 id=w_id,
                 task_queue=app.state.settings.temporal_task_queue,
+                execution_timeout=timedelta(seconds=app.state.settings.workflow_execution_timeout_seconds),
             )
             return w_id
         except Exception as e:
@@ -839,6 +841,7 @@ async def solve(request: SolveRequest):
             args=workflow_args,
             id=workflow_id,
             task_queue=app.state.settings.temporal_task_queue,
+            execution_timeout=timedelta(seconds=app.state.settings.workflow_execution_timeout_seconds),
         )
 
         result = await handle.result()
@@ -902,6 +905,7 @@ async def solve_async(request: SolveRequest):
             args=workflow_args,
             id=workflow_id,
             task_queue=app.state.settings.temporal_task_queue,
+            execution_timeout=timedelta(seconds=app.state.settings.workflow_execution_timeout_seconds),
         )
 
         return SolveAsyncResponse(
