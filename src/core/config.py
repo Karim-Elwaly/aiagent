@@ -52,6 +52,45 @@ class Settings(BaseSettings):
     # once this deadline passes.
     workflow_execution_timeout_seconds: int = 86400  # 24h
 
+    # ── Decision Capture (offline evaluation) ────────────
+    # Records the inputs + outputs of constrained-choice LLM calls (supervisor
+    # verdict, task risk level) to data/decision_capture/*.jsonl so a corpus can
+    # be built from real traffic and replayed offline. Off by default; captured
+    # records include worker output and so may contain sensitive evidence.
+    decision_capture_enabled: bool = False
+    decision_capture_max_field_chars: int = 8000
+
+    # ── Typed Decision Readout (AnyJev) — DORMANT ────────
+    # Reads constrained choices (supervisor verdict, task risk level) out of the
+    # model's distribution instead of parsing generated JSON. See
+    # src/core/decider.py.
+    #
+    # The AnyJev backend is currently DORMANT (ANYJEV_DORMANT in decider.py):
+    # these settings are wired and tested but cannot activate it on their own.
+    # Setting decision_backend="anyjev" logs a warning and changes nothing.
+    # The re-enable checklist lives next to the flag in decider.py.
+    decision_backend: str = "none"
+    decision_backend_url: str = ""    # defaults to llm_base_url
+    decision_backend_model: str = ""  # defaults to llm_model
+    decision_level: str = "L0"        # raw | L0 | L1 | L2
+
+    # Shadow mode: run the typed readout alongside the generated decision, log
+    # both, and act on NEITHER. This is how a candidate is compared against the
+    # baseline on real traffic without risking a live run.
+    decision_shadow_enabled: bool = False
+
+    # Promotion. Only when True is a typed readout allowed to decide anything.
+    # Keep this off until shadow-mode results on your own corpus beat the
+    # baseline; a published benchmark on someone else's data is not evidence
+    # about your traffic.
+    decision_act_on_readout: bool = False
+    # Refuse to act on a readout weaker than this. "raw" is uncalibrated and
+    # position-biased, so it is never an acceptable floor for acting.
+    decision_required_level: str = "L1"
+    # Below this probability the decision is treated as undecided and handed to
+    # a human rather than acted on automatically.
+    decision_auto_accept_threshold: float = 0.9
+
     # ── API Configuration ────────────────────────────────
     api_host: str = "0.0.0.0"
     api_port: int = 8000

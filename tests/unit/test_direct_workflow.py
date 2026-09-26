@@ -111,6 +111,63 @@ async def test_run_direct_workflow_error_handling(clean_app_state):
 
 
 @pytest.mark.asyncio
+async def test_direct_workflow_honors_supervisor_abort(clean_app_state):
+    """A supervisor 'abort' must stop the task, not be silently recorded as fine.
+
+    The Temporal engine already honored abort; the direct engine previously let
+    it fall through and marked the task completed anyway.
+    """
+    custom_dag = {
+        "goal": "Test supervisor abort",
+        "reasoning": "Abort path",
+        "tasks": [
+            {
+                "id": "t1",
+                "name": "Doomed Step",
+                "description": "Reads a path that does not exist",
+                "required_skills": ["general_reasoning"],
+                "dependencies": [],
+                "risk_level": "low",
+            },
+        ],
+    }
+
+    mock_exec = AsyncMock(return_value={
+        "status": "completed",
+        "output": "0 files enumerated",
+        "execution_time_ms": 10,
+        "tool_calls_made": [],
+    })
+    mock_assemble = AsyncMock(return_value="should not be assembled")
+    mock_eval = AsyncMock(return_value={
+        "decision": "abort",
+        "confidence": None,
+        "feedback": "Target directory does not exist.",
+        "degraded": False,
+    })
+
+    with patch("src.api.main.execute_task", mock_exec), \
+         patch("src.api.main.assemble_response", mock_assemble), \
+         patch("src.api.main.evaluate_task_output", mock_eval):
+
+        workflow_id = "test-wf-supervisor-abort"
+        result = await run_direct_workflow(
+            workflow_id=workflow_id,
+            user_query="Inspect a missing directory",
+            custom_dag=custom_dag,
+        )
+
+        state = clean_app_state[workflow_id]
+        assert state["task_statuses"]["t1"] == "aborted"
+        assert result["tasks_completed"] == 0
+        assert result["tasks_failed"] == 1
+        # Nothing completed, so the run reports failure rather than assembling
+        # a report from an aborted task.
+        assert "Target directory does not exist." in result["response"]
+        mock_assemble.assert_not_called()
+
+
+@pytest.mark.asyncio
 async def test_status_endpoint_reports_error(clean_app_state):
     from httpx import AsyncClient, ASGITransport
 

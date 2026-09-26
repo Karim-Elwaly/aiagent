@@ -633,9 +633,15 @@ document.addEventListener("DOMContentLoaded", () => {
 
       case "supervisor_verdict": {
         const taskId = ev.task_id;
-        const isPass = ev.decision === "pass" || ev.decision === "accurate" || ev.decision === "approved";
+        const isUnreviewed = ev.decision === "unreviewed" || ev.degraded === true;
+        const isAbort = ev.decision === "abort";
+        const isPass = !isUnreviewed && !isAbort &&
+          (ev.decision === "pass" || ev.decision === "accurate" || ev.decision === "approved");
         const decision = isPass ? "pass" : "retry";
-        const confidence = ev.confidence !== undefined ? Math.round(ev.confidence * 100) : 100;
+        // A missing confidence means the supervisor never reported one. Rendering
+        // that as 100% invented a certainty that was never measured.
+        const hasConfidence = ev.confidence !== undefined && ev.confidence !== null;
+        const confidenceLabel = hasConfidence ? `${Math.round(ev.confidence * 100)}%` : "unmeasured";
         const feedback = ev.feedback || "";
         const retryCount = ev.retry_count || 0;
 
@@ -655,26 +661,36 @@ document.addEventListener("DOMContentLoaded", () => {
 
         if (verdictEl) {
           verdictEl.className = `supervisor-verdict ${decision === "pass" ? "pass" : "retry"}`;
-          const icon = decision === "pass" ? "🛡️ Supervisor Approved" : `🔄 Supervisor ReAct Retry (Attempt ${retryCount})`;
+          const icon = isUnreviewed
+            ? "⚠️ Not Reviewed"
+            : isAbort
+              ? "⛔ Supervisor Aborted"
+              : decision === "pass"
+                ? "🛡️ Supervisor Approved"
+                : `🔄 Supervisor ReAct Retry (Attempt ${retryCount})`;
           verdictEl.innerHTML = `
             <div style="font-weight: 700; display: flex; justify-content: space-between; align-items: center;">
               <span>${icon}</span>
-              <span style="font-size: 11px; opacity: 0.85;">Confidence: ${confidence}%</span>
+              <span style="font-size: 11px; opacity: 0.85;">Confidence: ${confidenceLabel}</span>
             </div>
             <div style="font-size: 11px; margin-top: 4px; line-height: 1.4;">${escapeHtml(feedback)}</div>
           `;
           timelineList.scrollTop = timelineList.scrollHeight;
         }
 
-        if (decision === "retry") {
+        if (decision === "retry" && !isUnreviewed && !isAbort) {
           const duration = document.getElementById(`duration-${taskId}`);
           if (duration) duration.textContent = "RETRYING (ReAct)";
         }
 
         showToast(
-          decision === "pass"
-            ? `Supervisor approved Task ${taskId} (${confidence}% confidence)`
-            : `Supervisor requested retry on Task ${taskId}: ${feedback.slice(0, 50)}...`,
+          isUnreviewed
+            ? `Task ${taskId} was NOT reviewed by the supervisor`
+            : isAbort
+              ? `Supervisor aborted Task ${taskId}: ${feedback.slice(0, 50)}...`
+              : decision === "pass"
+                ? `Supervisor approved Task ${taskId} (confidence ${confidenceLabel})`
+                : `Supervisor requested retry on Task ${taskId}: ${feedback.slice(0, 50)}...`,
           decision === "pass" ? "info" : "warning"
         );
         break;
@@ -2036,16 +2052,29 @@ document.addEventListener("DOMContentLoaded", () => {
           const contentDiv = stepEl.querySelector(".step-content");
           if (contentDiv) contentDiv.appendChild(verdictEl);
         }
-        const isPass = evalObj.decision === "pass" || evalObj.decision === "accurate" || evalObj.decision === "approved";
+        const isUnreviewed = evalObj.decision === "unreviewed" || evalObj.degraded === true;
+        const isAbort = evalObj.decision === "abort";
+        const isPass = !isUnreviewed && !isAbort &&
+          (evalObj.decision === "pass" || evalObj.decision === "accurate" || evalObj.decision === "approved");
         const decision = isPass ? "pass" : "retry";
-        const conf = evalObj.confidence !== undefined ? Math.round(evalObj.confidence * 100) : 100;
+        const hasConf = evalObj.confidence !== undefined && evalObj.confidence !== null;
+        const confLabel = hasConf ? `${Math.round(evalObj.confidence * 100)}%` : "unmeasured";
+        const verdictIcon = isUnreviewed
+          ? "⚠️ Not Reviewed"
+          : isAbort
+            ? "⛔ Supervisor Aborted"
+            : decision === "pass"
+              ? "🛡️ Supervisor Approved"
+              : `🔄 Supervisor ReAct Retry (Attempt ${evalObj.retry_count || 1})`;
+        const verdictNote = evalObj.feedback ||
+          (isUnreviewed ? "This output was not reviewed by the supervisor." : "");
         verdictEl.className = `supervisor-verdict ${decision === "pass" ? "pass" : "retry"}`;
         verdictEl.innerHTML = `
           <div style="font-weight: 700; display: flex; justify-content: space-between; align-items: center;">
-            <span>${decision === "pass" ? "🛡️ Supervisor Approved" : `🔄 Supervisor ReAct Retry (Attempt ${evalObj.retry_count || 1})`}</span>
-            <span style="font-size: 11px; opacity: 0.85;">Confidence: ${conf}%</span>
+            <span>${verdictIcon}</span>
+            <span style="font-size: 11px; opacity: 0.85;">Confidence: ${confLabel}</span>
           </div>
-          <div style="font-size: 11px; margin-top: 4px; line-height: 1.4;">${escapeHtml(evalObj.feedback || "Task execution verified by Supervisor")}</div>
+          <div style="font-size: 11px; margin-top: 4px; line-height: 1.4;">${escapeHtml(verdictNote)}</div>
         `;
       }
     });

@@ -647,6 +647,8 @@ async def run_direct_workflow(
 
             if result_dict.get("status") == "completed":
                 task_output = result_dict.get("output", "")
+                supervisor_aborted = False
+                supervisor_abort_reason = ""
 
                 # Supervisor ReAct evaluation
                 try:
@@ -656,7 +658,16 @@ async def run_direct_workflow(
                     if supervisor_eval:
                         decision = supervisor_eval.get("decision", "pass")
                         feedback = supervisor_eval.get("feedback", "")
-                        if decision in ("needs_retry", "need_more_info", "retry"):
+                        if decision == "abort":
+                            logger.warning(
+                                "Circuit breaker triggered by supervisor on task '%s': %s",
+                                task.name,
+                                feedback,
+                            )
+                            state["supervisor_evaluations"].append(supervisor_eval)
+                            supervisor_aborted = True
+                            supervisor_abort_reason = feedback
+                        elif decision in ("needs_retry", "need_more_info", "retry"):
                             logger.info(
                                 "Supervisor requested retry for task '%s': %s",
                                 task.name,
@@ -671,21 +682,38 @@ async def run_direct_workflow(
                             if retry_result.get("status") == "completed":
                                 task_output = retry_result.get("output", "")
                                 result_dict = retry_result
-                                # Update supervisor evaluation record to pass
+                                # Re-evaluate the retried output. This previously
+                                # wrote a fabricated "pass" with an invented 0.98
+                                # confidence, claiming a review that never happened.
+                                retry_eval = await evaluate_task_output(
+                                    task_dict, task_output, user_query, completed
+                                ) or {}
                                 state["supervisor_evaluations"] = [
                                     e for e in state["supervisor_evaluations"]
                                     if e.get("task_id") != task_id
-                                ] + [{
-                                    "task_id": task_id,
-                                    "task_name": task.name,
-                                    "decision": "pass",
-                                    "confidence": 0.98,
-                                    "feedback": "Factual findings and metrics successfully verified.",
-                                }]
+                                ] + [retry_eval]
+                                if retry_eval.get("decision") == "abort":
+                                    supervisor_aborted = True
+                                    supervisor_abort_reason = retry_eval.get("feedback", "")
                         else:
                             state["supervisor_evaluations"].append(supervisor_eval)
                 except Exception as eval_err:
                     logger.warning("Supervisor evaluation error on '%s': %s", task.name, eval_err)
+
+                if supervisor_aborted:
+                    abort_msg = f"Aborted by supervisor: {supervisor_abort_reason}"
+                    state["task_statuses"][task_id] = "aborted"
+                    failed_errors[task_id] = abort_msg
+                    _persist_checkpoint(direct_checkpoint.STATUS_RUNNING, dag_dict, completed)
+                    bus.publish(
+                        workflow_id,
+                        {
+                            "type": "task_failed",
+                            "task_id": task_id,
+                            "error": abort_msg,
+                        },
+                    )
+                    continue
 
                 completed[task_id] = task_output
                 state["task_statuses"][task_id] = "completed"
@@ -724,7 +752,7 @@ async def run_direct_workflow(
             workflow_result = {
                 "response": err_response,
                 "tasks_completed": 0,
-                "tasks_failed": sum(1 for s in state["task_statuses"].values() if s == "failed"),
+                "tasks_failed": sum(1 for s in state["task_statuses"].values() if s in ("failed", "aborted")),
                 "replans": 0,
                 "supervisor_evaluations": state["supervisor_evaluations"],
             }
@@ -742,7 +770,7 @@ async def run_direct_workflow(
         workflow_result = {
             "response": final_solution,
             "tasks_completed": sum(1 for s in state["task_statuses"].values() if s == "completed"),
-            "tasks_failed": sum(1 for s in state["task_statuses"].values() if s == "failed"),
+            "tasks_failed": sum(1 for s in state["task_statuses"].values() if s in ("failed", "aborted")),
             "replans": 0,
             "supervisor_evaluations": state["supervisor_evaluations"],
         }
@@ -773,7 +801,7 @@ async def run_direct_workflow(
         err_res = {
             "response": f"Workflow execution error: {e}",
             "tasks_completed": sum(1 for s in state.get("task_statuses", {}).values() if s == "completed"),
-            "tasks_failed": max(1, sum(1 for s in state.get("task_statuses", {}).values() if s == "failed")),
+            "tasks_failed": max(1, sum(1 for s in state.get("task_statuses", {}).values() if s in ("failed", "aborted"))),
             "replans": 0,
             "supervisor_evaluations": state.get("supervisor_evaluations", []),
         }

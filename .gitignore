@@ -64,3 +64,7 @@ data/schedules.json
 
 # Direct-engine run checkpoints (in-process fallback resume state)
 data/checkpoints/
+
+# Captured LLM decision corpora — contain task descriptions and worker output,
+# which in a SOC deployment includes log evidence. Never commit.
+data/decision_capture/

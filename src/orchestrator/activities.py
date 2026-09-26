@@ -20,7 +20,12 @@ from temporalio import activity
 from temporalio.exceptions import ApplicationError
 
 from src.brain.meta_planner import MetaPlanner
-from src.brain.prompts import ASSEMBLER_SYSTEM_PROMPT, SUPERVISOR_EVALUATION_PROMPT
+from src.brain.prompts import (
+    ASSEMBLER_SYSTEM_PROMPT,
+    SUPERVISOR_EVALUATION_PROMPT,
+    format_decision_options,
+)
+from src.core import decision_capture
 from src.core.config import get_settings
 from src.core.exceptions import TransientLLMError
 from src.core.llm_client import LocalLLMClient
@@ -161,7 +166,33 @@ async def plan_tasks(user_query: str, agent_id: str = "") -> dict:
         dag.goal[:80],
     )
 
-    return dag.to_serializable()
+    serialized = dag.to_serializable()
+
+    # Record each task's assigned risk level for offline evaluation. This is the
+    # value that fires the human approval gate, and the planner emits it as one
+    # field inside a large DAG with no confidence attached. No-op unless
+    # decision_capture_enabled.
+    for task in serialized.get("tasks", []):
+        decision_capture.capture_risk_level_decision(
+            user_query=user_query,
+            task=task,
+        )
+
+    # Re-score each task's risk as a focused typed decision and compare against
+    # the planner's own value. Records the comparison; the planner's value still
+    # stands. No-op unless decision_shadow_enabled.
+    try:
+        from src.core import decision_shadow
+
+        for task in serialized.get("tasks", []):
+            await decision_shadow.shadow_risk_level(
+                user_query=user_query,
+                task=task,
+            )
+    except Exception as shadow_err:
+        logger.debug("Shadow risk comparison failed: %s", shadow_err)
+
+    return serialized
 
 
 @activity.defn
@@ -574,6 +605,49 @@ async def notify_approval_required(task_dict: dict) -> bool:
     return True
 
 
+def parse_supervisor_response(
+    resp: str,
+) -> tuple[str, float | None, str, list]:
+    """Extract a verdict from the supervisor's generated text.
+
+    Raises on unparseable input so the caller can record the failure rather than
+    inventing a verdict. Shared with the offline replay tooling so measured
+    behaviour is the behaviour that actually runs.
+
+    Returns ``(decision, confidence, feedback, missing_info)`` where confidence
+    is ``None`` when the model reported none or reported a non-numeric value.
+    """
+    clean_json = resp.strip()
+    if "```" in clean_json:
+        clean_json = clean_json.split("```")[1]
+        if clean_json.startswith("json"):
+            clean_json = clean_json[4:].strip()
+
+    start = clean_json.find("{")
+    end = clean_json.rfind("}")
+    if start != -1 and end != -1:
+        clean_json = clean_json[start : end + 1]
+
+    data = json.loads(clean_json)
+    raw_decision = str(data.get("decision", "pass")).lower().strip()
+    if raw_decision in ("pass", "accurate", "success", "completed", "approved"):
+        decision = "pass"
+    elif raw_decision in ("abort", "fatal_abort", "halt", "cancel"):
+        decision = "abort"
+    else:
+        decision = "needs_retry"
+
+    # Self-reported and uncalibrated: treat as a hint, never as a threshold.
+    # A malformed value must not invalidate an otherwise usable verdict, so this
+    # cast is guarded separately from the JSON parse above.
+    try:
+        confidence = float(data.get("confidence"))
+    except (TypeError, ValueError):
+        confidence = None
+
+    return decision, confidence, data.get("feedback", ""), data.get("missing_info", [])
+
+
 @activity.defn
 async def evaluate_task_output(
     task_dict: dict,
@@ -609,50 +683,97 @@ async def evaluate_task_output(
         expected_output=expected_output or "Complete actionable task results",
         prior_context=prior_summary or "None",
         worker_output=worker_output[:2500],
+        decision_options=format_decision_options(),
     )
 
+    # Tracks whether we obtained a genuine supervisor verdict. When False the
+    # output was never actually reviewed, and must not be reported as approved.
+    degraded = False
+    # Raw model response, retained for offline decision capture. Distinguishes a
+    # malformed response from a transport failure after the fact.
+    raw_response: str | None = None
+
+    # Hybrid readout path (Phase 4). When a typed readout has been promoted and
+    # clears its gate, it supplies the verdict. A confident "pass" needs no
+    # further text, so the generation call is skipped entirely; anything else
+    # still generates, because the retry path needs feedback prose that a choice
+    # cannot provide. Inert unless decision_act_on_readout is enabled.
+    readout_verdict = None
     try:
-        resp = await llm.chat([
-            {
-                "role": "system",
-                "content": (
-                    "You are a strict, objective Investigation Supervisor. "
-                    "Output ONLY valid JSON."
-                ),
-            },
-            {"role": "user", "content": prompt},
-        ])
+        from src.core import decision_shadow
 
-        clean_json = resp.strip()
-        if "```" in clean_json:
-            clean_json = clean_json.split("```")[1]
-            if clean_json.startswith("json"):
-                clean_json = clean_json[4:].strip()
-
-        start = clean_json.find("{")
-        end = clean_json.rfind("}")
-        if start != -1 and end != -1:
-            clean_json = clean_json[start : end + 1]
-
-        data = json.loads(clean_json)
-        raw_decision = str(data.get("decision", "pass")).lower().strip()
-        if raw_decision in ("pass", "accurate", "success", "completed", "approved"):
-            decision = "pass"
-        elif raw_decision in ("abort", "fatal_abort", "halt", "cancel"):
-            decision = "abort"
-        else:
-            decision = "needs_retry"
-        confidence = float(data.get("confidence", 0.9))
-        feedback = data.get("feedback", "")
-        missing_info = data.get("missing_info", [])
-    except Exception as e:
-        logger.warning(
-            "Supervisor evaluation parsing fallback for task '%s': %s", task_name, e
+        candidate = await decision_shadow.read_decision(
+            "Did the worker adequately fulfil this task's expected output?",
+            ["pass", "needs_retry", "abort"],
+            (
+                f"Goal: {user_query}\n"
+                f"Task: {task_name}\n"
+                f"Task description: {task_desc}\n"
+                f"Expected output: {expected_output}\n\n"
+                f"Worker output:\n{worker_output[:2500]}"
+            ),
         )
+        allowed, gate_reason = decision_shadow.evaluate_gate(candidate)
+        if allowed and candidate is not None:
+            readout_verdict = candidate
+            logger.info(
+                "Supervisor verdict from typed readout on '%s': %s (%s, p=%.3f)",
+                task_name,
+                candidate.decision,
+                candidate.level,
+                candidate.confidence or 0.0,
+            )
+        elif candidate is not None:
+            logger.debug(
+                "Typed readout not acted on for '%s': %s", task_name, gate_reason
+            )
+    except Exception as readout_err:
+        logger.debug("Typed readout unavailable: %s", readout_err)
+
+    if readout_verdict is not None and readout_verdict.decision == "pass":
+        # Confident pass: no feedback text is needed, so nothing is generated.
         decision = "pass"
-        confidence = 0.8
+        confidence = readout_verdict.confidence
         feedback = ""
         missing_info = []
+        raw_response = None
+    else:
+        try:
+            resp = await llm.chat([
+                {
+                    "role": "system",
+                    "content": (
+                        "You are a strict, objective Investigation Supervisor. "
+                        "Output ONLY valid JSON."
+                    ),
+                },
+                {"role": "user", "content": prompt},
+            ])
+            raw_response = resp
+
+            decision, confidence, feedback, missing_info = parse_supervisor_response(resp)
+        except Exception as e:
+            logger.warning(
+                "Supervisor evaluation unavailable for task '%s': %s", task_name, e
+            )
+            # A verdict we could not obtain or parse is evidence of a problem, not
+            # of success. Previously this defaulted to "pass", so an unparseable
+            # (or entirely absent) response silently approved unreviewed work.
+            degraded = True
+            decision = "unreviewed"
+            confidence = None
+            feedback = (
+                f"Supervisor evaluation was unavailable ({type(e).__name__}), so this "
+                "output has NOT been reviewed. Treat the result as unverified."
+            )
+            missing_info = []
+
+        if readout_verdict is not None:
+            # The promoted readout decides; the generation call above ran only to
+            # supply the feedback prose the retry path needs.
+            decision = readout_verdict.decision
+            confidence = readout_verdict.confidence
+            degraded = False
 
     # Domain-agnostic circuit breaker: evaluate if critical discovery yielded 0 target artifacts
     is_initial_discovery = task_id in ("t1", "T1", "task-1") or any(
@@ -702,7 +823,39 @@ async def evaluate_task_output(
         "confidence": confidence,
         "feedback": feedback,
         "missing_info": missing_info,
+        "degraded": degraded,
     }
+
+    # Record inputs + verdict for offline evaluation. Captured after the
+    # override heuristics above so the stored decision is the one the system
+    # actually acted on. No-op unless decision_capture_enabled.
+    decision_capture.capture_supervisor_decision(
+        task_dict=task_dict,
+        worker_output=worker_output,
+        user_query=user_query,
+        prior_completed=prior_completed,
+        raw_response=raw_response,
+        decision=decision,
+        confidence=confidence,
+        degraded=degraded,
+        workflow_id=wf_id,
+    )
+
+    # Compare against a typed readout of the same choice. Records the
+    # comparison and acts on nothing. No-op unless decision_shadow_enabled.
+    try:
+        from src.core import decision_shadow
+
+        await decision_shadow.shadow_supervisor_decision(
+            task_dict=task_dict,
+            worker_output=worker_output,
+            user_query=user_query,
+            generated_decision=decision,
+            generated_confidence=confidence,
+            workflow_id=wf_id,
+        )
+    except Exception as shadow_err:
+        logger.debug("Shadow decision comparison failed: %s", shadow_err)
 
     # Broadcast supervisor verdict to UI
     try:
@@ -715,16 +868,17 @@ async def evaluate_task_output(
                 "decision": decision,
                 "confidence": confidence,
                 "feedback": feedback,
+                "degraded": degraded,
             },
         )
     except Exception as eb_err:
         logger.debug("Failed to publish supervisor verdict: %s", eb_err)
 
     logger.info(
-        "Supervisor verdict on '%s': %s (confidence: %.2f)",
+        "Supervisor verdict on '%s': %s (confidence: %s)",
         task_name,
         decision.upper(),
-        confidence,
+        f"{confidence:.2f}" if isinstance(confidence, (int, float)) else "unmeasured",
     )
 
     return eval_result

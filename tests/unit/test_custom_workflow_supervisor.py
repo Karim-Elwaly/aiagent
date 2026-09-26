@@ -78,9 +78,79 @@ async def test_evaluate_task_output_activity_fallback_on_error():
         mock_llm = mock_get_llm.return_value
         mock_llm.chat = AsyncMock(side_effect=RuntimeError("LLM timeout"))
 
-        # Should fallback gracefully without crashing
         evaluation = await evaluate_task_output(task_dict, worker_output, user_query, prior_completed)
-        assert evaluation["decision"] in ["pass", "accurate"]
+
+        # An output the supervisor never managed to review must NOT be reported
+        # as approved — that silently rubber-stamped unreviewed work.
+        assert evaluation["decision"] == "unreviewed"
+        assert evaluation["decision"] != "pass"
+        assert evaluation["degraded"] is True
+        assert evaluation["confidence"] is None
+        assert "not been reviewed" in evaluation["feedback"].lower()
+
+
+@pytest.mark.asyncio
+async def test_evaluate_task_output_unparseable_json_is_not_a_pass():
+    """Malformed supervisor output must not be treated as an approval."""
+    task_dict = {
+        "id": "t3",
+        "name": "Log Correlation",
+        "description": "Correlate auth failures",
+    }
+
+    with patch("src.orchestrator.activities._get_planner_llm") as mock_get_llm:
+        mock_llm = mock_get_llm.return_value
+        mock_llm.chat = AsyncMock(return_value="I think it looks fine, honestly.")
+
+        evaluation = await evaluate_task_output(task_dict, "Some output", "Audit", {})
+
+        assert evaluation["decision"] == "unreviewed"
+        assert evaluation["degraded"] is True
+        assert evaluation["confidence"] is None
+
+
+@pytest.mark.asyncio
+async def test_evaluate_task_output_non_numeric_confidence_keeps_verdict():
+    """A bad confidence value must not discard an otherwise valid decision."""
+    task_dict = {
+        "id": "t4",
+        "name": "Threat Review",
+        "description": "Review indicators",
+    }
+    mock_llm_json = json.dumps({
+        "decision": "needs_retry",
+        "confidence": "high",  # not a float
+        "feedback": "Run the lookup tool.",
+        "missing_info": [],
+    })
+
+    with patch("src.orchestrator.activities._get_planner_llm") as mock_get_llm:
+        mock_llm = mock_get_llm.return_value
+        mock_llm.chat = AsyncMock(return_value=mock_llm_json)
+
+        evaluation = await evaluate_task_output(task_dict, "Some output", "Audit", {})
+
+        assert evaluation["decision"] == "needs_retry"
+        assert evaluation["confidence"] is None
+        assert evaluation["degraded"] is False
+        assert evaluation["feedback"] == "Run the lookup tool."
+
+
+@pytest.mark.asyncio
+async def test_evaluate_task_output_missing_confidence_is_unmeasured():
+    """An omitted confidence is reported as unknown, not invented as 0.9."""
+    task_dict = {"id": "t5", "name": "Summary", "description": "Summarize"}
+    mock_llm_json = json.dumps({"decision": "pass", "feedback": "Good."})
+
+    with patch("src.orchestrator.activities._get_planner_llm") as mock_get_llm:
+        mock_llm = mock_get_llm.return_value
+        mock_llm.chat = AsyncMock(return_value=mock_llm_json)
+
+        evaluation = await evaluate_task_output(task_dict, "Some output", "Audit", {})
+
+        assert evaluation["decision"] == "pass"
+        assert evaluation["confidence"] is None
+        assert evaluation["degraded"] is False
 
 
 @pytest.mark.asyncio

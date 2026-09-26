@@ -153,6 +153,36 @@ Return ONLY valid JSON. No markdown, no explanation."""
 
 # ─── Supervisor Phase Evaluation Prompt ──────────────────────────
 
+# The supervisor's allowed answers, with the description shown for each.
+# Kept as data rather than inlined in the prompt so the listing order can be
+# permuted: if the verdict changes when the same options are presented in a
+# different order, the model is responding to position rather than to evidence.
+SUPERVISOR_DECISION_OPTIONS: dict[str, str] = {
+    "pass": "the worker fulfilled the core objective with concrete, tool-grounded findings.",
+    "needs_retry": (
+        "the worker failed to run the required tool, hallucinated without executing "
+        "code/tools, or omitted critical required indicators, AND re-running the task "
+        "could plausibly fix it."
+    ),
+    "abort": (
+        "the task is unrecoverable (target data does not exist, a prerequisite is "
+        "missing), so retrying the same task cannot succeed."
+    ),
+}
+
+
+def format_decision_options(order: list[str] | None = None) -> str:
+    """Render the supervisor's allowed decisions as a prompt block.
+
+    ``order`` permutes the listing for order-sensitivity measurement. Unknown
+    names are ignored and any omitted option is appended, so a caller cannot
+    accidentally hide a valid answer from the model.
+    """
+    names = [n for n in (order or []) if n in SUPERVISOR_DECISION_OPTIONS]
+    names += [n for n in SUPERVISOR_DECISION_OPTIONS if n not in names]
+    return "\n".join(f'- "{n}" — {SUPERVISOR_DECISION_OPTIONS[n]}' for n in names)
+
+
 SUPERVISOR_EVALUATION_PROMPT = """You are an Autonomous Investigation Supervisor.
 Your job is to evaluate whether a worker agent's completed phase/task output is ACCURATE, SUFFICIENT, and adequately fulfills its expected output, or if it NEEDS TO RETRY to gather more information.
 
@@ -166,17 +196,20 @@ Your job is to evaluate whether a worker agent's completed phase/task output is 
 ## Worker Output Under Review
 {worker_output}
 
+## Decisions (choose exactly one)
+{decision_options}
+
 ## Rules
-1. If the worker fulfilled the core task objective with concrete findings, correct numbers, code outputs, or appropriate calculations, evaluate as "accurate" (pass).
-2. **DO NOT be pedantic about output formatting or line counts**: If the worker provided the correct calculation (e.g. prime sum 4,227 and elapsed time) in markdown, prose, stdout, or a table, evaluate as "accurate" (pass) with high confidence (0.95+). NEVER trigger a retry over formatting or line structure when the factual calculations or data are present.
-3. Only evaluate as "needs_retry" if the worker completely failed to execute the required tool, hallucinated without executing code/tools, or omitted critical required indicators.
-4. If the worker hit an insurmountable error or tool limitation that cannot be fixed by retrying the same task, evaluate as "accurate" with low confidence to avoid an infinite loop.
+1. Judge substance, not presentation. **DO NOT be pedantic about output formatting or line counts**: if the correct calculation or data is present in markdown, prose, stdout, or a table, that is a "pass". NEVER trigger a retry over formatting or line structure when the factual calculations or data are present.
+2. Only choose "needs_retry" when re-running the same task could realistically produce a better result.
+3. If the worker hit an insurmountable error or tool limitation that retrying cannot fix, choose "abort" rather than passing it through.
+4. "confidence" must be your own honest estimate in [0.0, 1.0] of how likely your decision is correct. Do NOT default to a high value. The 0.5 below is a placeholder, not a target — a number that does not reflect genuine uncertainty is worse than no number at all.
 
 ## Output Format
 Return ONLY valid JSON with this exact structure:
 {{
-  "decision": "accurate",
-  "confidence": 0.95,
+  "decision": "pass",
+  "confidence": 0.5,
   "feedback": "Concise advice or missing details if retry needed",
   "missing_info": []
 }}"""

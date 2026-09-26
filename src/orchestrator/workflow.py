@@ -585,16 +585,30 @@ class UAOSWorkflow:
                         if retry_result.get("status") == "completed":
                             task_output = retry_result.get("output", "")
                             result_dict = retry_result
+                            # Re-evaluate the retried output. This previously
+                            # wrote a fabricated "pass" with an invented 0.98
+                            # confidence, claiming a review that never happened.
+                            retry_eval = await workflow.execute_activity(
+                                evaluate_task_output,
+                                args=[retry_task_dict, task_output, user_query, dict(completed)],
+                                start_to_close_timeout=timedelta(seconds=120),
+                                retry_policy=RetryPolicy(maximum_attempts=2),
+                            ) or {}
                             self._supervisor_evaluations = [
                                 e for e in self._supervisor_evaluations
                                 if e.get("task_id") != task_id
-                            ] + [{
-                                "task_id": task_id,
-                                "task_name": task_name,
-                                "decision": "pass",
-                                "confidence": 0.98,
-                                "feedback": "Factual findings verified on supervisor retry.",
-                            }]
+                            ] + [retry_eval]
+                            if retry_eval.get("decision") == "abort":
+                                workflow.logger.warning(
+                                    "Supervisor aborted task '%s' after retry: %s",
+                                    task_name,
+                                    retry_eval.get("feedback", ""),
+                                )
+                                self._task_statuses[task_id] = "aborted"
+                                failed[task_id] = (
+                                    f"Aborted by supervisor: {retry_eval.get('feedback', '')}"
+                                )
+                                return True
                     else:
                         self._supervisor_evaluations.append(supervisor_eval)
             except Exception as eval_err:
