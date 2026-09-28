@@ -919,6 +919,114 @@ async def test_case5_dns_tunneling_and_exfiltration_full_pipeline(tmp_path):
     assert "Phase 01" in timeline
 
 
+@pytest.mark.asyncio
+async def test_case6_ddos_recon_and_firewall_correlation_pipeline(tmp_path):
+    from src.registry.tools.soc_tools import (
+        gather_log_evidence,
+        compress_security_timeline,
+        propose_containment_response,
+    )
+
+    # 1. FortiGate UTM log (fortigate_utm_anomaly.log)
+    fg_file = tmp_path / "fortigate_utm_anomaly.log"
+    fg_file.write_text(
+        # Attack 1: Log4j RCE attempt at 11:18:40
+        'date=2026-09-14 time=11:18:40 devname="FGT-CORP-FW01" type="utm" subtype="ips" attack="Apache.Log4j.Error.Log.Remote.Code.Execution" srcip="203.0.113.88" dstip="172.16.10.80" srcport=49200 dstport=80 action="dropped" severity="high" attackid=51006 msg="Apache Log4j RCE attempt"\n'
+        # Attack 4: Volumetric SYN Flood at 12:10:05
+        'date=2026-09-14 time=12:10:05 devname="FGT-CORP-FW01" type="utm" subtype="anomaly" attack="syn_flood" srcip="0.0.0.0" dstip="198.51.100.10" dstport=80 count=15240 action="clear_session" severity="critical" msg="anomaly: syn_flood, 15240 > threshold 1000, current pps 3810"\n'
+        # Trap 3: Opportunistic Internet Bot
+        'date=2026-09-14 time=12:12:00 devname="FGT-CORP-FW01" type="traffic" srcip="198.51.100.99" dstip="172.16.10.5" dstport=3389 action="deny" msg="no session matched"\n',
+        encoding="utf-8"
+    )
+
+    # 2. Cisco ASA log (cisco_asa_firewall.log)
+    asa_file = tmp_path / "cisco_asa_firewall.log"
+    asa_file.write_text(
+        # Attack 2: Vertical Port Scan on 10.10.10.20 across 10 ports at 11:33:05
+        "Sep 14 11:33:05 asa-core-01 %ASA-4-106023: Deny tcp src outside:198.51.100.220/51234 dst dmz:10.10.10.20/21 by access-group OUTSIDE_IN [0x0, 0x0]\n"
+        "Sep 14 11:33:06 asa-core-01 %ASA-4-106023: Deny tcp src outside:198.51.100.220/51235 dst dmz:10.10.10.20/22 by access-group OUTSIDE_IN [0x0, 0x0]\n"
+        "Sep 14 11:33:07 asa-core-01 %ASA-4-106023: Deny tcp src outside:198.51.100.220/51236 dst dmz:10.10.10.20/23 by access-group OUTSIDE_IN [0x0, 0x0]\n"
+        "Sep 14 11:33:08 asa-core-01 %ASA-4-106023: Deny tcp src outside:198.51.100.220/51237 dst dmz:10.10.10.20/25 by access-group OUTSIDE_IN [0x0, 0x0]\n"
+        "Sep 14 11:33:09 asa-core-01 %ASA-4-106023: Deny tcp src outside:198.51.100.220/51238 dst dmz:10.10.10.20/80 by access-group OUTSIDE_IN [0x0, 0x0]\n"
+        "Sep 14 11:33:10 asa-core-01 %ASA-4-106023: Deny tcp src outside:198.51.100.220/51239 dst dmz:10.10.10.20/135 by access-group OUTSIDE_IN [0x0, 0x0]\n"
+        "Sep 14 11:33:11 asa-core-01 %ASA-4-106023: Deny tcp src outside:198.51.100.220/51240 dst dmz:10.10.10.20/443 by access-group OUTSIDE_IN [0x0, 0x0]\n"
+        "Sep 14 11:33:11 asa-core-01 %ASA-4-106023: Deny tcp src outside:198.51.100.220/51241 dst dmz:10.10.10.20/445 by access-group OUTSIDE_IN [0x0, 0x0]\n"
+        "Sep 14 11:33:11 asa-core-01 %ASA-4-106023: Deny tcp src outside:198.51.100.220/51242 dst dmz:10.10.10.20/1433 by access-group OUTSIDE_IN [0x0, 0x0]\n"
+        "Sep 14 11:33:11 asa-core-01 %ASA-4-106023: Deny tcp src outside:198.51.100.220/51243 dst dmz:10.10.10.20/3389 by access-group OUTSIDE_IN [0x0, 0x0]\n"
+        # Attack 4: Connection limit exceeded on port 80 at 12:10:10
+        "Sep 14 12:10:10 asa-core-01 %ASA-3-201011: Connection limit exceeded 10000/10000 for input packet from 203.0.113.88/41234 to 10.10.10.5/80\n"
+        "Sep 14 12:10:12 asa-core-01 %ASA-3-201011: Connection limit exceeded 10000/10000 for input packet from 203.0.113.89/41235 to 10.10.10.5/80\n"
+        "Sep 14 12:10:14 asa-core-01 %ASA-3-201011: Connection limit exceeded 10000/10000 for input packet from 203.0.113.90/41236 to 10.10.10.5/80\n"
+        # Attack 5: SSH Brute Force from 198.51.100.75 targeting 10.10.10.25:22 at 12:15:01
+        "Sep 14 12:15:01 asa-core-01 %ASA-6-113015: AAA user authentication Rejected : reason = 'User authentication failed' : user = root : user IP = 198.51.100.75\n"
+        "Sep 14 12:15:02 asa-core-01 %ASA-6-302014: Teardown TCP connection 120 for outside:198.51.100.75/48123 to dmz:10.10.10.25/22 duration 0:00:01 bytes 120 TCP Reset-I\n"
+        "Sep 14 12:15:03 asa-core-01 %ASA-6-113015: AAA user authentication Rejected : reason = 'User authentication failed' : user = admin : user IP = 198.51.100.75\n"
+        "Sep 14 12:15:04 asa-core-01 %ASA-6-302014: Teardown TCP connection 121 for outside:198.51.100.75/48124 to dmz:10.10.10.25/22 duration 0:00:01 bytes 120 TCP Reset-I\n"
+        # Trap 1: Authorized internal vulnerability scanner 10.10.10.99
+        "Sep 14 11:40:00 asa-core-01 %ASA-6-302013: Built inbound TCP connection 99 for inside:10.10.10.99/41000 to dmz:10.10.10.20/80\n"
+        "Sep 14 11:40:01 asa-core-01 %ASA-6-302014: Teardown TCP connection 99 for inside:10.10.10.99/41000 to dmz:10.10.10.20/80 duration 0:00:01 bytes 450 TCP FIN\n",
+        encoding="utf-8"
+    )
+
+    # 3. pfSense log (pfsense_filterlog.csv)
+    pfs_file = tmp_path / "pfsense_filterlog.csv"
+    pfs_lines = [
+        # Attack 3: Vertical Scan by 198.51.100.50 on 192.168.1.50 across 10 ports at 12:00:01
+        "14-Sep-2026 12:00:01,rule1,interface1,block,in,4,0x0,,64,0,0,DF,6,tcp,44,198.51.100.50,192.168.1.50,51000,21,0,S,1000,,",
+        "14-Sep-2026 12:00:01,rule1,interface1,block,in,4,0x0,,64,0,0,DF,6,tcp,44,198.51.100.50,192.168.1.50,51001,22,0,S,1000,,",
+        "14-Sep-2026 12:00:01,rule1,interface1,block,in,4,0x0,,64,0,0,DF,6,tcp,44,198.51.100.50,192.168.1.50,51002,23,0,S,1000,,",
+        "14-Sep-2026 12:00:01,rule1,interface1,block,in,4,0x0,,64,0,0,DF,6,tcp,44,198.51.100.50,192.168.1.50,51003,80,0,S,1000,,",
+        "14-Sep-2026 12:00:01,rule1,interface1,block,in,4,0x0,,64,0,0,DF,6,tcp,44,198.51.100.50,192.168.1.50,51004,443,0,S,1000,,",
+        "14-Sep-2026 12:00:01,rule1,interface1,block,in,4,0x0,,64,0,0,DF,6,tcp,44,198.51.100.50,192.168.1.50,51005,445,0,S,1000,,",
+        "14-Sep-2026 12:00:01,rule1,interface1,block,in,4,0x0,,64,0,0,DF,6,tcp,44,198.51.100.50,192.168.1.50,51006,1433,0,S,1000,,",
+        "14-Sep-2026 12:00:01,rule1,interface1,block,in,4,0x0,,64,0,0,DF,6,tcp,44,198.51.100.50,192.168.1.50,51007,3306,0,S,1000,,",
+        "14-Sep-2026 12:00:01,rule1,interface1,block,in,4,0x0,,64,0,0,DF,6,tcp,44,198.51.100.50,192.168.1.50,51008,3389,0,S,1000,,",
+        "14-Sep-2026 12:00:01,rule1,interface1,block,in,4,0x0,,64,0,0,DF,6,tcp,44,198.51.100.50,192.168.1.50,51009,8080,0,S,1000,,",
+        # Attack 3b: Horizontal SMB Sweep by 198.51.100.15 on port 445 at 12:05:01
+        "14-Sep-2026 12:05:01,rule2,interface1,block,in,4,0x0,,64,0,0,DF,6,tcp,44,198.51.100.15,192.168.1.1,52001,445,0,S,1000,,",
+        "14-Sep-2026 12:05:01,rule2,interface1,block,in,4,0x0,,64,0,0,DF,6,tcp,44,198.51.100.15,192.168.1.2,52002,445,0,S,1000,,",
+        "14-Sep-2026 12:05:02,rule2,interface1,block,in,4,0x0,,64,0,0,DF,6,tcp,44,198.51.100.15,192.168.1.3,52003,445,0,S,1000,,",
+        "14-Sep-2026 12:05:02,rule2,interface1,block,in,4,0x0,,64,0,0,DF,6,tcp,44,198.51.100.15,192.168.1.4,52004,445,0,S,1000,,",
+        "14-Sep-2026 12:05:02,rule2,interface1,block,in,4,0x0,,64,0,0,DF,6,tcp,44,198.51.100.15,192.168.1.5,52005,445,0,S,1000,,",
+        # Trap 2: Local printer traffic (action=pass)
+        "14-Sep-2026 12:06:00,rule3,interface1,pass,in,4,0x0,,64,0,0,DF,6,tcp,44,192.168.1.110,192.168.1.200,53000,9100,0,S,1000,,",
+    ]
+    pfs_file.write_text("\n".join(pfs_lines) + "\n", encoding="utf-8")
+
+    # 1. Gather evidence
+    evidence = await gather_log_evidence(str(tmp_path), pattern="*.*")
+
+    # CRITICAL CHECK 1: Victim public VIP 198.51.100.10 MUST NOT be labeled as confirmed adversary IP!
+    assert "Confirmed Adversary IPs" in evidence
+    adv_line = [l for l in evidence.splitlines() if "Confirmed Adversary IPs" in l][0]
+    assert "198.51.100.10" not in adv_line
+
+    # CRITICAL CHECK 2: Placeholder 0.0.0.0 MUST NOT be in confirmed adversary IPs!
+    assert "0.0.0.0" not in adv_line
+
+    # CRITICAL CHECK 3: 198.51.100.10 MUST be recognized as targeted external VIP
+    assert "Targeted Gateway VIPs" in evidence
+    assert "198.51.100.10" in evidence
+
+    # CRITICAL CHECK 4: SSH Brute Force IP 198.51.100.75 MUST be detected!
+    assert "198.51.100.75" in adv_line
+    assert "SSH Brute Force" in evidence or "T1110.001" in evidence
+
+    # CRITICAL CHECK 5: All real attackers present
+    assert "198.51.100.220" in adv_line
+    assert "198.51.100.50" in adv_line
+    assert "198.51.100.15" in adv_line
+    assert "203.0.113.88" in adv_line
+
+    # 2. Timeline Verification: Log4j (11:18:40) MUST be Phase 01!
+    timeline = await compress_security_timeline(evidence)
+    assert "=== [COMPRESSED INCIDENT TIMELINE]" in timeline
+    timeline_milestones = [l for l in timeline.splitlines() if l.startswith("Phase ")]
+    assert len(timeline_milestones) >= 4
+    # The first milestone must be Log4j at 11:18:40, NOT port scanning at 11:33
+    assert "11:18:40" in timeline_milestones[0] or "Log4j" in timeline_milestones[0]
+
+
 
 
 

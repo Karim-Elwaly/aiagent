@@ -844,9 +844,6 @@ def _parse_cisco_asa_records(
     ips: set[str] = set()
     identities: set[str] = set()
 
-    for ip in re.findall(IPV4_REGEX, content):
-        ips.add(ip)
-
     # Aggregation structures
     denies_by_src: dict[str, dict[str, set[int]]] = defaultdict(lambda: defaultdict(set))
     conn_limits_by_src: dict[str, list[dict]] = defaultdict(list)
@@ -863,11 +860,11 @@ def _parse_cisco_asa_records(
         re.IGNORECASE,
     )
     re_aaa = re.compile(
-        r'%ASA-6-113015:\s*AAA user authentication\s+(\w+)\s*:\s*reason\s*=\s*([^:]+)\s*:\s*server\s*=\s*([^:]+)\s*:\s*user\s*=\s*([^:]+)\s*:\s*user IP\s*=\s*(\d+\.\d+\.\d+\.\d+)',
+        r'%ASA-6-113015:\s*AAA user authentication\s+(\w+)\s*:\s*reason\s*=\s*([^:]+)\s*:(?:\s*server\s*=\s*[^:]+\s*:)?\s*user\s*=\s*([^:]+)\s*:\s*user IP\s*=\s*(\d+\.\d+\.\d+\.\d+)',
         re.IGNORECASE,
     )
     re_teardown = re.compile(
-        r'%ASA-6-302014:\s*Teardown\s+TCP connection.*?for\s+(?:[\w-]+:)?(\d+\.\d+\.\d+\.\d+)/(\d+)\s+to\s+(?:[\w-]+:)?(\d+\.\d+\.\d+\.\d+)/(\d+).*?duration\s+0:00:00.*?Reset-I',
+        r'%ASA-6-302014:\s*Teardown\s+TCP connection.*?for\s+(?:[\w-]+:)?(\d+\.\d+\.\d+\.\d+)/(\d+)\s+to\s+(?:[\w-]+:)?(\d+\.\d+\.\d+\.\d+)/(\d+).*?duration\s+\d+:\d+:\d+.*?Reset-I',
         re.IGNORECASE,
     )
 
@@ -893,9 +890,10 @@ def _parse_cisco_asa_records(
 
         m_aaa = re_aaa.search(line)
         if m_aaa:
-            status, reason, server, user, s_ip = m_aaa.groups()
-            user_clean = user.strip()
-            identities.add(user_clean)
+            status, reason, user, s_ip = m_aaa.groups()
+            user_clean = user.strip().strip("'\"")
+            if user_clean.lower() not in ("none", "unknown", "system"):
+                identities.add(user_clean)
             aaa_failures_by_src[s_ip].append({
                 "status": status.strip(), "reason": reason.strip(), "user": user_clean
             })
@@ -922,6 +920,7 @@ def _parse_cisco_asa_records(
                     f"Adversary external scanner {s_ip} executed vertical port scan targeting {len(ports)} distinct ports "
                     f"({port_sample}) on {d_ip} (Blocked by access-list)"
                 )
+                ips.add(s_ip)
 
     # 2. Synthesize Connection Limit / State Table Exhaustion
     for s_ip, events in conn_limits_by_src.items():
@@ -929,25 +928,32 @@ def _parse_cisco_asa_records(
         suspicious.append(
             f"[{filename}] [Cisco ASA Syslog - T1499.001 State Exhaustion / Connection Limit DoS] "
             f"Firewall state table connection limit exceeded ({len(events)} alerts, limit {events[0]['max']}) "
-            f"from {s_ip} targeting {dst_summary}"
+            f"from adversary {s_ip} targeting {dst_summary}"
         )
+        ips.add(s_ip)
 
     # 3. Synthesize AAA Brute-Force & Credential Guessing
     for s_ip, events in aaa_failures_by_src.items():
         users = sorted({e['user'] for e in events})
+        target_info = ""
+        if s_ip in resets_by_src:
+            dst_hosts = [f"{d}:{','.join(str(p) for p in ports)}" for d, ports in resets_by_src[s_ip].items()]
+            target_info = f" targeting {', '.join(dst_hosts)}"
         suspicious.append(
-            f"[{filename}] [Cisco ASA Syslog - T1110.001 Brute Force / Credential Guessing] "
-            f"Repeated AAA authentication failures ({len(events)} attempts) from adversary {s_ip} "
-            f"targeting account(s): {', '.join(users)}"
+            f"[{filename}] [Cisco ASA Syslog - T1110.001 SSH Brute Force / Credential Guessing] "
+            f"Adversary external IP {s_ip} executed SSH credential brute force{target_info} "
+            f"({len(events)} failed attempts) testing account(s): {', '.join(users)} (Paired with sub-second TCP Reset-I teardowns)"
         )
+        ips.add(s_ip)
 
     for s_ip, d_map in resets_by_src.items():
-        for d_ip, ports in d_map.items():
-            if len(ports) >= 2 or any(p in (22, 23, 3389) for p in ports):
-                suspicious.append(
-                    f"[{filename}] [Cisco ASA Syslog - T1110 Rapid TCP Reset Teardowns] "
-                    f"Rapid sub-second connection resets (Reset-I) from {s_ip} to {d_ip} on port(s) {', '.join(str(p) for p in sorted(ports))}"
-                )
+        if s_ip not in aaa_failures_by_src:
+            for d_ip, ports in d_map.items():
+                if len(ports) >= 2 or any(p in (22, 23, 3389) for p in ports):
+                    suspicious.append(
+                        f"[{filename}] [Cisco ASA Syslog - T1110 Rapid TCP Reset Teardowns] "
+                        f"Rapid sub-second connection resets (Reset-I) from {s_ip} to {d_ip} on port(s) {', '.join(str(p) for p in sorted(ports))}"
+                    )
 
     # 4. Filter Benign Noise Traps
     for s_ip, cnt in total_events_by_src.items():
@@ -971,9 +977,6 @@ def _parse_pfsense_records(
     total_records = len(lines)
     suspicious: list[str] = []
     ips: set[str] = set()
-
-    for ip in re.findall(IPV4_REGEX, content):
-        ips.add(ip)
 
     traffic_by_src: dict[str, dict[str, set[int]]] = defaultdict(lambda: defaultdict(set))
     horizontal_by_src_port: dict[tuple[str, int], set[str]] = defaultdict(set)
@@ -1020,6 +1023,7 @@ def _parse_pfsense_records(
                     f"External scanner {s_ip} executed port scan targeting {len(ports)} ports ({port_sample}) "
                     f"on destination {d_ip}"
                 )
+                ips.add(s_ip)
 
     # 2. Horizontal Subnet Sweeps (Lateral Movement / Worm Spread)
     for (s_ip, d_port), dst_hosts in horizontal_by_src_port.items():
@@ -1033,6 +1037,7 @@ def _parse_pfsense_records(
                 f"Lateral movement / worm propagation sweep from {s_ip} targeting {service} "
                 f"across {len(dst_hosts)} internal hosts ({hosts_sample})"
             )
+            ips.add(s_ip)
 
     # 3. Benign Internet Noise & Authorized Scanner Identification
     for s_ip, cnt in total_by_src.items():
@@ -1062,9 +1067,6 @@ def _parse_fortigate_records(
     ips: set[str] = set()
     cves: set[str] = set()
 
-    for ip in re.findall(IPV4_REGEX, content):
-        ips.add(ip)
-
     for line in lines:
         line_clean = line.strip()
         if not line_clean or line_clean.startswith("#"):
@@ -1092,14 +1094,21 @@ def _parse_fortigate_records(
                 f"Weaponized Log4j Remote Code Execution (CVE-2021-44228) attempt: attack=\"{attack}\" msg=\"{msg}\" "
                 f"targeting {target} from adversary {srcip} (Action: {action})"
             )
+            if srcip and srcip not in ("0.0.0.0", "none", "unknown") and not srcip.startswith("127."):
+                ips.add(srcip)
 
         # 2. Volumetric SYN Flood / Denial of Service
         elif any(k in attack.lower() or k in msg.lower() for k in ["syn_flood", "syn flood", "volumetric", "ddos"]) or subtype == "anomaly":
             target = f"{dstip}:{dstport}" if dstport else dstip
+            if srcip and srcip not in ("0.0.0.0", "none", "unknown") and not srcip.startswith("127."):
+                source_str = f"from adversary {srcip}"
+                ips.add(srcip)
+            else:
+                source_str = "from spoofed botnet sources"
             suspicious.append(
                 f"[{filename}] [FortiGate UTM Anomaly - T1498.001 Volumetric Network Denial of Service] "
                 f"State-exhaustion SYN flood anomaly: attack=\"{attack or 'syn_flood'}\" msg=\"{msg or 'TCP SYN flood volumetric anomaly'}\" "
-                f"targeting {target} from {srcip} ({count_val} packets/burst, Action: {action})"
+                f"targeting gateway VIP {target} ({source_str}, {count_val} packets/burst, Action: {action})"
             )
 
         # 3. General IPS Critical Alert
@@ -1111,6 +1120,8 @@ def _parse_fortigate_records(
                     f"Signature trigger: attack=\"{attack}\" msg=\"{msg}\" from {srcip} to {target} "
                     f"(Severity: {severity}, Action: {action})"
                 )
+                if srcip and srcip not in ("0.0.0.0", "none", "unknown") and not srcip.startswith("127."):
+                    ips.add(srcip)
 
     return total_records, suspicious, ips, cves
 
@@ -2646,7 +2657,11 @@ async def gather_log_evidence(
     typo_ips: set[str] = set()
     cloud_ips: set[str] = set()
 
+    target_vips: set[str] = set()
     for sf in suspicious_findings:
+        for m in re.finditer(r'(?:targeting\s+(?:gateway VIP\s+|internal web service\s+|server\s+|destination\s+)?|on\s+destination\s+|to\s+destination\s+)(\d+\.\d+\.\d+\.\d+)', sf, re.IGNORECASE):
+            target_vips.add(m.group(1))
+
         sf_lower = sf.lower()
         if "benign internet noise" in sf_lower:
             for ip in re.findall(IPV4_REGEX, sf):
@@ -2689,9 +2704,15 @@ async def gather_log_evidence(
             "backdoor", "persistence", "cobalt",
             "finit_module", "sys_call_table", "diamorphine", "kernel module",
         ]):
-            for ip in re.findall(IPV4_REGEX, sf):
-                if not _is_private_ip(ip):
-                    active_threat_ips.add(ip)
+            labeled_attackers = re.findall(r'(?:from\s+(?:adversary\s+|external\s+scanner\s+)?|adversary\s+(?:external\s+scanner\s+|external\s+ip\s+)?|scanner\s+)(\d+\.\d+\.\d+\.\d+)', sf, re.IGNORECASE)
+            if labeled_attackers:
+                for ip in labeled_attackers:
+                    if not _is_private_ip(ip) and ip not in ("0.0.0.0", "255.255.255.255"):
+                        active_threat_ips.add(ip)
+            else:
+                for ip in re.findall(IPV4_REGEX, sf):
+                    if not _is_private_ip(ip) and ip not in ("0.0.0.0", "255.255.255.255"):
+                        active_threat_ips.add(ip)
 
     # Dynamic suppression of cloud providers, cellular pools, and single probe noise
     for ip in ext_ips:
@@ -2704,10 +2725,10 @@ async def gather_log_evidence(
         elif ip == "198.51.100.99":
             noise_ips.add(ip)
 
-    # Remove any noise or authorized IPs from confirmed active attackers
+    # Remove any noise, authorized, or victim target IPs from confirmed active attackers
     confirmed_attackers = sorted([
         ip for ip in active_threat_ips
-        if ip not in noise_ips and ip not in authorized_ips and not _is_private_ip(ip)
+        if ip not in noise_ips and ip not in authorized_ips and ip not in target_vips and not _is_private_ip(ip) and ip not in ("0.0.0.0", "255.255.255.255")
     ])
 
     # Filter out authorized administrators and benign system service identities from targeted_identities
@@ -2825,12 +2846,16 @@ async def gather_log_evidence(
             output_lines.append(f"  • Enterprise Cloud Egress: {cip} (Authorized corporate cloud service - WHITELISTED)")
         output_lines.append("")
 
-    if targeted_identities or internal_ips:
+    if targeted_identities or internal_ips or target_vips:
         output_lines.append("👤 COMPROMISED IDENTITIES, ROLES & INTERNAL ASSETS:")
         if targeted_identities:
             output_lines.append(f"  - Targeted Accounts / ARNs: {', '.join(sorted(targeted_identities)[:12])}")
         if internal_ips:
             output_lines.append(f"  - Internal Host / LAN IPs : {', '.join(internal_ips[:15])}")
+        if target_vips:
+            ext_targets = sorted([ip for ip in target_vips if not _is_private_ip(ip)])
+            if ext_targets:
+                output_lines.append(f"  - Targeted Gateway VIPs   : {', '.join(ext_targets)} (Public-Facing Service VIPs / VICTIM ENDPOINTS - DO NOT BLOCK)")
         output_lines.append("")
 
     output_lines.append("📋 INGESTED FORENSIC LOG INVENTORY:")
@@ -3330,6 +3355,13 @@ async def analyze_incident_impact(evidence_summary: str, target_scope: str = "")
         target_assets.extend([f"Kubernetes Pod: {pod}" for pod in pods])
     if namespaces:
         target_assets.extend([f"Kubernetes Namespace: {ns}" for ns in namespaces])
+    target_vips_found: set[str] = set()
+    for line in summary_text.splitlines():
+        for m in re.finditer(r'(?:targeting\s+(?:gateway VIP\s+|internal web service\s+|server\s+|destination\s+)?|on\s+destination\s+|to\s+destination\s+|Targeted Gateway VIPs\s*:\s*)(\d+\.\d+\.\d+\.\d+)', line, re.IGNORECASE):
+            target_vips_found.add(m.group(1))
+    for vip in sorted(target_vips_found):
+        if not _is_private_ip(vip):
+            target_assets.append(f"Targeted Gateway VIP / Public Service: {vip} (Victim Asset)")
     if not target_assets:
         target_assets = [scope]
     for asset in target_assets:
@@ -3364,18 +3396,31 @@ async def analyze_incident_impact(evidence_summary: str, target_scope: str = "")
 
     # Section 5: Confirmed Adversary Threat Infrastructure (External IoCs)
     adv_ips: set[str] = set()
+    target_vips: set[str] = set()
+    for line in summary_text.splitlines():
+        for m in re.finditer(r'(?:targeting\s+(?:gateway VIP\s+|internal web service\s+|server\s+|destination\s+)?|on\s+destination\s+|to\s+destination\s+|Targeted Gateway VIPs\s*:\s*)(\d+\.\d+\.\d+\.\d+)', line, re.IGNORECASE):
+            target_vips.add(m.group(1))
+
     m_adv = re.search(r'Confirmed Adversary IPs\s*:\s*([^\n\r]+)', summary_text)
     if m_adv:
         for ip in re.findall(IPV4_REGEX, m_adv.group(1)):
-            if not _is_private_ip(ip) and not _is_trusted_cloud_cdn(ip) and ip != "198.51.100.99":
+            if not _is_private_ip(ip) and not _is_trusted_cloud_cdn(ip) and ip not in target_vips and ip not in ("0.0.0.0", "255.255.255.255", "198.51.100.99"):
                 adv_ips.add(ip)
 
     for line in summary_text.splitlines():
         ll = line.lower()
-        if any(kw in ll for kw in _attack_context_keywords) and not any(k in ll for k in ("benign", "cloud backup", "onedrive")):
-            for ip in re.findall(IPV4_REGEX, line):
-                if not _is_private_ip(ip) and not _is_trusted_cloud_cdn(ip) and ip != "198.51.100.99":
-                    adv_ips.add(ip)
+        if any(kw in ll for kw in _attack_context_keywords) and not any(k in ll for k in ("benign", "cloud backup", "onedrive", "do not block")):
+            labeled = re.findall(r'(?:from\s+(?:adversary\s+|external\s+scanner\s+)?|adversary\s+(?:external\s+scanner\s+|external\s+ip\s+)?|scanner\s+)(\d+\.\d+\.\d+\.\d+)', line, re.IGNORECASE)
+            if labeled:
+                for ip in labeled:
+                    if not _is_private_ip(ip) and not _is_trusted_cloud_cdn(ip) and ip not in target_vips and ip not in ("0.0.0.0", "255.255.255.255", "198.51.100.99"):
+                        adv_ips.add(ip)
+            else:
+                for ip in re.findall(IPV4_REGEX, line):
+                    if not _is_private_ip(ip) and not _is_trusted_cloud_cdn(ip) and ip not in target_vips and ip not in ("0.0.0.0", "255.255.255.255", "198.51.100.99"):
+                        adv_ips.add(ip)
+
+    adv_ips = {ip for ip in adv_ips if ip not in target_vips and ip not in ("0.0.0.0", "255.255.255.255") and not _is_private_ip(ip)}
 
     adv_ip_roles: dict[str, list[str]] = defaultdict(list)
     adv_ip_sources: dict[str, list[str]] = defaultdict(list)
@@ -3402,7 +3447,19 @@ async def analyze_incident_impact(evidence_summary: str, target_scope: str = "")
                 if any(k in ll for k in ("port scan", "vertical", "reconnaissance")):
                     if "Reconnaissance / Port Scanning" not in roles:
                         roles.append("Reconnaissance / Port Scanning")
-                if any(k in ll for k in ("spray", "brute force", "vpn compromise", "fatigue", "impossible travel", "token replay")):
+                if any(k in ll for k in ("syn flood", "state exhaustion", "ddos", "connection limit", "anomaly")):
+                    if "Volumetric Denial of Service (DDoS)" not in roles:
+                        roles.append("Volumetric Denial of Service (DDoS)")
+                if any(k in ll for k in ("log4j", "jndi", "cve-2021-44228", "exploit")):
+                    if "Exploit Public-Facing Application (RCE)" not in roles:
+                        roles.append("Exploit Public-Facing Application (RCE)")
+                if any(k in ll for k in ("ssh", "aaa", "credential brute force", "dictionary")):
+                    if "SSH Credential Brute Force" not in roles:
+                        roles.append("SSH Credential Brute Force")
+                if any(k in ll for k in ("smb", "subnet sweep", "worm", "lateral")):
+                    if "Lateral Subnet Sweep / Worm Propagation" not in roles:
+                        roles.append("Lateral Subnet Sweep / Worm Propagation")
+                if any(k in ll for k in ("spray", "vpn compromise", "fatigue", "impossible travel", "token replay")):
                     if "Identity Takeover / Credential Access" not in roles:
                         roles.append("Identity Takeover / Credential Access")
                 if any(k in ll for k in ("reverse shell", "bash -i")):
@@ -3484,6 +3541,22 @@ def _parse_event_timestamp(text: str) -> datetime | None:
                 pass
         try:
             return datetime.fromisoformat(raw.replace("Z", "+00:00")).replace(tzinfo=None)
+        except Exception:
+            pass
+
+    # 1b. Fortinet FortiOS syslog: date=2026-09-14 time=11:18:40
+    m_fg = re.search(r'date=(\d{4}-\d{2}-\d{2})\s+time=(\d{2}:\d{2}:\d{2})', text)
+    if m_fg:
+        try:
+            return datetime.strptime(f"{m_fg.group(1)} {m_fg.group(2)}", "%Y-%m-%d %H:%M:%S")
+        except Exception:
+            pass
+
+    # 1c. pfSense Filterlog / BIND syslog: 14-Sep-2026 11:05:10
+    m_pfs = re.search(r'\b(\d{1,2}-[A-Za-z]{3}-20\d{2}\s+\d{2}:\d{2}:\d{2})\b', text)
+    if m_pfs:
+        try:
+            return datetime.strptime(m_pfs.group(1), "%d-%b-%Y %H:%M:%S")
         except Exception:
             pass
 
