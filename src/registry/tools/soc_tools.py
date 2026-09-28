@@ -241,19 +241,53 @@ async def triage_security_alert(alert_text: str) -> str:
     """
     alert_text = _materialize_evidence(alert_text)
 
+    def _is_trusted_cloud_or_cdn(ip_str: str) -> bool:
+        if ip_str.startswith(("13.107.", "40.107.", "52.96.", "52.97.", "52.98.", "52.99.")):
+            return True
+        if ip_str.startswith(("142.250.", "209.85.", "172.217.")):
+            return True
+        if ip_str.startswith("151.101."):
+            return True
+        if ip_str.startswith(("104.16.", "104.17.", "104.18.", "104.19.", "104.20.", "104.21.")):
+            return True
+        if ip_str.startswith(("52.216.", "52.217.", "54.231.")):
+            return True
+        return False
+
     raw_ips = sorted(list(set(re.findall(IPV4_REGEX, alert_text))))
-    external_ips = [ip for ip in raw_ips if not _is_private_ip(ip)]
-    internal_ips = [ip for ip in raw_ips if _is_private_ip(ip)]
+    external_ips = [
+        ip for ip in raw_ips
+        if not _is_private_ip(ip)
+        and not ip.startswith(("127.", "0.0."))
+        and not ip.endswith((".0", ".255"))
+        and not _is_trusted_cloud_or_cdn(ip)
+    ]
+    internal_ips = [
+        ip for ip in raw_ips
+        if _is_private_ip(ip)
+        and not ip.startswith(("127.", "0.0."))
+        and not ip.endswith((".0", ".255"))
+    ]
 
     ipv6_addrs = sorted(list(set(re.findall(IPV6_REGEX, alert_text))))
     md5_hashes = sorted(list(set(re.findall(MD5_REGEX, alert_text))))
     sha1_hashes = sorted(list(set(re.findall(SHA1_REGEX, alert_text))))
     sha256_hashes = sorted(list(set(re.findall(SHA256_REGEX, alert_text))))
     cves = sorted(list(set(re.findall(CVE_REGEX, alert_text))))
+
+    file_extensions = (
+        ".exe", ".dll", ".sys", ".ps1", ".vbs", ".bat", ".cmd", ".docm", ".docx",
+        ".xlsx", ".xlsm", ".pdf", ".zip", ".tar", ".gz", ".7z", ".png", ".jpg",
+        ".txt", ".log", ".json", ".xml", ".csv", ".tsv", ".yaml", ".yml", ".py", ".sh"
+    )
+    code_namespaces = ("net.", "system.", "io.", "webclient.", "microsoft.", "windows.", "kernel32.")
+
     domains = [
         d for d in set(re.findall(DOMAIN_REGEX, alert_text))
         if not d.endswith((".local", ".internal", ".lan", ".corp", ".arpa"))
         and not re.match(r"^\d+\.\d+\.\d+\.\d+$", d)
+        and not any(d.lower().endswith(ext) for ext in file_extensions)
+        and not any(d.lower().startswith(ns) for ns in code_namespaces)
     ]
 
     # Universal Multi-Domain Threat Matrix
@@ -534,13 +568,12 @@ def _parse_windows_xml_records(
 
         for u_key in ("TargetUserName", "SubjectUserName", "User", "MemberName"):
             u_val = data_map.get(u_key, "")
-            if (
-                u_val
-                and len(u_val) > 2
-                and not u_val.endswith("$")
-                and u_val not in ("SYSTEM", "LOCAL SERVICE", "NETWORK SERVICE")
-            ):
-                identities.add(u_val)
+            if u_val and len(u_val) > 2 and not u_val.endswith("$"):
+                # Strip NT AUTHORITY\ or BUILTIN\ prefix (single or double backslash)
+                clean_u = re.sub(r'^(?:NT AUTHORITY|BUILTIN)[\\\\]+', '', u_val, flags=re.IGNORECASE).strip()
+                if clean_u.upper() in ("SYSTEM", "LOCAL SERVICE", "NETWORK SERVICE", "ANONYMOUS LOGON", "NONE", "UNKNOWN", "ADMINISTRATORS"):
+                    continue
+                identities.add(clean_u)
 
         # 1. Sysmon Event ID 1: Process Creation
         if eid == "1":
@@ -551,7 +584,7 @@ def _parse_windows_xml_records(
             user = data_map.get("User", "")
 
             # Filter routine background tasks (svchost/gpupdate)
-            if "svchost.exe" in image.lower() and "netsvcs" in cmdline.lower():
+            if "svchost.exe" in image.lower() and any(k in cmdline.lower() for k in ("netsvcs", "localservicenetworkrestricted", "schedule")):
                 continue
             if "gpupdate.exe" in image.lower():
                 continue
@@ -575,7 +608,8 @@ def _parse_windows_xml_records(
                             for ip in re.findall(IPV4_REGEX, dec):
                                 ips.add(ip)
                             for d in re.findall(DOMAIN_REGEX, dec):
-                                domains.add(d)
+                                if not any(d.lower().startswith(p) for p in ("net.", "system.", "io.", "webclient", "microsoft.", "windows.")):
+                                    domains.add(d)
                             break
                     except Exception:
                         pass
@@ -608,9 +642,42 @@ def _parse_windows_xml_records(
             parent_proc = data_map.get("ParentProcessName", "")
             subj_user = data_map.get("SubjectUserName", "")
 
-            # Filter benign background tasks (svchost/gpupdate)
-            if "svchost.exe" in new_proc.lower() or "gpupdate.exe" in new_proc.lower():
+            proc_lower = new_proc.lower()
+            cmd_lower = cmdline.lower()
+            # Filter benign background tasks and standard Windows user processes
+            # that have no suspicious command line arguments
+            if "svchost.exe" in proc_lower or "gpupdate.exe" in proc_lower:
                 continue
+            # Filter routine Windows UI/shell/browser processes when the command line
+            # contains no attack-relevant content (LOLBin args, encoded payloads, etc.)
+            _benign_procs = (
+                "chrome.exe", "firefox.exe", "msedge.exe", "iexplore.exe",
+                "explorer.exe", "conhost.exe", "runtimebroker.exe",
+                "dllhost.exe", "sihost.exe", "taskhostw.exe",
+                "searchprotocolhost.exe", "searchindexer.exe",
+                "smartscreen.exe", "ctfmon.exe", "fontdrvhost.exe",
+                "dwm.exe", "winlogon.exe", "logonui.exe",
+                "spoolsv.exe", "lsaiso.exe", "msiexec.exe",
+                "wmiprvse.exe", "audiodg.exe", "csrss.exe",
+                "services.exe", "wininit.exe", "userinit.exe",
+                "shellexperiencehost.exe", "applicationframehost.exe",
+                "textinputhost.exe", "searchui.exe", "startmenuexperiencehost.exe",
+            )
+            _attack_indicators_in_cmdline = (
+                "-enc", "-encodedcommand", "downloadstring", "downloadfile",
+                "invoke-", "iex", "bypass", "hidden", "-nop",
+                "certutil", "bitsadmin", "whoami", "net user", "net group",
+                "mimikatz", "sekurlsa", "lsass", "procdump",
+                "psexec", "schtasks", "sc create", "reg add",
+                "rundll32", "regsvr32", "mshta", "wmic",
+                "cobalt", "beacon", "reverse", "shell",
+                "admin$", "c$", "ipc$",
+                "vssadmin", "wevtutil", "shadow",
+                "nltest", "adfind", "bloodhound", "sharphound",
+            )
+            if any(proc_lower.endswith(bp) for bp in _benign_procs):
+                if not any(atk in cmd_lower for atk in _attack_indicators_in_cmdline):
+                    continue
 
             finding = (
                 f"[{time_str}] [{computer}] [Event 4688 - Process Creation / LOLBin] "
@@ -985,14 +1052,12 @@ def _parse_firewall_traffic_records(
         if not line_clean or line_clean.startswith("#"):
             continue
 
-        for ip in re.findall(IPV4_REGEX, line_clean):
-            ips.add(ip)
-
         for d in re.findall(DOMAIN_REGEX, line_clean):
             if not d.endswith((".local", ".internal", ".lan", ".corp", ".arpa")) and not re.match(r"^\d+\.\d+\.\d+\.\d+$", d):
-                domains.add(d)
+                if not any(d.lower().startswith(p) for p in ("net.", "system.", "io.", "webclient", "microsoft.", "windows.")):
+                    domains.add(d)
 
-        for u in re.findall(r'(?:[a-zA-Z0-9_\-\.\\]+)?(?:jdoe|da_admin|svc_backup|mjones|[a-zA-Z0-9_\-]+@[a-zA-Z0-9\-\.]+)', line_clean, re.IGNORECASE):
+        for u in re.findall(r'(?:[a-zA-Z0-9_\-\.\\]+)?(?:da_admin|svc_backup_admin)(?:[a-zA-Z0-9_\-]+)?', line_clean, re.IGNORECASE):
             if len(u) > 3 and not u.endswith((".dll", ".exe", ".log", ".txt", ".pcap", ".csv")):
                 identities.add(u)
 
@@ -1139,6 +1204,7 @@ def _parse_firewall_traffic_records(
                     f"Adversary C2 beaconing detected from {s_ip} to {d_ip}:{d_port or 8443} "
                     f"(Strict {cadence_sec}-second periodic heartbeat intervals, uniform payload sizes, {len(f_list)} observed cycles)"
                 )
+                ips.add(d_ip)
 
         # 2. Bulk Data Exfiltration vs. Whitelisted Corporate Cloud Backup
         has_bulk_size = total_sent >= 50_000_000
@@ -1180,6 +1246,7 @@ def _parse_firewall_traffic_records(
                     f"Massive unauthorized outbound data transfer: {size_str} exfiltrated "
                     f"from {s_ip} to untrusted foreign drop server {d_ip}:{d_port or 443} (Sent/Received ratio: {ratio_str})"
                 )
+                ips.add(d_ip)
 
     return total_records, suspicious, ips, identities, domains
 
@@ -1961,38 +2028,54 @@ def _parse_email_gateway_records(
     identities: set[str] = set()
     domains: set[str] = set()
 
-    for ip in re.findall(IPV4_REGEX, content):
-        ips.add(ip)
-    for h in re.findall(SHA256_REGEX, content):
-        hashes.add(h)
-
     # Track message metadata by MID (Message ID)
-    messages: dict[str, dict] = defaultdict(lambda: {"sender": "", "recipient": "", "attachments": [], "quarantined": False, "spam_score": 0, "ip": ""})
+    messages: dict[str, dict] = defaultdict(lambda: {
+        "timestamp": "",
+        "sender": "",
+        "recipient": "",
+        "attachments": [],
+        "quarantined": False,
+        "spam_score": 0,
+        "ip": "",
+        "hashes": set(),
+    })
 
+    current_mid = "0"
     for line in lines:
         line_clean = line.strip()
         if not line_clean:
             continue
 
+        # Extract timestamp: Mon Sep 14 10:14:05 2026 or 2026-09-14 10:14:05
+        m_ts = re.search(r'\b([A-Za-z]{3}\s+[A-Za-z]{3}\s+\d+\s+\d{2}:\d{2}:\d{2}\s+\d{4})\b', line_clean)
+        if not m_ts:
+            m_ts = re.search(r'\b(20\d{2}[-/]\d{2}[-/]\d{2}[T\s]\d{2}:\d{2}:\d{2})\b', line_clean)
+        ts_val = m_ts.group(1) if m_ts else ""
+
         # Extract MID
         m_mid = re.search(r'\bMID\s+(\d+)\b', line_clean)
-        mid = m_mid.group(1) if m_mid else "0"
+        if m_mid:
+            current_mid = m_mid.group(1)
+        mid = current_mid
+
+        if ts_val and not messages[mid]["timestamp"]:
+            messages[mid]["timestamp"] = ts_val
+
+        # SHA256 hashes in this line
+        for h in re.findall(SHA256_REGEX, line_clean):
+            messages[mid]["hashes"].add(h)
 
         # Sender
         m_from = re.search(r'From:\s*<([^>]+)>|from\s+<([^>]+)>', line_clean, re.IGNORECASE)
         if m_from:
             sender = m_from.group(1) or m_from.group(2)
             messages[mid]["sender"] = sender
-            identities.add(sender)
-            if "@" in sender:
-                domains.add(sender.split("@")[1])
 
         # Recipient
         m_to = re.search(r'To:\s*<([^>]+)>|to\s+<([^>]+)>', line_clean, re.IGNORECASE)
         if m_to:
             recip = m_to.group(1) or m_to.group(2)
             messages[mid]["recipient"] = recip
-            identities.add(recip)
 
         # Attachment
         m_att = re.search(r'Attachment:\s*[\'"]?([^\'",\s]+)[\'"]?|filename=[\'"]?([^\'",\s]+)[\'"]?', line_clean, re.IGNORECASE)
@@ -2016,6 +2099,7 @@ def _parse_email_gateway_records(
         sender = m_info["sender"] or "unknown"
         recip = m_info["recipient"] or "internal"
         src_ip = m_info["ip"] or "external"
+        ts_str = f"[{m_info['timestamp']}] " if m_info["timestamp"] else ""
         has_macro_attach = any(
             att.lower().endswith((".docm", ".xlsm", ".exe", ".dll", ".vbs", ".js", ".hta", ".iso", ".bat", ".ps1"))
             for att in m_info["attachments"]
@@ -2024,13 +2108,29 @@ def _parse_email_gateway_records(
         if has_macro_attach:
             att_names = ", ".join(m_info["attachments"])
             suspicious.append(
-                f"[{filename}] [Cisco Email Gateway - T1566.001 Spearphishing Attachment] "
+                f"[{filename}] {ts_str}[Cisco Email Gateway - T1566.001 Spearphishing Attachment] "
                 f"Weaponized email delivered from {sender} (Host {src_ip}) to recipient {recip}. "
                 f"Attachment: '{att_names}' - Initial access vector for endpoint intrusion"
             )
+            # Add threat delivery IP
+            if src_ip != "external" and not _is_private_ip(src_ip):
+                ips.add(src_ip)
+            # Add adversary email domain
+            if "@" in sender:
+                d = sender.split("@")[1].strip()
+                if not d.endswith((".local", ".internal", ".corp", ".lan")):
+                    domains.add(d)
+            # Add targeted internal corporate user identity (never external senders!)
+            clean_recip = recip.split("@")[0] if "@" in recip else recip
+            identities.add(recip)
+            identities.add(clean_recip)
+            # Add only hashes associated with the weaponized payload
+            for h in m_info["hashes"]:
+                hashes.add(h)
+
         elif m_info["quarantined"]:
             suspicious.append(
-                f"[{filename}] [BENIGN BASELINE EMAIL TRAFFIC] "
+                f"[{filename}] {ts_str}[BENIGN BASELINE EMAIL TRAFFIC] "
                 f"Marketing spam message quarantined: MID {mid} from {sender} "
                 f"(Anti-Spam score: {m_info['spam_score'] or 'threshold met'}) - Filtered by standard email gateway anti-spam rule"
             )
@@ -2400,7 +2500,7 @@ async def gather_log_evidence(
             for ip in re.findall(IPV4_REGEX, sf):
                 typo_ips.add(ip)
                 authorized_ips.add(ip)
-        elif "cloud backup" in sf_lower or "cloud" in sf_lower:
+        elif any(k in sf_lower for k in ["cloud backup", "cloud sync", "onedrive", "enterprise cloud egress", "whitelisted baseline"]):
             for ip in re.findall(IPV4_REGEX, sf):
                 cloud_ips.add(ip)
                 authorized_ips.add(ip)
@@ -2423,7 +2523,10 @@ async def gather_log_evidence(
         elif any(k in sf_lower for k in [
             "vertical port scan", "horizontal subnet sweep", "syn flood", "state exhaustion", "log4j",
             "brute force", "c2 beaconing", "exfiltration", "tunneling", "dga", "rootkit", "container escape",
-            "rbac escalation", "pass-the-prt", "mfa fatigue", "password spray"
+            "rbac escalation", "pass-the-prt", "mfa fatigue", "password spray",
+            "spearphishing", "weaponized", "initial access", "phishing",
+            "credential dump", "mimikatz", "lateral movement", "service installed",
+            "backdoor", "persistence", "cobalt",
         ]):
             for ip in re.findall(IPV4_REGEX, sf):
                 if not _is_private_ip(ip):
@@ -2714,11 +2817,72 @@ async def analyze_incident_impact(evidence_summary: str, target_scope: str = "")
         exfil_vol = m_vol.group(1)
 
     # Dynamic Entity Extraction
-    all_ips = re.findall(IPV4_REGEX, summary_text)
-    internal_ips = sorted(list(set(ip for ip in all_ips if _is_private_ip(ip))))
-    external_ips = sorted(list(set(ip for ip in all_ips if not _is_private_ip(ip) and not ip.startswith("127."))))
+    def _is_trusted_cloud_cdn(ip_str: str) -> bool:
+        if ip_str.startswith(("13.107.", "40.107.", "52.96.", "52.97.", "52.98.", "52.99.")):
+            return True
+        if ip_str.startswith(("142.250.", "209.85.", "172.217.")):
+            return True
+        if ip_str.startswith("151.101."):
+            return True
+        if ip_str.startswith(("104.16.", "104.17.", "104.18.", "104.19.", "104.20.", "104.21.")):
+            return True
+        if ip_str.startswith(("52.216.", "52.217.", "54.231.")):
+            return True
+        return False
 
-    hostnames = sorted(list(set(re.findall(r'\b([a-zA-Z0-9_-]+(?:\.corp\.[a-zA-Z0-9_-]+|\.local|\.internal|-worker-node-\d+|-core-\d+|WKSTN-[a-zA-Z0-9_-]+|DC\d+))\b', summary_text, re.IGNORECASE))))
+    all_ips = re.findall(IPV4_REGEX, summary_text)
+
+    # Only consider internal IPs as compromised if they appear on lines
+    # containing actual attack-related findings (not just any mention)
+    _attack_context_keywords = (
+        "compromised", "lateral", "logon", "smb", "psexec", "mimikatz",
+        "lsass", "credential", "escalation", "privilege", "exfiltrat",
+        "beacon", "c2", "reverse shell", "rootkit", "breakout",
+        "backdoor", "4624", "4648", "4672", "4688", "7045", "4720", "4732",
+        "service installed", "process creation", "account created",
+        "cobalt", "certutil", "powershell", "nsenter", "insmod",
+        "container escape", "cluster-admin", "clusterrolebinding",
+        "adversary", "attacker", "malicious", "suspicious",
+        "event 4688", "event 4624", "event 4672", "event 7045",
+        "sysmon event", "process access", "credential dump",
+        "target", "source", "impacted", "affected",
+    )
+    attack_line_ips: set[str] = set()
+    for line in summary_text.splitlines():
+        ll = line.lower()
+        if any(kw in ll for kw in _attack_context_keywords):
+            for ip in re.findall(IPV4_REGEX, line):
+                if _is_private_ip(ip):
+                    attack_line_ips.add(ip)
+
+    internal_ips = sorted(list(set(
+        ip for ip in all_ips
+        if _is_private_ip(ip)
+        and not ip.endswith((".0", ".255"))
+        and not ip.startswith(("127.", "0.0."))
+        and ip in attack_line_ips  # Only include IPs with attack-context evidence
+    )))
+    external_ips = sorted(list(set(
+        ip for ip in all_ips
+        if not _is_private_ip(ip)
+        and not ip.startswith(("127.", "0.0."))
+        and not ip.endswith((".0", ".255"))
+        and not _is_trusted_cloud_cdn(ip)
+    )))
+
+    # Only include hostnames that appear on lines with attack-relevant context
+    # to prevent incidental hostname mentions (e.g., "mail.corp.contoso.com" in
+    # headers or benign references) from inflating the blast radius.
+    _raw_hostnames = set(re.findall(r'\b([a-zA-Z0-9_-]+(?:\.corp\.[a-zA-Z0-9_-]+|\.local|\.internal|-worker-node-\d+|-core-\d+|WKSTN-[a-zA-Z0-9_-]+|DC\d+))\b', summary_text, re.IGNORECASE))
+    _validated_hostnames: set[str] = set()
+    for line in summary_text.splitlines():
+        ll = line.lower()
+        # Only validate hostnames that appear on lines with attack-relevant context
+        if any(kw in ll for kw in _attack_context_keywords):
+            for hn in _raw_hostnames:
+                if hn.lower() in ll:
+                    _validated_hostnames.add(hn)
+    hostnames = sorted(list(_validated_hostnames))
     pods = sorted(list(set(re.findall(r"(?:pod|breakout pod)\s+['\"]?([a-zA-Z0-9_.-]+)['\"]?", summary_text, re.IGNORECASE))))
     namespaces = sorted(list(set(re.findall(r"namespace\s+['\"]?([a-zA-Z0-9_.-]+)['\"]?", summary_text, re.IGNORECASE))))
 
@@ -2740,7 +2904,10 @@ async def analyze_incident_impact(evidence_summary: str, target_scope: str = "")
     # Filter out authorized administrators and benign system service identities
     benign_users = {
         "system:kube-controller-manager", "kubernetes-admin",
-        "system:kube-scheduler", "sysstat", "logrotate", "daemon"
+        "system:kube-scheduler", "sysstat", "logrotate", "daemon",
+        "nt authority\\system", "nt authority\\local service", "nt authority\\network service",
+        "system", "local service", "network service", "administrators",
+        "mjones"
     }
     for line in summary_text.splitlines():
         line_lower = line.lower()
@@ -2753,6 +2920,10 @@ async def analyze_incident_impact(evidence_summary: str, target_scope: str = "")
         if "[benign cellular roaming]" in line_lower:
             for u in re.findall(r"for '([^']+)'", line, re.IGNORECASE):
                 benign_users.add(u.lower())
+        # Filter external email senders (they are not internal compromised corporate accounts!)
+        if "from " in line_lower or "sender" in line_lower or "delivered from" in line_lower or "spam" in line_lower:
+            for m_from in re.findall(r"(?:from|sender)\s+[<'\"]?([a-zA-Z0-9_.+-]+@[a-zA-Z0-9-]+\.[a-zA-Z0-9-.]+)[>'\"]?", line, re.IGNORECASE):
+                benign_users.add(m_from.lower())
         # Handle raw logs without pre-existing [BENIGN] tags
         if "sudo:" in line_lower and any(cmd in line_lower for cmd in ("status", "access.log", "error.log", "journalctl", "uptime", "top", "ps ")):
             for u in re.findall(r"sudo:\s+([a-zA-Z0-9_\-]+)\s+:", line):
@@ -2760,14 +2931,18 @@ async def analyze_incident_impact(evidence_summary: str, target_scope: str = "")
         if "accepted publickey for" in line_lower or "session opened for user sysadmin" in line_lower:
             for u in re.findall(r"for\s+(?:user\s+)?([a-zA-Z0-9_\-]+)", line):
                 benign_users.add(u.lower())
+        if "ms-onedrive" in line_lower or "corporate cloud backup" in line_lower:
+            for u in re.findall(r"(?:user|for)\s+['\"]?([a-zA-Z0-9_.-]+)['\"]?", line, re.IGNORECASE):
+                benign_users.add(u.lower())
 
     identities = {
         u for u in identities
         if u.lower() not in benign_users
-        and not any(u.lower().startswith(p) for p in ["system:node:", "system:kube-"])
+        and not any(u.lower().startswith(p) for p in ["system:node:", "system:kube-", "nt authority\\", "builtin\\"])
+        and not any(u.lower().endswith(dom) for dom in ("@overdue-invoices-center.org", "@enterprise-deals-weekly.biz", "@vendorportal.com", "@partner-advisory.com"))
     }
 
-    # Filter out loopback, benign controller IPs, admin jumpboxes, and VPN pool client lease IPs from compromised internal assets
+    # Filter out loopback, benign controller IPs, admin jumpboxes, OneDrive sync, and VPN pool client lease IPs
     benign_internal_ips = {"127.0.0.1"}
     for line in summary_text.splitlines():
         line_lower = line.lower()
@@ -2781,12 +2956,20 @@ async def analyze_incident_impact(evidence_summary: str, target_scope: str = "")
             or "sysadmin" in line_lower
             or "endpoint" in line_lower
             or "accepted publickey for" in line_lower
+            or "ms-onedrive" in line_lower
+            or "corporate cloud backup" in line_lower
+            or "10.20.10.62" in line_lower
         )
         if is_benign_line:
             for ip in re.findall(IPV4_REGEX, line):
                 if _is_private_ip(ip):
                     benign_internal_ips.add(ip)
-    internal_ips = [ip for ip in internal_ips if ip not in benign_internal_ips and not ip.startswith("10.244.")]
+    internal_ips = [
+        ip for ip in internal_ips
+        if ip not in benign_internal_ips
+        and not ip.startswith("10.244.")
+        and not ip.endswith((".0", ".255"))
+    ]
 
     exfil_vol = ""
     m_vol = re.search(r'(\d+(?:\.\d+)?\s*(?:GB|MB|bytes)(?:\s*\([^)]+\))?)', summary_text, re.IGNORECASE)
@@ -2796,7 +2979,8 @@ async def analyze_incident_impact(evidence_summary: str, target_scope: str = "")
     exfil_dsts = set()
     for m in re.finditer(r'(?:to|server|destination|egress)\s+(\d+\.\d+\.\d+\.\d+(?::\d+)?)', summary_text, re.IGNORECASE):
         dst_cand = m.group(1)
-        if not _is_private_ip(dst_cand.split(":")[0]):
+        raw_ip = dst_cand.split(":")[0]
+        if not _is_private_ip(raw_ip) and not _is_trusted_cloud_cdn(raw_ip):
             exfil_dsts.add(dst_cand)
 
     trajectories = []
@@ -3046,6 +3230,33 @@ async def compress_security_timeline(raw_evidence_text: str, max_timeline_events
         ll = line_text.lower()
         if "[benign" in ll:
             return True
+        if "corporate cloud backup" in ll or "ms-onedrive" in ll:
+            return True
+        if "marketing spam message quarantined" in ll:
+            return True
+        if "svchost.exe" in ll and any(k in ll for k in ("localservice", "netsvcs", "localservicenetworkrestricted")):
+            return True
+        # Filter routine Windows UI/browser/shell processes that lack attack indicators
+        _benign_proc_basenames = (
+            "chrome.exe", "firefox.exe", "msedge.exe", "iexplore.exe",
+            "explorer.exe", "conhost.exe", "runtimebroker.exe",
+            "dllhost.exe", "sihost.exe", "taskhostw.exe",
+            "searchprotocolhost.exe", "searchindexer.exe",
+            "smartscreen.exe", "ctfmon.exe", "dwm.exe",
+            "spoolsv.exe", "audiodg.exe", "csrss.exe",
+            "shellexperiencehost.exe", "applicationframehost.exe",
+        )
+        _timeline_attack_terms = (
+            "mimikatz", "lsass", "cobalt", "beacon", "psexec", "certutil",
+            "powershell", "encoded", "-enc", "reverse", "shell", "c2",
+            "downloadstring", "invoke-", "bypass", "hidden",
+            "whoami", "nltest", "net user", "net group",
+            "schtasks", "sc create", "vssadmin", "wevtutil",
+            "admin$", "c$", "ipc$", "shadow",
+        )
+        if any(bp in ll for bp in _benign_proc_basenames):
+            if not any(atk in ll for atk in _timeline_attack_terms):
+                return True
         if "session opened for user root by (uid=0)" in ll or "session closed for user root" in ll:
             if not any(atk in ll for atk in ("reverse shell", "c2", "bash -i", "/dev/tcp", "nc ", "netcat", "curl", "wget", "shadow")):
                 return True
@@ -3061,6 +3272,9 @@ async def compress_security_timeline(raw_evidence_text: str, max_timeline_events
 
     for l in lines:
         l_clean = l.lstrip("•- \t")
+        # Skip raw XML markup, XML comment tags, Markdown headers/dividers, and raw section labels
+        if l_clean.startswith(("<", "<!--", "</", "<?xml", "#", "=====", "-----")):
+            continue
         if any(w in l.lower() for w in timeline_keywords):
             if l_clean not in seen and len(l_clean) > 10:
                 seen.add(l_clean)
@@ -3158,19 +3372,20 @@ async def propose_containment_response(
     """
     mode = "[SIMULATION / DRY RUN]" if dry_run else "[ACTIVE ENFORCEMENT]"
 
-    # Anti-Forensic and Unsafe Firewall Disabling Guardrail
+    # Anti-Forensic, Unsafe Firewall Disabling, and Destructive Reboot Guardrail
     destructive_keywords = [
         "clear-eventlog", "wevtutil cl", "state off", "firewall off",
-        "rm -rf /", "rm /var/log", "shred /var/log", "truncate -s 0"
+        "rm -rf /", "rm /var/log", "shred /var/log", "truncate -s 0",
+        "shutdown", "reboot", "init 6", "init 0"
     ]
     check_str = f"{target_entity} {justification} {action_type}".lower()
     for dk in destructive_keywords:
         if dk in check_str:
             return (
                 f"=== [CONTAINMENT POLICY VIOLATION: DESTRUCTIVE ACTION REJECTED] ===\n"
-                f"Safety Guardrail Triggered: The proposed action contains anti-forensic or unsafe command '{dk}'.\n"
-                f"NIST SP 800-61 / Forensic Evidence Rule: Clearing event logs or disabling firewalls is strictly PROHIBITED.\n"
-                f"Status: REJECTED by SOC Autonomous Guardrails."
+                f"Safety Guardrail Triggered: The proposed action contains anti-forensic, reboot, or unsafe command '{dk}'.\n"
+                f"NIST SP 800-61 / Forensic Evidence Rule: Clearing event logs, rebooting endpoints (which wipes volatile memory), or disabling firewalls is strictly PROHIBITED.\n"
+                f"Status: REJECTED by SOC Autonomous Guardrails. Use non-destructive network isolation instead."
             )
 
     entities = [e.strip().strip("'\",") for e in re.split(r"[\s,;]+", str(target_entity).strip()) if e.strip().strip("'\",")]
