@@ -2760,11 +2760,11 @@ async def analyze_incident_impact(evidence_summary: str, target_scope: str = "")
     # Filter out loopback, benign controller IPs, and VPN pool client lease IPs from compromised internal assets
     benign_internal_ips = {"127.0.0.1"}
     for line in summary_text.splitlines():
-        if "[BENIGN" in line or "assigned internal lease:" in line.lower() or "ipv4 address" in line.lower():
+        if "[BENIGN" in line or "assigned internal lease:" in line.lower() or "ipv4 address" in line.lower() or "kube-controller-manager" in line.lower() or "endpoint" in line.lower():
             for ip in re.findall(IPV4_REGEX, line):
                 if _is_private_ip(ip):
                     benign_internal_ips.add(ip)
-    internal_ips = [ip for ip in internal_ips if ip not in benign_internal_ips]
+    internal_ips = [ip for ip in internal_ips if ip not in benign_internal_ips and not ip.startswith("10.244.")]
 
     exfil_vol = ""
     m_vol = re.search(r'(\d+(?:\.\d+)?\s*(?:GB|MB|bytes)(?:\s*\([^)]+\))?)', summary_text, re.IGNORECASE)
@@ -2809,7 +2809,7 @@ async def analyze_incident_impact(evidence_summary: str, target_scope: str = "")
         trajectories.append("Reconnaissance: Perimeter vertical port scan mapping listening services")
     if "horizontal" in summary_lower or "smb" in summary_lower or "sweep" in summary_lower:
         trajectories.append("Lateral Movement: Horizontal subnet sweep propagating across network segment")
-    if ("syn flood" in summary_lower or "connection limit" in summary_lower) and not any(k in summary_lower for k in ["[benign kernel warning]", "unconfirmed noise", "isolated kernel buffer alert"]):
+    if ("syn flood" in summary_lower or "connection limit" in summary_lower) and not any(k in summary_lower for k in ["[benign kernel warning]", "unconfirmed noise", "isolated kernel buffer alert", "possible syn flooding"]):
         trajectories.append("Availability Impact: State-exhaustion SYN flood and connection limit saturation")
     if "mimikatz" in summary_lower or "lsass" in summary_lower:
         trajectories.append("Credential Dumping: LSASS memory access via Mimikatz")
@@ -2821,7 +2821,7 @@ async def analyze_incident_impact(evidence_summary: str, target_scope: str = "")
         if "[BENIGN" in line:
             benign_items.append(line.strip())
 
-    has_syn_flood = "syn flood" in summary_lower and not any(k in summary_lower for k in ["[benign kernel warning]", "unconfirmed noise", "isolated kernel buffer alert"])
+    has_syn_flood = "syn flood" in summary_lower and not any(k in summary_lower for k in ["[benign kernel warning]", "unconfirmed noise", "isolated kernel buffer alert", "possible syn flooding"])
     if any(k in summary_lower for k in ["rootkit", "cluster-admin", "exfiltrat", "impossible travel", "domain controller", "lsass", "mfa fatigue", "pass-the-prt", "anomaloustoken"]) or has_syn_flood:
         severity = "CRITICAL"
     elif any(k in summary_lower for k in ["beacon", "breakout", "tunnel", "mfa fatigue", "privilege escalation"]):
