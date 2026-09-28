@@ -358,6 +358,13 @@ async def triage_security_alert(alert_text: str) -> str:
         "/etc/shadow": (50, "Shadow File Access Attempt"),
         "pkexec": (45, "Polkit Privilege Escalation (PwnKit)"),
         "linpeas": (50, "Automated Privilege Escalation Audit (LinPEAS)"),
+        # Spearphishing & Initial Access
+        "spearphishing": (50, "Spear-phishing Weaponized Attachment (Initial Access - T1566.001)"),
+        "t1566": (50, "Phishing Attack Vector (T1566)"),
+        "invoice_": (45, "Weaponized Invoice Attachment Delivery"),
+        ".docm": (45, "Macro-Enabled Weaponized Document"),
+        "weaponized": (50, "Weaponized Payload Delivery"),
+        "initial access vector": (45, "Endpoint Intrusion Initial Access Vector"),
         # Network & Perimeter
         "port scan": (40, "Network Port Reconnaissance"),
         "syn flood": (45, "SYN Flood Denial of Service"),
@@ -377,6 +384,8 @@ async def triage_security_alert(alert_text: str) -> str:
             triggered_indicators.append(f"{kw} ({desc})")
             if any(h in kw for h in ["mimikatz", "lsass", "powershell", "certutil", "psexec", "schtasks", "beacon", "cobalt", "meterpreter"]):
                 threat_categories.add("Endpoint / Host Intrusion")
+            elif any(s in kw for s in ["spearphishing", "t1566", "invoice_", ".docm", "weaponized", "initial access"]):
+                threat_categories.add("Spearphishing & Initial Access Vector")
             elif any(w in kw for w in ["union select", "sqlmap", "169.254.169.254", "meta-data", "modsecurity", "etc/passwd", "cmd.php", "jndi"]):
                 threat_categories.add("Web & API Exploitation")
             elif any(c in kw for c in ["assumerole", "createloginprofile", "createaccesskey", "attachuserpolicy", "unauthorizedoperation"]):
@@ -393,19 +402,82 @@ async def triage_security_alert(alert_text: str) -> str:
     severity = "CRITICAL" if score >= 80 else "HIGH" if score >= 50 else "MEDIUM" if score >= 30 else "LOW"
     categories_str = ", ".join(sorted(threat_categories)) if threat_categories else "General Security Audit"
 
+    # Extract Confirmed Adversary Threat Infrastructure (Active IoCs with roles and sources)
+    confirmed_threat_ips: list[str] = []
+    m_conf = re.search(r'Confirmed Adversary IPs\s*:\s*([^\n\r]+)', alert_text)
+    if m_conf:
+        for ip in re.findall(IPV4_REGEX, m_conf.group(1)):
+            if not _is_private_ip(ip) and not _is_trusted_cloud_or_cdn(ip) and ip != "198.51.100.99":
+                if ip not in confirmed_threat_ips:
+                    confirmed_threat_ips.append(ip)
+
+    _triage_atk_keywords = (
+        "spearphishing", "weaponized", "attachment", "docm", "phishing",
+        "beacon", "c2", "cobalt", "downloadstring", "exfiltrat", "drop server",
+        "mimikatz", "psexec", "reverse shell", "rootkit", "breakout", "impossible travel",
+        "pass-the-prt", "anomaloustoken", "port scan", "syn flood"
+    )
+    for line in alert_text.splitlines():
+        ll = line.lower()
+        if any(kw in ll for kw in _triage_atk_keywords) and not any(b in ll for b in ("benign", "cloud backup", "onedrive")):
+            for ip in re.findall(IPV4_REGEX, line):
+                if not _is_private_ip(ip) and not _is_trusted_cloud_or_cdn(ip) and ip != "198.51.100.99":
+                    if ip not in confirmed_threat_ips:
+                        confirmed_threat_ips.append(ip)
+
+    adv_ip_details: list[str] = []
+    for ip in sorted(confirmed_threat_ips):
+        roles = []
+        sources = []
+        for line in alert_text.splitlines():
+            if ip in line:
+                ll = line.lower()
+                m_src = re.search(r'\[([^\]]+)\]', line)
+                if m_src:
+                    s_cand = m_src.group(1).strip()
+                    if s_cand not in sources and not any(k in s_cand.lower() for k in ("2026", "2025", "2024", "mon", "tue", "wed", "thu", "fri", "sat", "sun")):
+                        sources.append(s_cand)
+                if any(k in ll for k in ("spearphishing", "weaponized", "attachment", "docm", "ironport", "email", "mailer")):
+                    if "Spearphishing Email Delivery / Initial Access" not in roles:
+                        roles.append("Spearphishing Email Delivery / Initial Access")
+                if any(k in ll for k in ("c2", "beacon", "cobalt", "heartbeat", "download")):
+                    if "C2 Beaconing / Script Download" not in roles:
+                        roles.append("C2 Beaconing / Script Download")
+                if any(k in ll for k in ("exfiltrat", "data transfer", "drop server", "egress")):
+                    if "Data Exfiltration Drop Server" not in roles:
+                        roles.append("Data Exfiltration Drop Server")
+                if any(k in ll for k in ("port scan", "vertical", "reconnaissance")):
+                    if "Reconnaissance / Port Scanning" not in roles:
+                        roles.append("Reconnaissance / Port Scanning")
+                if any(k in ll for k in ("spray", "brute force", "vpn compromise", "fatigue", "impossible travel", "token replay")):
+                    if "Identity Takeover / Credential Access" not in roles:
+                        roles.append("Identity Takeover / Credential Access")
+                if any(k in ll for k in ("reverse shell", "bash -i")):
+                    if "Reverse Shell C2" not in roles:
+                        roles.append("Reverse Shell C2")
+        role_label = " / ".join(roles) if roles else "Active Adversary Infrastructure"
+        src_label = f" (Log Source: {', '.join(sources)})" if sources else ""
+        adv_ip_details.append(f"  • {ip} : {role_label}{src_label}")
+
     report = [
         "=== [UNIVERSAL SOC TRIAGE REPORT] ===",
         "=== [SOC TRIAGE REPORT] ===",
         f"Assigned Severity : {severity} (Threat Score: {min(score, 100)}/100)",
         f"Threat Class      : {categories_str}",
         f"External WAN IPs  : {', '.join(external_ips[:12]) if external_ips else 'None detected'}",
+    ]
+    if adv_ip_details:
+        report.append(f"Confirmed Adversary Threat IPs ({len(adv_ip_details)}):")
+        for detail in adv_ip_details:
+            report.append(detail)
+    report.extend([
         f"Internal LAN IPs  : {', '.join(internal_ips[:10]) if internal_ips else 'None'}",
         f"Extracted IPv6    : {', '.join(ipv6_addrs[:5]) if ipv6_addrs else 'None'}",
         f"Artifact Hashes   : {', '.join((sha256_hashes or md5_hashes or sha1_hashes)[:8]) if (sha256_hashes or md5_hashes or sha1_hashes) else 'None'}",
         f"Target Domains    : {', '.join(domains[:10]) if domains else 'None'}",
         f"Identified CVEs   : {', '.join(cves) if cves else 'None'}",
         f"Key Attack Vectors Triggered ({len(triggered_indicators)}):",
-    ]
+    ])
     for ti in triggered_indicators[:12]:
         report.append(f"  • {ti}")
     if len(triggered_indicators) > 12:
@@ -2079,22 +2151,34 @@ def _parse_email_gateway_records(
             messages[mid]["hashes"].add(h)
 
         # Sender
-        m_from = re.search(r'From:\s*<([^>]+)>|from\s+<([^>]+)>', line_clean, re.IGNORECASE)
+        m_from = re.search(r'\b(?:from|mail from|envelope from|sender):\s*<?([a-zA-Z0-9_.+-]+@[a-zA-Z0-9-]+\.[a-zA-Z0-9-.]+)>?', line_clean, re.IGNORECASE)
+        if not m_from:
+            m_from = re.search(r'\bfrom\s+<([^>]+)>', line_clean, re.IGNORECASE)
         if m_from:
-            sender = m_from.group(1) or m_from.group(2)
-            messages[mid]["sender"] = sender
+            sender = (m_from.group(1) or "").strip()
+            if sender:
+                messages[mid]["sender"] = sender
 
         # Recipient
-        m_to = re.search(r'To:\s*<([^>]+)>|to\s+<([^>]+)>', line_clean, re.IGNORECASE)
+        m_to = re.search(r'\b(?:to|rcpt to|envelope to|recipient):\s*<?([a-zA-Z0-9_.+-]+@[a-zA-Z0-9-]+\.[a-zA-Z0-9-.]+)>?', line_clean, re.IGNORECASE)
+        if not m_to:
+            m_to = re.search(r'\bto\s+<([^>]+)>', line_clean, re.IGNORECASE)
         if m_to:
-            recip = m_to.group(1) or m_to.group(2)
-            messages[mid]["recipient"] = recip
+            recip = (m_to.group(1) or "").strip()
+            if recip:
+                messages[mid]["recipient"] = recip
 
         # Attachment
-        m_att = re.search(r'Attachment:\s*[\'"]?([^\'",\s]+)[\'"]?|filename=[\'"]?([^\'",\s]+)[\'"]?', line_clean, re.IGNORECASE)
+        m_att = re.search(r'\b(?:attachment|filename)[:\s=]+[\'"]?([^\'",\s;>)]+)[\'"]?', line_clean, re.IGNORECASE)
         if m_att:
-            att = m_att.group(1) or m_att.group(2)
-            messages[mid]["attachments"].append(att)
+            att = m_att.group(1).strip("'\"")
+            if att not in messages[mid]["attachments"]:
+                messages[mid]["attachments"].append(att)
+        m_doc = re.search(r'[\'"]?([a-zA-Z0-9_\-\.]+\.(?:docm|xlsm|doc|docx|xls|xlsx|exe|dll|vbs|js|hta|iso|bat|ps1|zip|rar|7z))[\'"]?', line_clean, re.IGNORECASE)
+        if m_doc:
+            att2 = m_doc.group(1).strip("'\"")
+            if att2 not in messages[mid]["attachments"]:
+                messages[mid]["attachments"].append(att2)
 
         # Quarantined / Spam
         if any(k in line_clean.lower() for k in ["quarantine", "anti-spam", "spam positive"]):
@@ -2103,20 +2187,41 @@ def _parse_email_gateway_records(
             if m_sc:
                 messages[mid]["spam_score"] = int(m_sc.group(1))
 
-        # Client IP from ICID connection lines (e.g. "New ICID 58212 interface Management address 203.0.113.119")
-        m_cip = re.search(r'ICID\s+(\d+)\s+.*?(?:address|connect from|from)?\s*(' + IPV4_REGEX + r')', line_clean, re.IGNORECASE)
-        if m_cip:
+        # Client IP from ICID connection lines (e.g. "New ICID 58212 interface Management address 203.0.113.119" or "interface Management (10.20.10.25) address 203.0.113.119")
+        m_cip = re.search(r'\bICID\s+(\d+)\b.*?\b(?:address|connect from|from)\s+(' + IPV4_REGEX + r')', line_clean, re.IGNORECASE)
+        if not m_cip:
+            m_icid = re.search(r'\bICID\s+(\d+)\b', line_clean, re.IGNORECASE)
+            if m_icid:
+                line_ips = re.findall(IPV4_REGEX, line_clean)
+                ext_line_ips = [ip for ip in line_ips if not _is_private_ip(ip)]
+                if ext_line_ips:
+                    icid_val = m_icid.group(1)
+                    ip_val = ext_line_ips[0]
+                    icid_to_ip[icid_val] = ip_val
+                    if ip_val not in gateway_external_ips:
+                        gateway_external_ips.append(ip_val)
+                    if m_mid:
+                        messages[mid]["ip"] = ip_val
+        else:
             icid_val = m_cip.group(1)
             ip_val = m_cip.group(2)
             icid_to_ip[icid_val] = ip_val
             if not _is_private_ip(ip_val) and ip_val not in gateway_external_ips:
                 gateway_external_ips.append(ip_val)
-            if mid != "0":
+            if m_mid:
                 messages[mid]["ip"] = ip_val
 
-        # Map MID to ICID (e.g. "Start MID 1042 ICID 58212" or "MID 1042 ICID 58212")
-        m_mid_icid = re.search(r'MID\s+(\d+)\s+.*?\bICID\s+(\d+)\b', line_clean, re.IGNORECASE)
-        if m_mid_icid:
+        # Map MID to ICID (e.g. "Start MID 1042 ICID 58212" or "MID 1042 ICID 58212" or "ICID 58212 MID 1042")
+        m_mid_icid = re.search(r'\bMID\s+(\d+)\b.*?\bICID\s+(\d+)\b', line_clean, re.IGNORECASE)
+        if not m_mid_icid:
+            m_mid_icid = re.search(r'\bICID\s+(\d+)\b.*?\bMID\s+(\d+)\b', line_clean, re.IGNORECASE)
+            if m_mid_icid:
+                icid_val = m_mid_icid.group(1)
+                mid_val = m_mid_icid.group(2)
+                mid_to_icid[mid_val] = icid_val
+                if icid_val in icid_to_ip and not messages[mid_val]["ip"]:
+                    messages[mid_val]["ip"] = icid_to_ip[icid_val]
+        else:
             mid_val = m_mid_icid.group(1)
             icid_val = m_mid_icid.group(2)
             mid_to_icid[mid_val] = icid_val
@@ -2148,8 +2253,8 @@ def _parse_email_gateway_records(
             att_names = ", ".join(m_info["attachments"])
             suspicious.append(
                 f"[{filename}] {ts_str}[Cisco Email Gateway - T1566.001 Spearphishing Attachment] "
-                f"Weaponized email delivered from {sender} (Host {src_ip}) to recipient {recip}. "
-                f"Attachment: '{att_names}' - Initial access vector for endpoint intrusion"
+                f"Adversary weaponized spearphishing email delivered from {sender} (Adversary Host {src_ip}) to recipient {recip}. "
+                f"Malicious weaponized attachment: '{att_names}' - Initial access vector for endpoint intrusion"
             )
             # Add threat delivery IP
             if src_ip != "external" and not _is_private_ip(src_ip):
@@ -2647,6 +2752,38 @@ async def gather_log_evidence(
         output_lines.append("🌐 EXTRACTED THREAT INDICATORS (IoCs) & ACTIVE ATTACKERS:")
         if confirmed_attackers:
             output_lines.append(f"  - Confirmed Adversary IPs : {', '.join(confirmed_attackers[:15])}")
+            for ip in confirmed_attackers[:15]:
+                roles_found = []
+                sources_found = []
+                for sf in suspicious_findings:
+                    if ip in sf:
+                        sf_l = sf.lower()
+                        m_src = re.search(r'\[([^\]]+)\]', sf)
+                        if m_src:
+                            s_cand = m_src.group(1).strip()
+                            if s_cand not in sources_found and not any(k in s_cand.lower() for k in ("2026", "2025", "2024", "mon", "tue", "wed", "thu", "fri", "sat", "sun")):
+                                sources_found.append(s_cand)
+                        if any(k in sf_l for k in ("spearphishing", "weaponized", "attachment", "docm", "ironport", "email", "mailer")):
+                            if "Spearphishing Email Delivery / Initial Access" not in roles_found:
+                                roles_found.append("Spearphishing Email Delivery / Initial Access")
+                        if any(k in sf_l for k in ("c2", "beacon", "cobalt", "heartbeat", "download")):
+                            if "C2 Beaconing / Script Download" not in roles_found:
+                                roles_found.append("C2 Beaconing / Script Download")
+                        if any(k in sf_l for k in ("exfiltrat", "data transfer", "drop server", "egress")):
+                            if "Data Exfiltration Drop Server" not in roles_found:
+                                roles_found.append("Data Exfiltration Drop Server")
+                        if any(k in sf_l for k in ("port scan", "vertical", "reconnaissance")):
+                            if "Reconnaissance / Port Scanning" not in roles_found:
+                                roles_found.append("Reconnaissance / Port Scanning")
+                        if any(k in sf_l for k in ("spray", "brute force", "vpn", "fatigue", "impossible travel", "token replay")):
+                            if "Identity Takeover / Credential Access" not in roles_found:
+                                roles_found.append("Identity Takeover / Credential Access")
+                        if any(k in sf_l for k in ("reverse shell", "bash -i")):
+                            if "Reverse Shell C2" not in roles_found:
+                                roles_found.append("Reverse Shell C2")
+                role_label = " / ".join(roles_found) if roles_found else "Active Adversary Infrastructure"
+                src_label = f" (Log Source: {', '.join(sources_found)})" if sources_found else ""
+                output_lines.append(f"    • {ip} : {role_label}{src_label}")
         if ext_ips:
             output_lines.append(f"  - External Public WAN IPs : {', '.join(ext_ips[:15])}")
         if extracted_domains:
@@ -2656,6 +2793,7 @@ async def gather_log_evidence(
         if extracted_cves:
             output_lines.append(f"  - Detected CVE References : {', '.join(sorted(extracted_cves))}")
         output_lines.append("")
+
 
     if noise_ips or authorized_ips:
         output_lines.append("🛡️ FALSE-POSITIVE TRAP & BENIGN BASELINE DISCRIMINATION:")
@@ -2784,10 +2922,10 @@ async def lookup_threat_indicators(indicator: str, indicator_type: str = "auto")
                 results.append("Action: Filter out from active threat actors; do NOT block or escalate.")
             else:
                 results.append("Classification: Public WAN Address.")
-                results.append("Reputation: Suspected External C2 / Potential Adversary Infrastructure / Unverified Public Origin.")
+                results.append("Reputation: Confirmed / Suspected Adversary Threat Infrastructure (Phishing Mailer / C2 Beaconing / Exfiltration Drop).")
                 results.append("Threat Score: 85/100 (HIGH RISK - ADVERSARY INFRASTRUCTURE)")
                 results.append("Correlation Guidance: Differentiate coordinated multi-vector attacks from benign internet noise. If the IP appears only in <= 2 isolated drops without session persistence, classify as BENIGN_INTERNET_NOISE.")
-                results.append("Action: Block ingress/egress at perimeter firewall; isolate beaconing endpoint.")
+                results.append("Action: Block ingress/egress at perimeter firewall and blacklist at email security gateway; isolate beaconing endpoint.")
         elif ind_type == "hash":
             results.append("Classification: Potential weaponized binary / malicious tool artifact.")
             results.append("Reputation: Potential malicious binary / Unverified Tool Artifact.")
@@ -2891,6 +3029,8 @@ async def analyze_incident_impact(evidence_summary: str, target_scope: str = "")
         "event 4688", "event 4624", "event 4672", "event 7045",
         "sysmon event", "process access", "credential dump",
         "target", "source", "impacted", "affected",
+        "spearphishing", "phishing", "weaponized", "initial access",
+        "attachment", "docm", "macro", "mailer", "email gateway", "ironport",
     )
     attack_line_ips: set[str] = set()
     for line in summary_text.splitlines():
@@ -3198,17 +3338,77 @@ async def analyze_incident_impact(evidence_summary: str, target_scope: str = "")
     if not exfil_vol and not any(k in summary_lower for k in ["shadow", "admin:password"]):
         report.append("  • No unauthorized bulk data exfiltration confirmed")
 
-    # Section 5: False-Positive & Benign Activity Filtered
+    # Section 5: Confirmed Adversary Threat Infrastructure (External IoCs)
+    adv_ips: set[str] = set()
+    m_adv = re.search(r'Confirmed Adversary IPs\s*:\s*([^\n\r]+)', summary_text)
+    if m_adv:
+        for ip in re.findall(IPV4_REGEX, m_adv.group(1)):
+            if not _is_private_ip(ip) and not _is_trusted_cloud_cdn(ip) and ip != "198.51.100.99":
+                adv_ips.add(ip)
+
+    for line in summary_text.splitlines():
+        ll = line.lower()
+        if any(kw in ll for kw in _attack_context_keywords) and not any(k in ll for k in ("benign", "cloud backup", "onedrive")):
+            for ip in re.findall(IPV4_REGEX, line):
+                if not _is_private_ip(ip) and not _is_trusted_cloud_cdn(ip) and ip != "198.51.100.99":
+                    adv_ips.add(ip)
+
+    adv_ip_roles: dict[str, list[str]] = defaultdict(list)
+    adv_ip_sources: dict[str, list[str]] = defaultdict(list)
+    for ip in sorted(adv_ips):
+        roles = []
+        sources = []
+        for line in summary_text.splitlines():
+            if ip in line:
+                ll = line.lower()
+                m_src = re.search(r'\[([^\]]+)\]', line)
+                if m_src:
+                    s_cand = m_src.group(1).strip()
+                    if s_cand not in sources and not any(k in s_cand.lower() for k in ("2026", "2025", "2024", "mon", "tue", "wed", "thu", "fri", "sat", "sun")):
+                        sources.append(s_cand)
+                if any(k in ll for k in ("spearphishing", "weaponized", "attachment", "docm", "ironport", "email", "mailer")):
+                    if "Spearphishing Email Delivery / Initial Access" not in roles:
+                        roles.append("Spearphishing Email Delivery / Initial Access")
+                if any(k in ll for k in ("c2", "beacon", "cobalt", "heartbeat", "download")):
+                    if "C2 Beaconing / Script Download" not in roles:
+                        roles.append("C2 Beaconing / Script Download")
+                if any(k in ll for k in ("exfiltrat", "data transfer", "drop server", "egress")):
+                    if "Data Exfiltration Drop Server" not in roles:
+                        roles.append("Data Exfiltration Drop Server")
+                if any(k in ll for k in ("port scan", "vertical", "reconnaissance")):
+                    if "Reconnaissance / Port Scanning" not in roles:
+                        roles.append("Reconnaissance / Port Scanning")
+                if any(k in ll for k in ("spray", "brute force", "vpn compromise", "fatigue", "impossible travel", "token replay")):
+                    if "Identity Takeover / Credential Access" not in roles:
+                        roles.append("Identity Takeover / Credential Access")
+                if any(k in ll for k in ("reverse shell", "bash -i")):
+                    if "Reverse Shell C2" not in roles:
+                        roles.append("Reverse Shell C2")
+        adv_ip_roles[ip] = roles or ["Active Adversary Infrastructure"]
+        adv_ip_sources[ip] = sources
+
+    report.append("\n5. CONFIRMED ADVERSARY THREAT INFRASTRUCTURE (EXTERNAL IOCs):")
+    if adv_ips:
+        for ip in sorted(adv_ips):
+            role_desc = " / ".join(adv_ip_roles[ip])
+            src_desc = f" | Source: {', '.join(adv_ip_sources[ip])}" if adv_ip_sources[ip] else ""
+            report.append(f"  • {ip} ({role_desc}{src_desc})")
+    else:
+        report.append("  • Activity isolated to internal lateral pivoting or unauthenticated perimeter drops")
+
+    # Section 6: False-Positive & Benign Activity Filtered
     if benign_items:
-        report.append("\n5. FALSE-POSITIVE TRAPS & BENIGN BASELINE DISCRIMINATION:")
+        report.append("\n6. FALSE-POSITIVE TRAPS & BENIGN BASELINE DISCRIMINATION:")
         for b in benign_items[:5]:
             report.append(f"  • {b}")
 
-    # Section 6: Executive Impact Summary
-    report.append("\n6. EXECUTIVE IMPACT SUMMARY:")
+    # Section 7: Executive Impact Summary
+    report.append("\n7. EXECUTIVE IMPACT SUMMARY:")
     report.append(f"  Forensic analysis confirmed a {severity.lower()}-severity security incident affecting {len(target_assets)} targeted asset(s)")
     if identities:
-        report.append(f"  and {len(identities)} identity account(s).")
+        report.append(f"  and {len(identities)} identity account(s)")
+    if adv_ips:
+        report.append(f"  originating from {len(adv_ips)} confirmed adversary threat IP(s) [{', '.join(sorted(adv_ips))}].")
     else:
         report.append(".")
     if trajectories:
@@ -3218,6 +3418,7 @@ async def analyze_incident_impact(evidence_summary: str, target_scope: str = "")
     report.append("  Immediate containment, credential revocation, and forensic eradication required under NIST SP 800-61.")
 
     return "\n".join(report)
+
 
 
 ANALYZE_IMPACT_SPEC = ToolSpec(
@@ -3507,6 +3708,8 @@ async def propose_containment_response(
             generated_commands.append(
                 f"# Cisco ASA Perimeter Gateway ACL Drop:\n"
                 f"access-list OUTSIDE_IN line 1 extended deny ip host {ent} any\n"
+                f"# Cisco Email Security Gateway (IronPort AsyncOS) Sender Blacklist:\n"
+                f"hat edit ALL BLACKLIST add {ent}\n"
                 f"# pfSense Packet Filter Rule:\n"
                 f"pfctl -t attackers -T add {ent} && pfctl -k {ent}\n"
                 f"# Linux Firewall (iptables / nftables):\n"

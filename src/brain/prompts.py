@@ -116,14 +116,14 @@ Your job is to transform raw task outputs into an authoritative, executive-level
 
 4. **Grounding & Investigation Integrity**:
    - Only report security events, IPs, file paths, or IOCs that explicitly appear in the Task Results.
-   - Every IP, domain, hash, CVE, username, hostname, port, byte count, and timestamp you print MUST be copyable verbatim from the Task Results. If a value is not present there, omit the row or field entirely and state that the data was not recovered. Never substitute a plausible example, documentation-range placeholder (e.g. `203.0.113.42`, `badexample.com`, `CVE-2023-1234`), or a value recalled from general knowledge of similar attacks.
+   - Every IP, domain, hash, CVE, username, hostname, port, byte count, and timestamp you print MUST be copyable verbatim from the Task Results. Crucially, INCLUDE ALL confirmed adversary threat IPs that appear in the Task Results across all attack stages (including Initial Access / Spear-phishing mailer delivery IPs, C2 beaconing / download staging IPs, and bulk exfiltration drop IPs). Never fabricate or invent fictional values (e.g. `1.2.3.4`, `badexample.com`, `CVE-YYYY-NNNN`) not present in the task results.
    - Do not describe files, directories, or log sources that were not actually enumerated in the Task Results.
    - If the task results indicate that log discovery failed, files could not be accessed, or 0 files were enumerated, explicitly report the access/collection blockage. NEVER fabricate benign user activity (e.g. 'alice', 'explorer.exe') or invent false-positive conclusions when data is absent.
 
 5. **Security Incident Investigation & Forensic Reports**:
    - When synthesizing security incident investigations across any log ecosystem (Windows EVTX, Linux syslog/auth/auditd, CloudTrail/Cloud audit, Web/WAF, Network/Suricata/Firewalls):
      - Identify the **Attack Vector & Adversary Progression**: Detail the intrusion vector across Host/OS, Web/API (e.g. SQLi, SSRF, RCE, Path Traversal), Cloud/IAM (e.g. AssumeRole abuse, privilege escalation), or Network/Perimeter domains.
-     - Provide a **Threat Indicators (IoCs) Summary Table**: External C2 IPs, Target Domains, Malicious URLs, Hashes (MD5/SHA1/SHA256), CVE Identifiers, and Compromised Accounts/Roles.
+     - Provide a **Confirmed Threat Indicators (IoCs) Summary Table**: All Confirmed Adversary IPs (categorized by their specific attack roles: Initial Access / Spear-phishing Mailer, C2 Beaconing / Script Download, and Data Exfiltration Drop, alongside their identifying Log Source), Target Domains, Malicious Attachments/Files, Hashes (MD5/SHA1/SHA256), CVE Identifiers, and Compromised Accounts & Hosts.
      - Detail **Adversary Commands, Exploits & Tools Observed**: Explicit process command lines, web payloads, shell scripts, API calls, and attacker tools across all affected platforms.
      - Detail the **Unified Incident Timeline**: Chronological steps from initial reconnaissance/access through privilege escalation and lateral spread to data staging and exfiltration.
      - Provide the **Multi-Platform Containment & Remediation Playbook**: Actionable firewall blocking commands (iptables, netsh, cloud security groups), host isolation commands, identity revocation procedures, and forensic recovery guidance."""

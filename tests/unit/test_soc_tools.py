@@ -642,7 +642,7 @@ async def test_case1_enterprise_intrusion_full_pipeline(tmp_path):
     # 1. Cisco Email Gateway Log (ironport_mail.log)
     mail_file = tmp_path / "ironport_mail.log"
     mail_file.write_text(
-        "Mon Sep 14 10:14:00 2026 Info: New ICID 58212 interface Management address 203.0.113.119 reverse dns host mail.attacker.com verified yes\n"
+        "Mon Sep 14 10:14:00 2026 Info: New ICID 58212 interface Management (10.20.10.25) address 203.0.113.119 reverse dns host mail.attacker.com verified yes\n"
         "Mon Sep 14 10:14:01 2026 Info: Start MID 1042 ICID 58212\n"
         "Mon Sep 14 10:14:02 2026 Info: MID 1042 ICID 58212 From: <billing@overdue-invoices-center.org>\n"
         "Mon Sep 14 10:14:03 2026 Info: MID 1042 ICID 58212 RID 0 To: <jdoe@corp.contoso.com>\n"
@@ -758,7 +758,34 @@ async def test_case1_enterprise_intrusion_full_pipeline(tmp_path):
     assert "Targeted SMB authentication to Domain Controller" in impact
     assert "Remote service execution via PsExec" in impact
 
-    # 3. Test compress_security_timeline
+    # Crucial Threat Infrastructure Assertions: All 3 Adversary IPs Identified with Functional Roles & Sources
+    assert "CONFIRMED ADVERSARY THREAT INFRASTRUCTURE" in impact
+    assert "185.220.101.45" in impact
+    assert "198.51.100.240" in impact
+    assert "203.0.113.119" in impact
+    assert "Spearphishing Email Delivery" in impact
+    assert "Source:" in impact
+
+    # 3. Test triage_security_alert
+    from src.registry.tools.soc_tools import triage_security_alert, propose_containment_response
+    triage = await triage_security_alert(evidence)
+    assert "203.0.113.119" in triage
+    assert "Spearphishing Email Delivery" in triage
+    assert "185.220.101.45" in triage
+    assert "198.51.100.240" in triage
+
+    # 4. Test propose_containment_response with mailer IP
+    containment = await propose_containment_response(
+        target_entity="203.0.113.119",
+        action_type="block_ip",
+        justification="Initial access spearphishing mailer delivery",
+        dry_run=True,
+    )
+    assert "203.0.113.119" in containment
+    assert "Cisco Email Security Gateway" in containment
+    assert "BLACKLIST add 203.0.113.119" in containment
+
+    # 5. Test compress_security_timeline
     timeline = await compress_security_timeline(evidence)
     assert "=== [COMPRESSED INCIDENT TIMELINE]" in timeline
 
