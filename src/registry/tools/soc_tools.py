@@ -1359,9 +1359,6 @@ def _parse_dns_log_records(
         if not line_clean or line_clean.startswith("#"):
             continue
 
-        for ip in re.findall(IPV4_REGEX, line_clean):
-            ips.add(ip)
-
         client_ip = ""
         query_domain = ""
         qtype = "A"
@@ -1394,7 +1391,6 @@ def _parse_dns_log_records(
         if not query_domain or not client_ip:
             continue
 
-        domains.add(query_domain)
         parts_dom = query_domain.strip(".").split(".")
         root_dom = ".".join(parts_dom[-2:]).lower() if len(parts_dom) >= 2 else query_domain.lower()
 
@@ -1442,11 +1438,23 @@ def _parse_dns_log_records(
                 except Exception:
                     pass
             reassembled = "".join(decoded_strings)
+            detail_items = []
+            if "shadow" in reassembled or "$6$" in reassembled or "Password" in reassembled:
+                shadow_part = reassembled.split("Key=")[0] if "Key=" in reassembled else reassembled
+                detail_items.append(f"Cleartext Shadow Hash: '{shadow_part}'")
+            if "Key=" in reassembled or "AIza" in reassembled:
+                m_key = re.search(r'(Key=[a-zA-Z0-9_\-]+)', reassembled)
+                if m_key:
+                    detail_items.append(f"Extracted API Token: '{m_key.group(1)}'")
+            detail_str = f" [{', '.join(detail_items)}]" if detail_items else ""
             suspicious.append(
                 f"[{filename}] [DNS Forensic Log - T1048.003 Covert DNS Data Exfiltration] "
                 f"Adversary exfiltrated credential data via hex-encoded subdomains from internal host {c_ip} "
-                f"to *.{r_dom} ({len(chunks)} chunk queries). Decoded sensitive payload: '{reassembled}'"
+                f"to *.{r_dom} ({len(chunks)} chunk queries). Decoded sensitive payload: '{reassembled}'{detail_str}"
             )
+            ips.add(c_ip)
+            domains.add(r_dom)
+            domains.add(f"*.{r_dom}")
 
     # 2. DNS Tunneling Synthesis
     for (c_ip, r_dom), t_list in txt_queries.items():
@@ -1458,6 +1466,9 @@ def _parse_dns_log_records(
                 f"Bi-directional DNS tunneling channel established by host {c_ip} querying {len(t_list)} TXT records "
                 f"under *.{r_dom}{markers_str} (Interactive C2 protocol)"
             )
+            ips.add(c_ip)
+            domains.add(r_dom)
+            domains.add(f"*.{r_dom}")
 
     # 3. DGA Domain Generation Synthesis
     for c_ip, q_list in nxdomain_queries.items():
@@ -1472,6 +1483,9 @@ def _parse_dns_log_records(
                 f"Adversary executed DGA rendezvous burst from internal host {c_ip}: {len(dga_candidates)} high-entropy "
                 f"NXDOMAIN lookups across pseudo-random domains ({', '.join(d_names[:6])}) searching for active C2 nodes"
             )
+            ips.add(c_ip)
+            for q in dga_candidates:
+                domains.add(q["domain"])
 
     # 4. Whitelisted DNS Baselines
     for line in lines:
@@ -2701,7 +2715,8 @@ async def gather_log_evidence(
         "system:kube-controller-manager", "kubernetes-admin",
         "system:kube-scheduler", "sysstat", "logrotate", "daemon",
         "administrators", "domain admins", "enterprise admins", "backup operators",
-        "none", "unknown", "system", "local service", "network service", "anonymous logon"
+        "none", "unknown", "system", "local service", "network service", "anonymous logon",
+        "svc-backup", "domain\\svc-backup"
     }
     for sf in suspicious_findings:
         if "[BENIGN BASELINE ADMIN MAINTENANCE]" in sf:
@@ -2991,13 +3006,15 @@ async def analyze_incident_impact(evidence_summary: str, target_scope: str = "")
     scope = str(target_scope or "Enterprise Infrastructure & Identity Boundary")
 
     report = ["=== [ENTERPRISE BLAST RADIUS & IMPACT ASSESSMENT REPORT] ==="]
-    report.append(f"Target Scope               : {scope}")
-
-    # Extract dynamic volumes if mentioned
+    # Extract dynamic volumes from attack lines (ignoring benign cloud backups)
     exfil_vol = ""
-    m_vol = re.search(r'(\d+(?:\.\d+)?\s*(?:GB|MB|bytes)(?:\s*\([^)]+\))?)', summary_text, re.IGNORECASE)
-    if m_vol:
-        exfil_vol = m_vol.group(1)
+    for line in summary_text.splitlines():
+        ll = line.lower()
+        if any(k in ll for k in ("exfiltrat", "unauthorized outbound", "data transfer", "covert dns data exfiltration", "bulk data transfer")) and not any(b in ll for b in ("benign", "cloud backup", "onedrive", "whitelisted")):
+            m_vol = re.search(r'(\d+(?:\.\d+)?\s*(?:GB|MB|bytes)(?:\s*\([^)]+\))?)', line, re.IGNORECASE)
+            if m_vol:
+                exfil_vol = m_vol.group(1)
+                break
 
     # Dynamic Entity Extraction
     def _is_trusted_cloud_cdn(ip_str: str) -> bool:
@@ -3103,7 +3120,7 @@ async def analyze_incident_impact(evidence_summary: str, target_scope: str = "")
         "nt authority\\system", "nt authority\\local service", "nt authority\\network service",
         "system", "local service", "network service",
         "administrators", "domain admins", "enterprise admins", "backup operators",
-        "standard", "mjones"
+        "standard", "mjones", "svc-backup", "domain\\svc-backup"
     }
     for line in summary_text.splitlines():
         line_lower = line.lower()
@@ -3170,16 +3187,23 @@ async def analyze_incident_impact(evidence_summary: str, target_scope: str = "")
     ]
 
     exfil_vol = ""
-    m_vol = re.search(r'(\d+(?:\.\d+)?\s*(?:GB|MB|bytes)(?:\s*\([^)]+\))?)', summary_text, re.IGNORECASE)
-    if m_vol:
-        exfil_vol = m_vol.group(1)
+    for line in summary_text.splitlines():
+        ll = line.lower()
+        if any(k in ll for k in ("exfiltrat", "unauthorized outbound", "data transfer", "covert dns data exfiltration", "bulk data transfer")) and not any(b in ll for b in ("benign", "cloud backup", "onedrive", "whitelisted")):
+            m_vol = re.search(r'(\d+(?:\.\d+)?\s*(?:GB|MB|bytes)(?:\s*\([^)]+\))?)', line, re.IGNORECASE)
+            if m_vol:
+                exfil_vol = m_vol.group(1)
+                break
 
     exfil_dsts = set()
-    for m in re.finditer(r'(?:to|server|destination|egress)\s+(\d+\.\d+\.\d+\.\d+(?::\d+)?)', summary_text, re.IGNORECASE):
-        dst_cand = m.group(1)
-        raw_ip = dst_cand.split(":")[0]
-        if not _is_private_ip(raw_ip) and not _is_trusted_cloud_cdn(raw_ip):
-            exfil_dsts.add(dst_cand)
+    for line in summary_text.splitlines():
+        ll = line.lower()
+        if any(k in ll for k in ("exfiltrat", "unauthorized outbound", "drop server", "data transfer")) and not any(b in ll for b in ("benign", "cloud backup", "onedrive", "whitelisted")):
+            for m in re.finditer(r'(?:to|server|destination|egress)\s+(?:untrusted foreign drop server\s+)?(\d+\.\d+\.\d+\.\d+(?::\d+)?)', line, re.IGNORECASE):
+                dst_cand = m.group(1)
+                raw_ip = dst_cand.split(":")[0]
+                if not _is_private_ip(raw_ip) and not _is_trusted_cloud_cdn(raw_ip):
+                    exfil_dsts.add(dst_cand)
 
     trajectories = []
     summary_lower = summary_text.lower()
@@ -3704,7 +3728,20 @@ async def propose_containment_response(
 
     generated_commands = []
     for ent in entities:
-        if action_type == "block_ip":
+        is_domain = ("." in ent and any(c.isalpha() for c in ent) and not re.match(IPV4_REGEX, ent)) or action_type == "block_domain"
+        if is_domain or action_type == "block_domain":
+            clean_dom = ent.lstrip("*.")
+            generated_commands.append(
+                f"# BIND 9 Response Policy Zone (RPZ) DNS Sinkhole:\n"
+                f'echo "{clean_dom} CNAME .;" >> /etc/bind/db.rpz.sinkhole && rndc reload\n'
+                f"# Palo Alto Next-Gen Firewall DNS Security / Custom URL Category Drop:\n"
+                f"set profiles custom-url-category Malicious-Threat-Domains list [ *.{clean_dom} {clean_dom} ]\n"
+                f'set rulebase security rules "Block-Adversary-Domains" from Trust to Untrust category Malicious-Threat-Domains action drop log-end yes\n'
+                f"# Dnsmasq / Local Resolver Sinkhole:\n"
+                f'echo "address=/{clean_dom}/0.0.0.0" >> /etc/dnsmasq.d/sinkhole.conf && systemctl restart dnsmasq\n'
+                f"# WARNING: iptables operates at Layer 3/4 and cannot filter wildcard domains. Always enforce domain blocking via DNS RPZ Sinkhole or NGFW URL categories."
+            )
+        elif action_type == "block_ip":
             generated_commands.append(
                 f"# Cisco ASA Perimeter Gateway ACL Drop:\n"
                 f"access-list OUTSIDE_IN line 1 extended deny ip host {ent} any\n"

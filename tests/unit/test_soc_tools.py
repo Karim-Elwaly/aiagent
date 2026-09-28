@@ -797,5 +797,128 @@ async def test_case1_enterprise_intrusion_full_pipeline(tmp_path):
     assert "10:14:0" in timeline_lines[0] or "Spearphishing" in timeline_lines[0] or "Invoice_90214.docm" in timeline_lines[0]
 
 
+@pytest.mark.asyncio
+async def test_case5_dns_tunneling_and_exfiltration_full_pipeline(tmp_path):
+    from src.registry.tools.soc_tools import (
+        gather_log_evidence,
+        analyze_incident_impact,
+        compress_security_timeline,
+        propose_containment_response,
+    )
+
+    # 1. BIND 9 DNS query log (bind9_dns_queries.log)
+    bind_file = tmp_path / "bind9_dns_queries.log"
+    bind_file.write_text(
+        # Trap 1: Spamhaus query by mail relay (192.168.10.5)
+        "14-Sep-2026 11:01:00.100 queries: info: client @0x7f1 192.168.10.5#51234 (12.1.168.192.zen.spamhaus.org): query: 12.1.168.192.zen.spamhaus.org IN A + (10.0.0.2)\n"
+        # Trap 2: CloudFront CDN query (192.168.10.60)
+        "14-Sep-2026 11:02:18.200 queries: info: client @0x7f2 192.168.10.60#52345 (d3g8q11abc29fg.cloudfront.net): query: d3g8q11abc29fg.cloudfront.net IN A + (10.0.0.2)\n"
+        # Trap 3: User typo (192.168.10.22)
+        "14-Sep-2026 11:03:45.300 queries: info: client @0x7f3 192.168.10.22#53456 (gogole.com): query: gogole.com IN A + (10.0.0.2)\n"
+        # Attack 1: DNS Tunneling TXT queries (192.168.10.142)
+        "14-Sep-2026 11:05:10.101 queries: info: client @0x7f4 192.168.10.142#54111 (000101a4000000000000.tunnel.c2server.org): query: 000101a4000000000000.tunnel.c2server.org IN TXT + (10.0.0.2) cmd\n"
+        "14-Sep-2026 11:05:10.302 queries: info: client @0x7f4 192.168.10.142#54112 (000101a4000000000001.tunnel.c2server.org): query: 000101a4000000000001.tunnel.c2server.org IN TXT + (10.0.0.2) whoami\n"
+        "14-Sep-2026 11:05:10.503 queries: info: client @0x7f4 192.168.10.142#54113 (000101a4000000000002.tunnel.c2server.org): query: 000101a4000000000002.tunnel.c2server.org IN TXT + (10.0.0.2) root\n"
+        "14-Sep-2026 11:05:10.704 queries: info: client @0x7f4 192.168.10.142#54114 (000101a4000000000003.tunnel.c2server.org): query: 000101a4000000000003.tunnel.c2server.org IN TXT + (10.0.0.2) ok\n"
+        # Attack 3: Hex-encoded Subdomain Exfiltration (192.168.10.88)
+        "14-Sep-2026 11:18:01.010 queries: info: client @0x7f5 192.168.10.88#55201 (61646d696e3a50617373776f726431.chunk1.exfil.badactor.net): query: 61646d696e3a50617373776f726431.chunk1.exfil.badactor.net IN A + (10.0.0.2)\n"
+        "14-Sep-2026 11:18:01.215 queries: info: client @0x7f5 192.168.10.88#55202 (3233213a726f6f742f6574632f7368.chunk2.exfil.badactor.net): query: 3233213a726f6f742f6574632f7368.chunk2.exfil.badactor.net IN A + (10.0.0.2)\n"
+        "14-Sep-2026 11:18:01.420 queries: info: client @0x7f5 192.168.10.88#55203 (61646f773a24362471776572747924.chunk3.exfil.badactor.net): query: 61646f773a24362471776572747924.chunk3.exfil.badactor.net IN A + (10.0.0.2)\n"
+        "14-Sep-2026 11:18:01.625 queries: info: client @0x7f5 192.168.10.88#55204 (4b65793d41497a6153794138397a58.chunk4.exfil.badactor.net): query: 4b65793d41497a6153794138397a58.chunk4.exfil.badactor.net IN A + (10.0.0.2)\n",
+        encoding="utf-8"
+    )
+
+    # 2. Zeek DNS log (zeek_dns.tsv) for DGA Hunting
+    zeek_file = tmp_path / "zeek_dns.tsv"
+    zeek_file.write_text(
+        "#separator \\x09\n"
+        "#fields\tts\tuid\tid.orig_h\tid.orig_p\tid.resp_h\tid.resp_p\tproto\ttrans_id\trtt\tquery\tqclass\tqclass_name\tqtype\tqtype_name\trcode\trcode_name\tAA\tTC\tRD\tRA\tZ\tanswers\tTTLs\trejected\n"
+        "1726312350.102\tC1\t192.168.10.205\t51001\t10.0.0.2\t53\tudp\t101\t0.02\tx8q1zm9vb21akz.biz\t1\tC_INTERNET\t1\tA\t3\tNXDOMAIN\tF\tF\tT\tT\t0\t-\t-\tF\n"
+        "1726312350.305\tC2\t192.168.10.205\t51002\t10.0.0.2\t53\tudp\t102\t0.02\tdj82mc7v19awzq.info\t1\tC_INTERNET\t1\tA\t3\tNXDOMAIN\tF\tF\tT\tT\t0\t-\t-\tF\n"
+        "1726312350.510\tC3\t192.168.10.205\t51003\t10.0.0.2\t53\tudp\t103\t0.02\tzla04kqncm91x.top\t1\tC_INTERNET\t1\tA\t3\tNXDOMAIN\tF\tF\tT\tT\t0\t-\t-\tF\n"
+        "1726312350.715\tC4\t192.168.10.205\t51004\t10.0.0.2\t53\tudp\t104\t0.02\tqx91vba83mzk10.org\t1\tC_INTERNET\t1\tA\t3\tNXDOMAIN\tF\tF\tT\tT\t0\t-\t-\tF\n"
+        "1726312350.920\tC5\t192.168.10.205\t51005\t10.0.0.2\t53\tudp\t105\t0.02\tv7b2m9laq01zpc.cc\t1\tC_INTERNET\t1\tA\t3\tNXDOMAIN\tF\tF\tT\tT\t0\t-\t-\tF\n",
+        encoding="utf-8"
+    )
+
+    # 3. Palo Alto Firewall Log (paloalto_traffic.log)
+    pa_file = tmp_path / "paloalto_traffic.log"
+    pa_file.write_text(
+        # Trap 4: Authorized S3 cloud backup transferring 5.42 GB from 10.20.10.12 under domain\svc-backup
+        "2026-09-14 11:10:00,10.20.10.12,52.216.148.10,443,bytes_sent=5420000000,bytes_rcvd=150000,rule=Backup-To-Cloud,user=domain\\svc-backup\n"
+        # Attack 4: 60s periodic C2 beaconing to 185.220.101.5:8443
+        "2026-09-14 11:20:00,10.20.10.142,185.220.101.5,8443,bytes_sent=520,bytes_rcvd=140,rule=Allow-Web\n"
+        "2026-09-14 11:21:00,10.20.10.142,185.220.101.5,8443,bytes_sent=520,bytes_rcvd=140,rule=Allow-Web\n"
+        "2026-09-14 11:22:00,10.20.10.142,185.220.101.5,8443,bytes_sent=520,bytes_rcvd=140,rule=Allow-Web\n"
+        "2026-09-14 11:23:00,10.20.10.142,185.220.101.5,8443,bytes_sent=520,bytes_rcvd=140,rule=Allow-Web\n"
+        # Attack 5: Asymmetric 3.84 GB bulk exfiltration from 10.20.10.88 to 198.51.100.240:443
+        "2026-09-14 11:38:40,10.20.10.88,198.51.100.240,443,bytes_sent=3842109400,bytes_rcvd=142050,rule=Allow-Web\n",
+        encoding="utf-8"
+    )
+
+    # 1. Test gather_log_evidence
+    evidence = await gather_log_evidence(str(tmp_path), pattern="*.*")
+    assert "bind9_dns_queries.log" in evidence
+    assert "zeek_dns.tsv" in evidence
+    assert "paloalto_traffic.log" in evidence
+
+    # Verify Adversary IPs and Domains
+    assert "185.220.101.5" in evidence
+    assert "198.51.100.240" in evidence
+    assert "tunnel.c2server.org" in evidence or "c2server.org" in evidence
+    assert "exfil.badactor.net" in evidence or "badactor.net" in evidence
+
+    # Verify Decoded sensitive payload
+    assert "admin:Password1" in evidence
+    assert "shadow" in evidence or "$6$" in evidence
+    assert "Key=AIzaSyA89zX" in evidence
+
+    # Verify Benign Traps are discriminated
+    assert "BENIGN BASELINE ENTERPRISE TRAFFIC" in evidence
+    assert "Corporate cloud backup" in evidence
+
+    # Verify Host Noise is filtered: Benign hosts must NOT be in compromised internal IPs list
+    assert "192.168.10.5" not in evidence or "BENIGN" in evidence or "Spamhaus" in evidence
+    assert "192.168.10.60" not in evidence or "BENIGN" in evidence or "CloudFront" in evidence
+    assert "192.168.10.22" not in evidence or "BENIGN" in evidence or "typo" in evidence
+
+    # 2. Test analyze_incident_impact
+    impact = await analyze_incident_impact(evidence)
+    assert "=== [ENTERPRISE BLAST RADIUS & IMPACT ASSESSMENT REPORT] ===" in impact
+
+    # Crucial Trap 4 Check: Exfiltration volume MUST be ~3.58 - 3.84 GB, NOT 5.42 GB (S3 backup)
+    assert "5.42 GB" not in impact or "BENIGN" in impact
+    assert "3.58 GB" in impact or "3.84 GB" in impact or "3,842,109,400 bytes" in impact
+
+    # Crucial Compromised Host Check: Only the 3 attacking workstations, NOT 14 hosts
+    assert "192.168.10.142" in impact or "10.20.10.142" in impact
+    assert "192.168.10.88" in impact or "10.20.10.88" in impact
+    assert "192.168.10.205" in impact
+    assert "192.168.10.35" not in impact
+    assert "192.168.10.42" not in impact
+    assert "192.168.10.15" not in impact
+
+    # Crucial Identity Check: svc-backup must NOT be listed under compromised identities
+    assert "svc-backup" not in impact or "[BENIGN" in impact
+
+    # 3. Test propose_containment_response for Domain
+    containment = await propose_containment_response(
+        target_entity="tunnel.c2server.org",
+        action_type="block_domain",
+        justification="DNS Tunneling interactive C2 channel",
+        dry_run=True,
+    )
+    assert "tunnel.c2server.org" in containment
+    assert "BIND 9 Response Policy Zone" in containment or "RPZ" in containment
+    assert "CNAME ." in containment
+    assert "Palo Alto" in containment
+
+    # 4. Test compress_security_timeline
+    timeline = await compress_security_timeline(evidence)
+    assert "=== [COMPRESSED INCIDENT TIMELINE]" in timeline
+    assert "Phase 01" in timeline
+
+
+
 
 
