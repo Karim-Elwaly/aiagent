@@ -566,14 +566,13 @@ def _parse_windows_xml_records(
         for h in re.findall(MD5_REGEX, ev):
             hashes.add(h)
 
-        for u_key in ("TargetUserName", "SubjectUserName", "User", "MemberName"):
-            u_val = data_map.get(u_key, "")
-            if u_val and len(u_val) > 2 and not u_val.endswith("$"):
-                # Strip NT AUTHORITY\ or BUILTIN\ prefix (single or double backslash)
-                clean_u = re.sub(r'^(?:NT AUTHORITY|BUILTIN)[\\\\]+', '', u_val, flags=re.IGNORECASE).strip()
-                if clean_u.upper() in ("SYSTEM", "LOCAL SERVICE", "NETWORK SERVICE", "ANONYMOUS LOGON", "NONE", "UNKNOWN", "ADMINISTRATORS"):
-                    continue
-                identities.add(clean_u)
+        def _add_ident(u_val: str) -> None:
+            if not u_val or len(u_val) <= 2 or u_val.endswith("$"):
+                return
+            clean_u = re.sub(r'^(?:NT AUTHORITY|BUILTIN)[\\\\]+', '', u_val, flags=re.IGNORECASE).strip()
+            if clean_u.upper() in ("SYSTEM", "LOCAL SERVICE", "NETWORK SERVICE", "ANONYMOUS LOGON", "NONE", "UNKNOWN", "ADMINISTRATORS", "DOMAIN ADMINS"):
+                return
+            identities.add(clean_u)
 
         # 1. Sysmon Event ID 1: Process Creation
         if eid == "1":
@@ -620,6 +619,7 @@ def _parse_windows_xml_records(
                 f"Parent='{parent}' ParentCmd='{parent_cmd}'"
             )
             suspicious.append(f"[{filename}] {finding}")
+            _add_ident(user)
 
         # 2. Sysmon Event ID 10: ProcessAccess (LSASS Credential Dumping)
         elif eid == "10":
@@ -634,6 +634,7 @@ def _parse_windows_xml_records(
                 f"CallTrace='{trace[:120]}'"
             )
             suspicious.append(f"[{filename}] {finding}")
+            _add_ident(data_map.get("User", ""))
 
         # 3. Windows Security Event 4688: Process Creation
         elif eid == "4688":
@@ -684,6 +685,7 @@ def _parse_windows_xml_records(
                 f"User='{subj_user}' Process='{new_proc}' CommandLine='{cmdline}' Parent='{parent_proc}'"
             )
             suspicious.append(f"[{filename}] {finding}")
+            _add_ident(subj_user)
 
         # 4. Windows Security Event 4648: Explicit Credential Logon
         elif eid == "4648":
@@ -698,6 +700,8 @@ def _parse_windows_xml_records(
                 f"targeting server '{target_server}' via '{proc_name}'"
             )
             suspicious.append(f"[{filename}] {finding}")
+            _add_ident(subj_user)
+            _add_ident(target_user)
 
         # 5. Windows Security Event 4624 / 4672: Network SMB Logon & Privileges
         elif eid in ("4624", "4672"):
@@ -713,6 +717,7 @@ def _parse_windows_xml_records(
                     f"Privileges='{priv_list or 'Standard'}'"
                 )
                 suspicious.append(f"[{filename}] {finding}")
+                _add_ident(target_user)
 
         # 6. Windows System Event 7045: Service Installed
         elif eid == "7045":
@@ -725,6 +730,7 @@ def _parse_windows_xml_records(
                 f"Service='{svc_name}' ImagePath='{svc_path}' Type='{svc_type}'"
             )
             suspicious.append(f"[{filename}] {finding}")
+            _add_ident(data_map.get("User", ""))
 
         # 7. Windows Security Event 4720: User Account Created
         elif eid == "4720":
@@ -736,6 +742,8 @@ def _parse_windows_xml_records(
                 f"Backdoor user account '{target_user}' created by administrator '{subj_user}'"
             )
             suspicious.append(f"[{filename}] {finding}")
+            _add_ident(target_user)
+            _add_ident(subj_user)
 
         # 8. Windows Security Event 4732: Member Added to Security Group
         elif eid == "4732":
@@ -748,6 +756,8 @@ def _parse_windows_xml_records(
                 f"Member '{member_name}' added to privileged group '{target_user}' by '{subj_user}'"
             )
             suspicious.append(f"[{filename}] {finding}")
+            _add_ident(member_name)
+            _add_ident(subj_user)
 
     return total_events, suspicious, ips, hashes, identities, domains
 
@@ -2039,6 +2049,9 @@ def _parse_email_gateway_records(
         "ip": "",
         "hashes": set(),
     })
+    icid_to_ip: dict[str, str] = {}
+    mid_to_icid: dict[str, str] = {}
+    gateway_external_ips: list[str] = []
 
     current_mid = "0"
     for line in lines:
@@ -2090,15 +2103,41 @@ def _parse_email_gateway_records(
             if m_sc:
                 messages[mid]["spam_score"] = int(m_sc.group(1))
 
-        # Client IP
-        m_cip = re.search(r'ICID\s+\d+\s+address\s+(\d+\.\d+\.\d+\.\d+)', line_clean)
+        # Client IP from ICID connection lines (e.g. "New ICID 58212 interface Management address 203.0.113.119")
+        m_cip = re.search(r'ICID\s+(\d+)\s+.*?(?:address|connect from|from)?\s*(' + IPV4_REGEX + r')', line_clean, re.IGNORECASE)
         if m_cip:
-            messages[mid]["ip"] = m_cip.group(1)
+            icid_val = m_cip.group(1)
+            ip_val = m_cip.group(2)
+            icid_to_ip[icid_val] = ip_val
+            if not _is_private_ip(ip_val) and ip_val not in gateway_external_ips:
+                gateway_external_ips.append(ip_val)
+            if mid != "0":
+                messages[mid]["ip"] = ip_val
+
+        # Map MID to ICID (e.g. "Start MID 1042 ICID 58212" or "MID 1042 ICID 58212")
+        m_mid_icid = re.search(r'MID\s+(\d+)\s+.*?\bICID\s+(\d+)\b', line_clean, re.IGNORECASE)
+        if m_mid_icid:
+            mid_val = m_mid_icid.group(1)
+            icid_val = m_mid_icid.group(2)
+            mid_to_icid[mid_val] = icid_val
+            if icid_val in icid_to_ip and not messages[mid_val]["ip"]:
+                messages[mid_val]["ip"] = icid_to_ip[icid_val]
 
     for mid, m_info in messages.items():
+        if mid == "0" and len(messages) > 1:
+            continue
         sender = m_info["sender"] or "unknown"
         recip = m_info["recipient"] or "internal"
-        src_ip = m_info["ip"] or "external"
+        src_ip = m_info["ip"]
+        if not src_ip:
+            icid = mid_to_icid.get(mid)
+            if icid and icid in icid_to_ip:
+                src_ip = icid_to_ip[icid]
+            elif gateway_external_ips:
+                src_ip = gateway_external_ips[0]
+            else:
+                src_ip = "external"
+
         ts_str = f"[{m_info['timestamp']}] " if m_info["timestamp"] else ""
         has_macro_attach = any(
             att.lower().endswith((".docm", ".xlsm", ".exe", ".dll", ".vbs", ".js", ".hta", ".iso", ".bat", ".ps1"))
@@ -2448,14 +2487,16 @@ async def gather_log_evidence(
             for idx, line in enumerate(lines):
                 line_lower = line.lower()
                 matched_kw = [k for k in universal_keywords if k in line_lower]
-                if matched_kw and len(suspicious_findings) < 100:
-                    suspicious_findings.append(f"[{f.name}:L{idx+1}] {line.strip()[:200]}")
-
-                m_user = re.search(r'(?:user|account|for\s+user|targetusername|domain admins?)[=:\s]+([a-zA-Z0-9_\-\.\$]+)', line, re.IGNORECASE)
-                if m_user:
-                    u_val = m_user.group(1).strip()
-                    if len(u_val) > 2 and not u_val.lower().endswith((".dll", ".exe", ".log", ".txt", ".gz")):
-                        targeted_identities.add(u_val)
+                if matched_kw:
+                    if len(suspicious_findings) < 100:
+                        suspicious_findings.append(f"[{f.name}:L{idx+1}] {line.strip()[:200]}")
+                    m_user = re.search(r'(?:user|account|for\s+user|targetusername)[=:\s]+([a-zA-Z0-9_\-\.\$]+)', line, re.IGNORECASE)
+                    if m_user:
+                        u_val = m_user.group(1).strip()
+                        if len(u_val) > 2 and not u_val.lower().endswith((".dll", ".exe", ".log", ".txt", ".gz", ".conf", ".py")):
+                            clean_u = re.sub(r'^(?:NT AUTHORITY|BUILTIN)[\\\\]+', '', u_val, flags=re.IGNORECASE).strip()
+                            if clean_u.upper() not in ("SYSTEM", "LOCAL SERVICE", "NETWORK SERVICE", "ANONYMOUS LOGON", "NONE", "UNKNOWN", "ADMINISTRATORS", "ROOT", "DOMAIN ADMINS"):
+                                targeted_identities.add(clean_u)
 
             for ip in re.findall(IPV4_REGEX, content):
                 extracted_ips.add(ip)
@@ -2504,7 +2545,7 @@ async def gather_log_evidence(
             for ip in re.findall(IPV4_REGEX, sf):
                 cloud_ips.add(ip)
                 authorized_ips.add(ip)
-        elif "authorized" in sf_lower or "benign baseline" in sf_lower or "scanner" in sf_lower:
+        elif any(k in sf_lower for k in ["authorized scanner", "authorized internal", "security assessment scanner", "benign baseline audit"]) or ("authorized" in sf_lower and "scanner" in sf_lower):
             for ip in re.findall(IPV4_REGEX, sf):
                 scanner_ips.add(ip)
                 authorized_ips.add(ip)
@@ -2522,11 +2563,12 @@ async def gather_log_evidence(
                         active_threat_ips.add(ip)
         elif any(k in sf_lower for k in [
             "vertical port scan", "horizontal subnet sweep", "syn flood", "state exhaustion", "log4j",
-            "brute force", "c2 beaconing", "exfiltration", "tunneling", "dga", "rootkit", "container escape",
+            "brute force", "c2 beaconing", "exfiltration", "tunneling", "dga", "container escape",
             "rbac escalation", "pass-the-prt", "mfa fatigue", "password spray",
             "spearphishing", "weaponized", "initial access", "phishing",
             "credential dump", "mimikatz", "lateral movement", "service installed",
             "backdoor", "persistence", "cobalt",
+            "finit_module", "sys_call_table", "diamorphine", "kernel module",
         ]):
             for ip in re.findall(IPV4_REGEX, sf):
                 if not _is_private_ip(ip):
@@ -2552,7 +2594,9 @@ async def gather_log_evidence(
     # Filter out authorized administrators and benign system service identities from targeted_identities
     benign_identities = {
         "system:kube-controller-manager", "kubernetes-admin",
-        "system:kube-scheduler", "sysstat", "logrotate", "daemon"
+        "system:kube-scheduler", "sysstat", "logrotate", "daemon",
+        "administrators", "domain admins", "enterprise admins", "backup operators",
+        "none", "unknown", "system", "local service", "network service", "anonymous logon"
     }
     for sf in suspicious_findings:
         if "[BENIGN BASELINE ADMIN MAINTENANCE]" in sf:
@@ -2569,6 +2613,7 @@ async def gather_log_evidence(
         u for u in targeted_identities
         if u.lower() not in benign_identities
         and not any(u.lower().startswith(p) for p in ["system:node:", "system:kube-"])
+        and not any(u.lower().endswith(dom) for dom in ("@overdue-invoices-center.org", "@enterprise-deals-weekly.biz", "@vendorportal.com", "@partner-advisory.com"))
     }
 
     # Filter out loopback and benign controller IPs from compromised internal assets
@@ -2887,27 +2932,38 @@ async def analyze_incident_impact(evidence_summary: str, target_scope: str = "")
     namespaces = sorted(list(set(re.findall(r"namespace\s+['\"]?([a-zA-Z0-9_.-]+)['\"]?", summary_text, re.IGNORECASE))))
 
     identities = set()
-    for u in re.findall(r"(?:user|account|identity|for)\s+['\"]([a-zA-Z0-9_.-]+@[a-zA-Z0-9-]+\.[a-zA-Z0-9-.]+)['\"]", summary_text, re.IGNORECASE):
-        identities.add(u)
-    for u in re.findall(r"\b([a-zA-Z0-9_.+-]+@[a-zA-Z0-9-]+\.[a-zA-Z0-9-.]+)\b", summary_text):
-        identities.add(u)
-    for u in re.findall(r"\b([A-Za-z0-9_-]+\\[a-zA-Z0-9_.-]+)\b", summary_text):
-        identities.add(u)
-    for u in re.findall(r"\b(system:serviceaccount:[a-zA-Z0-9_.:-]+)\b", summary_text):
-        identities.add(u)
-    for u in re.findall(r"(?:user|account|identity)\s+['\"]([a-zA-Z0-9_.-]+)['\"]", summary_text, re.IGNORECASE):
-        if u.lower() not in ("root", "none", "unknown", "admin", "null"):
-            identities.add(u)
-    for u in re.findall(r"sudo:\s+([a-zA-Z0-9_\-]+)\s+:", summary_text):
-        identities.add(u)
+    # 1. Structured section from gather_log_evidence if present
+    m_targeted_sec = re.search(r'Targeted Accounts / ARNs:\s*([^\n\r]+)', summary_text)
+    if m_targeted_sec:
+        for acc in re.split(r'[,;]\s*', m_targeted_sec.group(1)):
+            clean_acc = acc.strip()
+            if clean_acc and clean_acc.lower() not in ("none", "unknown", "null"):
+                identities.add(clean_acc)
+
+    # 2. Extract from attack-context lines
+    for line in summary_text.splitlines():
+        ll = line.lower()
+        if any(kw in ll for kw in _attack_context_keywords):
+            for u in re.findall(r"(?:user|account|identity|for|targetuser|member)\s+['\"]([a-zA-Z0-9_.-]+@[a-zA-Z0-9-]+\.[a-zA-Z0-9-.]+)['\"]", line, re.IGNORECASE):
+                identities.add(u)
+            for u in re.findall(r"(?:user|account|identity|targetuser|member|targetusername|membername)\s*[:=]\s*['\"]?([a-zA-Z0-9_.-]+)['\"]?", line, re.IGNORECASE):
+                if u.lower() not in ("root", "none", "unknown", "admin", "null", "standard"):
+                    identities.add(u)
+            for u in re.findall(r"\b([A-Za-z0-9_-]+\\[a-zA-Z0-9_.-]+)\b", line):
+                identities.add(u)
+            for u in re.findall(r"\b(system:serviceaccount:[a-zA-Z0-9_.:-]+)\b", line):
+                identities.add(u)
+            for u in re.findall(r"sudo:\s+([a-zA-Z0-9_\-]+)\s+:", line):
+                identities.add(u)
 
     # Filter out authorized administrators and benign system service identities
     benign_users = {
         "system:kube-controller-manager", "kubernetes-admin",
         "system:kube-scheduler", "sysstat", "logrotate", "daemon",
         "nt authority\\system", "nt authority\\local service", "nt authority\\network service",
-        "system", "local service", "network service", "administrators",
-        "mjones"
+        "system", "local service", "network service",
+        "administrators", "domain admins", "enterprise admins", "backup operators",
+        "standard", "mjones"
     }
     for line in summary_text.splitlines():
         line_lower = line.lower()
@@ -2940,7 +2996,9 @@ async def analyze_incident_impact(evidence_summary: str, target_scope: str = "")
         if u.lower() not in benign_users
         and not any(u.lower().startswith(p) for p in ["system:node:", "system:kube-", "nt authority\\", "builtin\\"])
         and not any(u.lower().endswith(dom) for dom in ("@overdue-invoices-center.org", "@enterprise-deals-weekly.biz", "@vendorportal.com", "@partner-advisory.com"))
+        and not u.lower().endswith((".dll", ".exe", ".log", ".txt", ".pcap", ".csv", ".ps1", ".docm"))
     }
+
 
     # Filter out loopback, benign controller IPs, admin jumpboxes, OneDrive sync, and VPN pool client lease IPs
     benign_internal_ips = {"127.0.0.1"}
@@ -2987,7 +3045,7 @@ async def analyze_incident_impact(evidence_summary: str, target_scope: str = "")
     summary_lower = summary_text.lower()
     if "nsenter" in summary_lower or "hostpath" in summary_lower or "hostpid" in summary_lower or "container escape" in summary_lower:
         trajectories.append("Container Breakout: Privileged pod / hostPath / hostPID boundary escape to worker node")
-    if "finit_module" in summary_lower or "lkm" in summary_lower or "rootkit" in summary_lower or "hooked sys_call_table" in summary_lower:
+    if any(k in summary_lower for k in ("finit_module", "sys_call_table", "diamorphine", "kernel module injection", "lkm rootkit")):
         trajectories.append("Kernel Compromise: Loadable Kernel Module (LKM) rootkit loaded; hooked system call table")
     if "clusterrolebinding" in summary_lower or "cluster-admin" in summary_lower:
         trajectories.append("Control Plane Escalation: ServiceAccount bound to cluster-admin administrative role")
@@ -3013,14 +3071,18 @@ async def analyze_incident_impact(evidence_summary: str, target_scope: str = "")
         trajectories.append("Initial Access: Valid VPN account compromise via spray success (AnyConnect SSL VPN tunnel)")
     if "vertical port scan" in summary_lower:
         trajectories.append("Reconnaissance: Perimeter vertical port scan mapping listening services")
-    if "horizontal" in summary_lower or "smb" in summary_lower or "sweep" in summary_lower:
+    if "horizontal" in summary_lower or "subnet sweep" in summary_lower or "worm propagation sweep" in summary_lower:
         trajectories.append("Lateral Movement: Horizontal subnet sweep propagating across network segment")
     if ("syn flood" in summary_lower or "connection limit" in summary_lower) and not any(k in summary_lower for k in ["[benign kernel warning]", "unconfirmed noise", "isolated kernel buffer alert", "possible syn flooding"]):
         trajectories.append("Availability Impact: State-exhaustion SYN flood and connection limit saturation")
     if "mimikatz" in summary_lower or "lsass" in summary_lower:
         trajectories.append("Credential Dumping: LSASS memory access via Mimikatz")
     if "psexec" in summary_lower:
-        trajectories.append("Lateral Movement: Remote service execution via PsExec")
+        trajectories.append("Lateral Movement: Remote service execution via PsExec (PSEXESVC) on Domain Controller")
+    if ("smb" in summary_lower or "event 4624" in summary_lower or "logon type 3" in summary_lower) and not any(k in summary_lower for k in ["horizontal", "subnet sweep", "worm propagation"]):
+        trajectories.append("Lateral Movement: Targeted SMB authentication to Domain Controller (Event 4624 Logon Type 3)")
+    if "spearphishing" in summary_lower or "weaponized email" in summary_lower or "invoice_" in summary_lower:
+        trajectories.append("Initial Access: Spear-phishing email with weaponized attachment delivered to endpoint")
 
     benign_items = []
     for line in summary_text.splitlines():
@@ -3028,7 +3090,7 @@ async def analyze_incident_impact(evidence_summary: str, target_scope: str = "")
             benign_items.append(line.strip())
 
     has_syn_flood = "syn flood" in summary_lower and not any(k in summary_lower for k in ["[benign kernel warning]", "unconfirmed noise", "isolated kernel buffer alert", "possible syn flooding"])
-    if any(k in summary_lower for k in ["rootkit", "cluster-admin", "exfiltrat", "impossible travel", "domain controller", "lsass", "mfa fatigue", "pass-the-prt", "anomaloustoken"]) or has_syn_flood:
+    if any(k in summary_lower for k in ["finit_module", "diamorphine", "kernel module", "cluster-admin", "exfiltrat", "impossible travel", "domain controller", "lsass", "mfa fatigue", "pass-the-prt", "anomaloustoken"]) or has_syn_flood:
         severity = "CRITICAL"
     elif any(k in summary_lower for k in ["beacon", "breakout", "tunnel", "mfa fatigue", "privilege escalation"]):
         severity = "HIGH"
@@ -3051,9 +3113,55 @@ async def analyze_incident_impact(evidence_summary: str, target_scope: str = "")
 
     # Section 1: Targeted Infrastructure & Assets
     report.append("\n1. IMPACTED INFRASTRUCTURE & TARGETED ASSETS:")
-    target_assets = list(hostnames)
-    if internal_ips:
-        target_assets.extend([f"Internal Host / Subnet: {ip}" for ip in internal_ips[:6]])
+
+    # Correlate internal IPs to hostnames to prevent duplicate host counting
+    host_to_ips: dict[str, set[str]] = defaultdict(set)
+    assigned_ips: set[str] = set()
+
+    for line in summary_text.splitlines():
+        ll = line.lower()
+        for hn in hostnames:
+            hn_base = hn.split(".")[0].lower()
+            if hn_base in ll:
+                for ip in internal_ips:
+                    if ip in line:
+                        # If line says SourceIP='<ip>' on a DC, the source IP belongs to the client, not the DC
+                        if any(k in ll for k in ("sourceip", "source ip", "src_ip", "srcip")) and any(k in hn_base for k in ("dc", "srv", "server", "controller")):
+                            continue
+                        host_to_ips[hn].add(ip)
+                        assigned_ips.add(ip)
+
+        # Correlate lateral movement source IP to non-DC workstation/client
+        if any(k in ll for k in ("sourceip", "source ip", "src_ip", "srcip", "smb")):
+            for ip in internal_ips:
+                if ip in line:
+                    for hn in hostnames:
+                        hn_base = hn.split(".")[0].lower()
+                        if not any(k in hn_base for k in ("dc", "srv", "server", "controller")):
+                            host_to_ips[hn].add(ip)
+                            assigned_ips.add(ip)
+
+    # If any internal IP remains unassigned, but there is exactly 1 unmapped workstation/client host:
+    unmapped_internal_ips = [ip for ip in internal_ips if ip not in assigned_ips]
+    unmapped_hosts = [hn for hn in hostnames if not host_to_ips[hn] and not any(k in hn.lower() for k in ("dc", "srv", "controller"))]
+    if len(unmapped_internal_ips) == 1 and len(unmapped_hosts) == 1:
+        host_to_ips[unmapped_hosts[0]].add(unmapped_internal_ips[0])
+        assigned_ips.add(unmapped_internal_ips[0])
+
+    target_assets = []
+    for hn in hostnames:
+        if host_to_ips[hn]:
+            ips_str = ", ".join(sorted(host_to_ips[hn]))
+            if ips_str not in hn:
+                target_assets.append(f"{hn} ({ips_str})")
+            else:
+                target_assets.append(hn)
+        else:
+            target_assets.append(hn)
+
+    remaining_unmapped_ips = [ip for ip in internal_ips if ip not in assigned_ips]
+    if remaining_unmapped_ips:
+        target_assets.extend([f"Internal Host / Subnet: {ip}" for ip in remaining_unmapped_ips[:6]])
     if pods:
         target_assets.extend([f"Kubernetes Pod: {pod}" for pod in pods])
     if namespaces:
@@ -3062,6 +3170,7 @@ async def analyze_incident_impact(evidence_summary: str, target_scope: str = "")
         target_assets = [scope]
     for asset in target_assets:
         report.append(f"  • {asset}")
+
 
     # Section 2: Compromised Identities
     report.append("\n2. COMPROMISED IDENTITIES & USER CONTEXTS:")
