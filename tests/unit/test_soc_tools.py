@@ -137,3 +137,128 @@ async def test_path_healing_and_benchmark_sample(tmp_path):
     assert "\r" not in str(healed)
     assert "attack-cases-benchmark" in str(healed)
     assert "raw-logs" in str(healed)
+
+
+@pytest.mark.asyncio
+async def test_cisco_asa_parser():
+    from src.registry.tools.soc_tools import _parse_cisco_asa_records
+
+    asa_logs = (
+        "%ASA-4-106023: Deny tcp src outside:198.51.100.220/49152 dst inside:10.10.10.20/21 by access-group \"outside_in\"\n"
+        "%ASA-4-106023: Deny tcp src outside:198.51.100.220/49153 dst inside:10.10.10.20/22 by access-group \"outside_in\"\n"
+        "%ASA-4-106023: Deny tcp src outside:198.51.100.220/49154 dst inside:10.10.10.20/23 by access-group \"outside_in\"\n"
+        "%ASA-4-106023: Deny tcp src outside:198.51.100.220/49155 dst inside:10.10.10.20/80 by access-group \"outside_in\"\n"
+        "%ASA-4-106023: Deny tcp src outside:198.51.100.220/49156 dst inside:10.10.10.20/443 by access-group \"outside_in\"\n"
+        "%ASA-4-106023: Deny tcp src outside:198.51.100.220/49157 dst inside:10.10.10.20/8080 by access-group \"outside_in\"\n"
+        "%ASA-3-201011: Connection limit exceeded 5000/5000 for input packet from 198.51.100.220/1234 to 10.10.10.20/80 on interface outside\n"
+        "%ASA-6-113015: AAA user authentication Rejected : reason = User password invalid : server = 10.10.10.1 : user = admin : user IP = 198.51.100.75\n"
+        "%ASA-4-106023: Deny tcp src outside:198.51.100.99/55555 dst inside:10.10.10.20/3389 by access-group \"outside_in\"\n"
+    )
+    total, findings, ips, users = _parse_cisco_asa_records(asa_logs, "cisco_asa_firewall.log")
+    assert total == 9
+    assert "198.51.100.220" in ips
+    assert "198.51.100.75" in ips
+    assert "admin" in users
+
+    findings_text = "\n".join(findings)
+    assert "Vertical Port Scan" in findings_text
+    assert "Connection Limit DoS" in findings_text
+    assert "Brute Force" in findings_text
+    assert "BENIGN INTERNET NOISE" in findings_text
+
+
+@pytest.mark.asyncio
+async def test_pfsense_parser():
+    from src.registry.tools.soc_tools import _parse_pfsense_records
+
+    pfsense_logs = (
+        # Vertical port scan from 198.51.100.50 against 10.10.10.20
+        "4,1663412000,em0,match,block,in,4,0x0,,64,0,0,DF,6,tcp,60,198.51.100.50,10.10.10.20,54101,21,0,S,123,,,\n"
+        "4,1663412001,em0,match,block,in,4,0x0,,64,0,0,DF,6,tcp,60,198.51.100.50,10.10.10.20,54102,22,0,S,124,,,\n"
+        "4,1663412002,em0,match,block,in,4,0x0,,64,0,0,DF,6,tcp,60,198.51.100.50,10.10.10.20,54103,23,0,S,125,,,\n"
+        "4,1663412003,em0,match,block,in,4,0x0,,64,0,0,DF,6,tcp,60,198.51.100.50,10.10.10.20,54104,80,0,S,126,,,\n"
+        "4,1663412004,em0,match,block,in,4,0x0,,64,0,0,DF,6,tcp,60,198.51.100.50,10.10.10.20,54105,443,0,S,127,,,\n"
+        "4,1663412005,em0,match,block,in,4,0x0,,64,0,0,DF,6,tcp,60,198.51.100.50,10.10.10.20,54106,8080,0,S,128,,,\n"
+        # Lateral SMB sweep from 198.51.100.15 across 192.168.1.0/24 subnet
+        "4,1663412010,em1,match,pass,in,4,0x0,,64,0,0,DF,6,tcp,60,198.51.100.15,192.168.1.10,49100,445,0,S,129,,,\n"
+        "4,1663412011,em1,match,pass,in,4,0x0,,64,0,0,DF,6,tcp,60,198.51.100.15,192.168.1.11,49101,445,0,S,130,,,\n"
+        "4,1663412012,em1,match,pass,in,4,0x0,,64,0,0,DF,6,tcp,60,198.51.100.15,192.168.1.12,49102,445,0,S,131,,,\n"
+        # Trap 3 Benign noise from 198.51.100.99
+        "4,1663412020,em0,match,block,in,4,0x0,,64,0,0,DF,6,tcp,60,198.51.100.99,10.10.10.20,60000,3389,0,S,132,,,\n"
+        # Internal authorized scanner 10.10.10.99
+        "4,1663412030,em0,match,pass,in,4,0x0,,64,0,0,DF,6,tcp,60,10.10.10.99,10.10.10.20,50000,80,0,S,133,,,\n"
+    )
+    total, findings, ips = _parse_pfsense_records(pfsense_logs, "pfsense_filterlog.csv")
+    assert total == 11
+    assert "198.51.100.50" in ips
+    assert "198.51.100.15" in ips
+    assert "198.51.100.99" in ips
+    assert "10.10.10.99" in ips
+
+    findings_text = "\n".join(findings)
+    assert "Vertical Port Scan" in findings_text
+    assert "Horizontal Subnet Sweep" in findings_text
+    assert "BENIGN INTERNET NOISE" in findings_text
+    assert "BENIGN BASELINE AUDIT" in findings_text
+
+
+@pytest.mark.asyncio
+async def test_fortigate_parser():
+    from src.registry.tools.soc_tools import _parse_fortigate_records
+
+    fgt_logs = (
+        'date=2026-09-17 time=14:22:01 devname="FGT-CORP-FW01" type="utm" subtype="ips" level="alert" severity="critical" srcip=198.51.100.200 dstip=10.10.10.20 srcport=43210 dstport=8080 attack="Apache.Log4j.Error.Log.Remote.Code.Execution" msg="Apache Log4j RCE attempt" action="dropped"\n'
+        'date=2026-09-17 time=14:25:00 devname="FGT-CORP-FW01" type="anomaly" subtype="anomaly" severity="critical" srcip=198.51.100.88 dstip=198.51.100.10 attack="syn_flood" count=15000 msg="TCP SYN flood volumetric anomaly detected" action="clear_session"\n'
+    )
+    total, findings, ips, cves = _parse_fortigate_records(fgt_logs, "fortigate_traffic_ips.log")
+    assert total == 2
+    assert "198.51.100.200" in ips
+    assert "198.51.100.88" in ips
+    assert "CVE-2021-44228" in cves
+
+    findings_text = "\n".join(findings)
+    assert "Log4j Remote Code Execution" in findings_text
+    assert "Volumetric Network Denial of Service" in findings_text
+
+
+@pytest.mark.asyncio
+async def test_multi_firewall_gather_evidence_and_noise_discrimination(tmp_path):
+    asa_file = tmp_path / "cisco_asa_firewall.log"
+    asa_file.write_text(
+        "%ASA-4-106023: Deny tcp src outside:198.51.100.220/49152 dst inside:10.10.10.20/21 by access-group \"outside_in\"\n"
+        "%ASA-4-106023: Deny tcp src outside:198.51.100.220/49153 dst inside:10.10.10.20/22 by access-group \"outside_in\"\n"
+        "%ASA-4-106023: Deny tcp src outside:198.51.100.220/49154 dst inside:10.10.10.20/23 by access-group \"outside_in\"\n"
+        "%ASA-4-106023: Deny tcp src outside:198.51.100.220/49155 dst inside:10.10.10.20/80 by access-group \"outside_in\"\n"
+        "%ASA-4-106023: Deny tcp src outside:198.51.100.220/49156 dst inside:10.10.10.20/443 by access-group \"outside_in\"\n"
+        "%ASA-4-106023: Deny tcp src outside:198.51.100.220/49157 dst inside:10.10.10.20/8080 by access-group \"outside_in\"\n"
+        "%ASA-4-106023: Deny tcp src outside:198.51.100.99/55555 dst inside:10.10.10.20/3389 by access-group \"outside_in\"\n",
+        encoding="utf-8"
+    )
+
+    report = await gather_log_evidence(str(tmp_path), pattern="*.log")
+    assert "=== [EVIDENCE COLLECTION:" in report
+    assert "cisco_asa_firewall.log" in report
+    assert "Vertical Port Scan" in report
+    assert "198.51.100.220" in report
+    assert "FALSE-POSITIVE TRAP & BENIGN BASELINE DISCRIMINATION" in report
+    assert "198.51.100.99" in report
+
+
+@pytest.mark.asyncio
+async def test_containment_anti_forensic_rejection():
+    # Attempting to clear event logs must be rejected
+    rejected_res = await propose_containment_response(
+        target_entity="Clear-EventLog -LogName Security",
+        action_type="isolate_endpoint",
+        justification="Clean up test logs"
+    )
+    assert "CONTAINMENT POLICY VIOLATION: DESTRUCTIVE ACTION REJECTED" in rejected_res
+    assert "strictly PROHIBITED" in rejected_res
+
+    # Attempting to turn firewall state off must be rejected
+    rejected_fw = await propose_containment_response(
+        target_entity="WKSTN-01",
+        action_type="isolate_endpoint",
+        justification="netsh advfirewall set allprofiles state off"
+    )
+    assert "CONTAINMENT POLICY VIOLATION: DESTRUCTIVE ACTION REJECTED" in rejected_fw
