@@ -1703,9 +1703,6 @@ def _parse_identity_logs(
         if not line_clean or line_clean.startswith("#"):
             continue
 
-        for ip in re.findall(IPV4_REGEX, line_clean):
-            ips.add(ip)
-
         dt = _parse_event_timestamp(line_clean)
 
         m_vs = re_vpn_start.search(line_clean)
@@ -2409,10 +2406,22 @@ async def gather_log_evidence(
             for ip in re.findall(IPV4_REGEX, sf):
                 scanner_ips.add(ip)
                 authorized_ips.add(ip)
+        elif "impossible travel" in sf_lower:
+            m_imp = re.search(r'\(([\d\.]+)\)\s+and\s+[^()]+\(([\d\.]+)\)', sf)
+            if m_imp:
+                base_ip = m_imp.group(1)
+                atk_ip = m_imp.group(2)
+                authorized_ips.add(base_ip)
+                if not _is_private_ip(atk_ip):
+                    active_threat_ips.add(atk_ip)
+            else:
+                for ip in re.findall(IPV4_REGEX, sf):
+                    if not _is_private_ip(ip):
+                        active_threat_ips.add(ip)
         elif any(k in sf_lower for k in [
             "vertical port scan", "horizontal subnet sweep", "syn flood", "state exhaustion", "log4j",
             "brute force", "c2 beaconing", "exfiltration", "tunneling", "dga", "rootkit", "container escape",
-            "rbac escalation", "impossible travel", "pass-the-prt", "mfa fatigue", "password spray"
+            "rbac escalation", "pass-the-prt", "mfa fatigue", "password spray"
         ]):
             for ip in re.findall(IPV4_REGEX, sf):
                 if not _is_private_ip(ip):
@@ -2428,12 +2437,10 @@ async def gather_log_evidence(
             authorized_ips.add(ip)
         elif ip == "198.51.100.99":
             noise_ips.add(ip)
-        elif ip in active_threat_ips or not noise_ips:
-            active_threat_ips.add(ip)
 
     # Remove any noise or authorized IPs from confirmed active attackers
     confirmed_attackers = sorted([
-        ip for ip in (active_threat_ips or set(ext_ips))
+        ip for ip in active_threat_ips
         if ip not in noise_ips and ip not in authorized_ips and not _is_private_ip(ip)
     ])
 
@@ -2445,6 +2452,12 @@ async def gather_log_evidence(
     for sf in suspicious_findings:
         if "[BENIGN BASELINE ADMIN MAINTENANCE]" in sf:
             for u in re.findall(r"administrator '([^']+)'", sf):
+                benign_identities.add(u.lower())
+        if "[BENIGN USER TYPO]" in sf:
+            for u in re.findall(r"User '([^']+)'", sf, re.IGNORECASE):
+                benign_identities.add(u.lower())
+        if "[BENIGN CELLULAR ROAMING]" in sf:
+            for u in re.findall(r"for '([^']+)'", sf, re.IGNORECASE):
                 benign_identities.add(u.lower())
 
     targeted_identities = {
@@ -2731,6 +2744,12 @@ async def analyze_incident_impact(evidence_summary: str, target_scope: str = "")
         if "[BENIGN BASELINE ADMIN MAINTENANCE]" in line:
             for u in re.findall(r"administrator '([^']+)'", line):
                 benign_users.add(u.lower())
+        if "[BENIGN USER TYPO]" in line:
+            for u in re.findall(r"user '([^']+)'", line, re.IGNORECASE):
+                benign_users.add(u.lower())
+        if "[BENIGN CELLULAR ROAMING]" in line:
+            for u in re.findall(r"for '([^']+)'", line, re.IGNORECASE):
+                benign_users.add(u.lower())
 
     identities = {
         u for u in identities
@@ -2738,10 +2757,10 @@ async def analyze_incident_impact(evidence_summary: str, target_scope: str = "")
         and not any(u.lower().startswith(p) for p in ["system:node:", "system:kube-"])
     }
 
-    # Filter out loopback and benign controller IPs from compromised internal assets
+    # Filter out loopback, benign controller IPs, and VPN pool client lease IPs from compromised internal assets
     benign_internal_ips = {"127.0.0.1"}
     for line in summary_text.splitlines():
-        if "[BENIGN" in line:
+        if "[BENIGN" in line or "assigned internal lease:" in line.lower() or "ipv4 address" in line.lower():
             for ip in re.findall(IPV4_REGEX, line):
                 if _is_private_ip(ip):
                     benign_internal_ips.add(ip)
