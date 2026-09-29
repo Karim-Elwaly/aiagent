@@ -202,6 +202,16 @@ async def lifespan(app: FastAPI):
     app.state.registry = registry
     logger.info("Tool Registry: %s", registry)
 
+    # Initialize Enterprise Security Connectors
+    try:
+        from src.connectors.manager import get_connector_manager
+        connector_mgr = get_connector_manager()
+        await connector_mgr.initialize(registry)
+        app.state.connector_manager = connector_mgr
+        logger.info("Enterprise Security Connectors initialized: %d active", len(connector_mgr.list_connectors()))
+    except Exception as e:
+        logger.warning("Could not initialize security connectors: %s", e)
+
     # In-memory storage for standalone in-process workflows (fallback when Temporal is offline)
     app.state.direct_workflows = {}
 
@@ -1857,6 +1867,70 @@ async def toggle_schedule(schedule_id: str):
     if not job:
         raise HTTPException(404, f"Schedule '{schedule_id}' not found")
     return app.state.scheduler.update_job(schedule_id, ScheduleUpdateRequest(enabled=not job.enabled))
+
+
+# ── Enterprise Security Connector Endpoints ─────────────────────
+
+
+@app.get("/api/connectors")
+async def list_security_connectors():
+    """List all enterprise security connectors (SIEM, EDR, Firewall, IAM, CTI, ITSM)."""
+    from src.connectors.manager import get_connector_manager
+
+    mgr = get_connector_manager()
+    return {"connectors": mgr.list_connectors(mask_secrets=True)}
+
+
+@app.get("/api/connectors/{connector_id}")
+async def get_security_connector(connector_id: str):
+    """Get metadata, connection status, and exported tools for a specific connector."""
+    from src.connectors.manager import get_connector_manager
+
+    mgr = get_connector_manager()
+    conn = mgr.get_connector(connector_id)
+    if not conn:
+        raise HTTPException(404, f"Connector '{connector_id}' not found")
+    return conn.to_dict(mask_secrets=True)
+
+
+@app.post("/api/connectors/{connector_id}/test")
+async def test_security_connector(connector_id: str):
+    """Test API authentication and latency for a connector."""
+    from src.connectors.manager import get_connector_manager
+
+    mgr = get_connector_manager()
+    conn = mgr.get_connector(connector_id)
+    if not conn:
+        raise HTTPException(404, f"Connector '{connector_id}' not found")
+    success, message, latency_ms = await mgr.test_connector(connector_id)
+    return {
+        "connector_id": connector_id,
+        "success": success,
+        "message": message,
+        "latency_ms": round(latency_ms, 2),
+        "status": conn.status.value,
+        "is_live": conn.is_live,
+    }
+
+
+@app.post("/api/connectors/{connector_id}/configure")
+async def configure_security_connector(connector_id: str, payload: dict[str, Any]):
+    """Update settings, credentials, or toggles for a connector."""
+    from src.connectors.manager import get_connector_manager
+
+    mgr = get_connector_manager()
+    try:
+        updated = await mgr.configure_connector(
+            connector_id,
+            payload,
+            registry=getattr(app.state, "registry", None),
+        )
+        return updated
+    except ValueError as ve:
+        raise HTTPException(404, str(ve))
+    except Exception as e:
+        logger.exception("Failed to configure connector %s: %s", connector_id, e)
+        raise HTTPException(400, f"Configuration failed: {e}")
 
 
 # ── Mount Messaging Gateways ─────────────────────────────────────

@@ -2488,10 +2488,12 @@ document.addEventListener("DOMContentLoaded", () => {
 
   // Tab switching: Installed Tools, MCP, OpenAPI, Hermes
   const tabBtnTools = document.getElementById("tab-btn-tools");
+  const tabBtnConnectors = document.getElementById("tab-btn-connectors");
   const tabBtnMcp = document.getElementById("tab-btn-mcp");
   const tabBtnOpenapi = document.getElementById("tab-btn-openapi");
   const tabBtnHermes = document.getElementById("tab-btn-hermes");
   const tabContentTools = document.getElementById("tab-content-tools");
+  const tabContentConnectors = document.getElementById("tab-content-connectors");
   const tabContentMcp = document.getElementById("tab-content-mcp");
   const tabContentOpenapi = document.getElementById("tab-content-openapi");
   const tabContentHermes = document.getElementById("tab-content-hermes");
@@ -2499,6 +2501,7 @@ document.addEventListener("DOMContentLoaded", () => {
   function switchIntegrationsTab(activeTab) {
     const tabs = [
       { btn: tabBtnTools, content: tabContentTools },
+      { btn: tabBtnConnectors, content: tabContentConnectors },
       { btn: tabBtnMcp, content: tabContentMcp },
       { btn: tabBtnOpenapi, content: tabContentOpenapi },
       { btn: tabBtnHermes, content: tabContentHermes }
@@ -2515,7 +2518,9 @@ document.addEventListener("DOMContentLoaded", () => {
       }
     });
 
-    if (activeTab === tabBtnHermes) {
+    if (activeTab === tabBtnConnectors) {
+      loadSecurityConnectors();
+    } else if (activeTab === tabBtnHermes) {
       fetchHermesStats();
       fetchHermesCapabilities();
       fetchHermesHubSkills(hermesCurrentPage || 1);
@@ -2523,9 +2528,132 @@ document.addEventListener("DOMContentLoaded", () => {
   }
 
   if (tabBtnTools) tabBtnTools.addEventListener("click", () => switchIntegrationsTab(tabBtnTools));
+  if (tabBtnConnectors) tabBtnConnectors.addEventListener("click", () => switchIntegrationsTab(tabBtnConnectors));
   if (tabBtnMcp) tabBtnMcp.addEventListener("click", () => switchIntegrationsTab(tabBtnMcp));
   if (tabBtnOpenapi) tabBtnOpenapi.addEventListener("click", () => switchIntegrationsTab(tabBtnOpenapi));
   if (tabBtnHermes) tabBtnHermes.addEventListener("click", () => switchIntegrationsTab(tabBtnHermes));
+
+  // Security Connectors Logic
+  let activeConnectorCategory = "all";
+  let cachedConnectors = [];
+
+  const refreshConnectorsBtn = document.getElementById("refresh-connectors-btn");
+  if (refreshConnectorsBtn) {
+    refreshConnectorsBtn.addEventListener("click", () => loadSecurityConnectors(activeConnectorCategory));
+  }
+
+  const connectorCategoryChips = document.getElementById("connector-category-chips");
+  if (connectorCategoryChips) {
+    connectorCategoryChips.querySelectorAll(".hermes-reg-chip").forEach(chip => {
+      chip.addEventListener("click", () => {
+        connectorCategoryChips.querySelectorAll(".hermes-reg-chip").forEach(c => c.classList.remove("active"));
+        chip.classList.add("active");
+        activeConnectorCategory = chip.getAttribute("data-cat") || "all";
+        renderConnectorsGrid(cachedConnectors, activeConnectorCategory);
+      });
+    });
+  }
+
+  async function loadSecurityConnectors(category = "all") {
+    const grid = document.getElementById("connectors-cards-grid");
+    if (!grid) return;
+    grid.innerHTML = `<div style="grid-column: 1 / -1; padding: 24px; text-align: center; color: var(--text-dim); font-size: 12px;">Loading enterprise security connectors...</div>`;
+
+    try {
+      const res = await fetch("/api/connectors");
+      if (!res.ok) throw new Error("Failed to load connectors");
+      const data = await res.json();
+      cachedConnectors = data.connectors || [];
+      renderConnectorsGrid(cachedConnectors, category);
+    } catch (e) {
+      grid.innerHTML = `<div style="grid-column: 1 / -1; padding: 24px; text-align: center; color: #f43f5e; font-size: 12px;">Error loading connectors: ${e.message}</div>`;
+    }
+  }
+
+  function renderConnectorsGrid(connectors, category) {
+    const grid = document.getElementById("connectors-cards-grid");
+    if (!grid) return;
+
+    const filtered = category === "all" ? connectors : connectors.filter(c => c.category === category);
+    if (!filtered || filtered.length === 0) {
+      grid.innerHTML = `<div style="grid-column: 1 / -1; padding: 32px; text-align: center; color: var(--text-dim); font-size: 12px;">No security connectors found in category '${category}'.</div>`;
+      return;
+    }
+
+    grid.innerHTML = filtered.map(c => {
+      const statusColor = c.status === "connected" ? "#34d399" : (c.status === "simulated" ? "#38bdf8" : "#94a3b8");
+      const statusBg = c.status === "connected" ? "rgba(16, 185, 129, 0.15)" : (c.status === "simulated" ? "rgba(56, 189, 248, 0.15)" : "rgba(148, 163, 184, 0.15)");
+      const statusLabel = c.status === "connected" ? "LIVE CONNECTED" : (c.status === "simulated" ? "SANDBOX / SIMULATED" : "DISCONNECTED");
+
+      const categoryLabels = {
+        siem: "SIEM & Logs",
+        edr: "EDR & XDR",
+        firewall: "Firewall & NGFW",
+        iam: "Identity & IAM",
+        threat_intel: "Threat Intel",
+        itsm: "ITSM / SOAR"
+      };
+
+      const toolsList = (c.supported_tools || []).map(t => {
+        const isContainment = t.includes("contain") || t.includes("isolate") || t.includes("ban") || t.includes("block") || t.includes("suspend") || t.includes("quarantine");
+        const badgeBg = isContainment ? "rgba(239, 68, 68, 0.2)" : "rgba(15, 23, 42, 0.6)";
+        const badgeColor = isContainment ? "#f87171" : "#94a3b8";
+        return `<span style="font-family: monospace; font-size: 10px; background: ${badgeBg}; color: ${badgeColor}; padding: 2px 6px; border-radius: 4px; border: 1px solid var(--border-subtle);">${t}</span>`;
+      }).join(" ");
+
+      return `
+        <div style="background: rgba(15, 23, 42, 0.7); border: 1px solid var(--border-subtle); border-radius: 8px; padding: 14px; display: flex; flex-direction: column; justify-content: space-between; gap: 10px; transition: border-color 0.2s;">
+          <div>
+            <div style="display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 6px;">
+              <div>
+                <span style="font-size: 10px; text-transform: uppercase; color: var(--text-dim); font-weight: 600;">${c.vendor} • ${categoryLabels[c.category] || c.category}</span>
+                <div style="font-size: 13px; font-weight: 700; color: #fff; margin-top: 2px;">${c.name}</div>
+              </div>
+              <span style="font-size: 10px; font-weight: 600; padding: 3px 8px; border-radius: 12px; background: ${statusBg}; color: ${statusColor}; border: 1px solid ${statusColor}44;">
+                ${statusLabel}
+              </span>
+            </div>
+            <div style="font-size: 11px; color: var(--text-dim); line-height: 1.4; margin-bottom: 8px;">${c.description}</div>
+            <div style="display: flex; flex-wrap: wrap; gap: 4px; margin-bottom: 8px;">
+              ${toolsList}
+            </div>
+          </div>
+          <div style="display: flex; justify-content: space-between; align-items: center; border-top: 1px solid var(--border-subtle); pt: 8px; padding-top: 8px;">
+            <div style="font-size: 10px; color: var(--text-dim);">
+              Latency: <span id="lat-${c.connector_id}">-- ms</span>
+            </div>
+            <div style="display: flex; gap: 6px;">
+              <button type="button" class="test-connector-btn header-btn" data-id="${c.connector_id}" style="padding: 4px 8px; font-size: 11px;">
+                🔌 Test
+              </button>
+            </div>
+          </div>
+        </div>
+      `;
+    }).join("");
+
+    // Wire up test buttons
+    grid.querySelectorAll(".test-connector-btn").forEach(btn => {
+      btn.addEventListener("click", async () => {
+        const cid = btn.getAttribute("data-id");
+        btn.textContent = "⏳ Testing...";
+        btn.disabled = true;
+        try {
+          const res = await fetch(`/api/connectors/${cid}/test`, { method: "POST" });
+          const data = await res.json();
+          const latEl = document.getElementById(`lat-${cid}`);
+          if (latEl) latEl.textContent = `${data.latency_ms} ms`;
+          showToast(`[${cid}] ${data.message}`, data.success ? "info" : "error");
+          btn.textContent = data.success ? "✔ Tested" : "✖ Failed";
+        } catch (err) {
+          showToast(`Test failed: ${err.message}`, "error");
+          btn.textContent = "✖ Failed";
+        } finally {
+          btn.disabled = false;
+        }
+      });
+    });
+  }
 
   // Copy Solution button
   const copySolutionBtn = document.getElementById("copy-solution-btn");

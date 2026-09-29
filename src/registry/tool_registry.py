@@ -218,6 +218,13 @@ class ToolRegistry:
         """Look up a tool by its ID."""
         return self._tools.get(tool_id)
 
+    def get_tool_by_name(self, name: str) -> ToolSpec | None:
+        """Look up a tool by its function name."""
+        for spec in self._tools.values():
+            if spec.name == name:
+                return spec
+        return None
+
     def has_tool(self, tool_id_or_name: str) -> bool:
         """Check if a tool exists by its tool_id or name."""
         if tool_id_or_name in self._tools:

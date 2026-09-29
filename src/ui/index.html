@@ -556,6 +556,9 @@
         <button type="button" id="tab-btn-tools" class="tab-btn active">
           🧩 Installed Tools
         </button>
+        <button type="button" id="tab-btn-connectors" class="tab-btn">
+          🛡️ Security Connectors (13)
+        </button>
         <button type="button" id="tab-btn-hermes" class="tab-btn" style="display: none;">
           ⚡ Skills Hub (97,986)
         </button>
@@ -779,6 +782,35 @@
         </div>
         <div id="tool-list" class="tool-list">
           <!-- Populated via fetchTools() -->
+        </div>
+      </div>
+
+      <!-- Tab: Enterprise Security Connectors (SIEM, EDR, Firewall, IAM, CTI, ITSM) -->
+      <div id="tab-content-connectors" class="tab-content" style="display: none; flex-direction: column;">
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px;">
+          <div>
+            <div style="font-weight: 600; font-size: 13px; color: #fff;">Enterprise Security Tool Connectors</div>
+            <div style="font-size: 11px; color: var(--text-dim);">Live bidirectional integrations for autonomous telemetry querying and high-risk containment execution</div>
+          </div>
+          <div style="display: flex; gap: 8px;">
+            <button type="button" id="refresh-connectors-btn" class="header-btn" style="padding: 4px 10px; font-size: 11px;">🔄 Refresh Status</button>
+          </div>
+        </div>
+
+        <!-- Category filter pills -->
+        <div class="hermes-registry-chips" id="connector-category-chips" style="margin-bottom: 12px;">
+          <button type="button" class="hermes-reg-chip active" data-cat="all">All (13)</button>
+          <button type="button" class="hermes-reg-chip" data-cat="siem">SIEM (3)</button>
+          <button type="button" class="hermes-reg-chip" data-cat="edr">EDR / XDR (3)</button>
+          <button type="button" class="hermes-reg-chip" data-cat="firewall">Firewalls (2)</button>
+          <button type="button" class="hermes-reg-chip" data-cat="iam">Identity / IAM (2)</button>
+          <button type="button" class="hermes-reg-chip" data-cat="threat_intel">Threat Intel (2)</button>
+          <button type="button" class="hermes-reg-chip" data-cat="itsm">ITSM / SOAR (1)</button>
+        </div>
+
+        <!-- Connector Cards Grid -->
+        <div id="connectors-cards-grid" class="connectors-grid" style="display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 12px; max-height: 480px; overflow-y: auto; padding-right: 4px;">
+          <!-- Dynamically populated via loadSecurityConnectors() -->
         </div>
       </div>
 
