@@ -92,6 +92,22 @@
           <span id="tools-count" class="badge-pill">76</span>
         </button>
 
+        <button id="open-memory-btn" class="header-btn" title="Inspect and manage persistent agent memory & facts">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M12 2a5 5 0 0 1 5 5v1a5 5 0 0 1-3.5 4.8A7 7 0 0 1 20 19v1a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1v-1a7 7 0 0 1 6.5-6.2A5 5 0 0 1 7 8V7a5 5 0 0 1 5-5z"/>
+          </svg>
+          <span>Memory</span>
+          <span id="memory-facts-count" class="badge-pill">0</span>
+        </button>
+
+        <button id="open-distilled-skills-btn" class="header-btn" title="Review autonomously distilled skills & approvals">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/>
+          </svg>
+          <span>Learned Skills</span>
+          <span id="distilled-skills-badge" class="badge-pill" style="display: none; background: rgba(236, 72, 153, 0.25); color: #f472b6; border-color: rgba(236, 72, 153, 0.5);">0</span>
+        </button>
+
         <a href="http://localhost:8234" target="_blank" class="header-btn icon-only" title="Open Temporal Web UI">
           <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
             <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6M15 3h6v6M10 14L21 3"/>
@@ -1228,12 +1244,130 @@
     </div>
   </div>
 
+  <!-- Memory Inspector Modal (Gap 3) -->
+  <div id="memory-modal" class="modal-overlay">
+    <div class="modal-card modal-large" style="max-width: 860px;">
+      <div class="modal-header">
+        <div class="brand-icon icon-circle gradient-blue">
+          <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="#fff" stroke-width="2">
+            <path d="M12 2a5 5 0 0 1 5 5v1a5 5 0 0 1-3.5 4.8A7 7 0 0 1 20 19v1a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1v-1a7 7 0 0 1 6.5-6.2A5 5 0 0 1 7 8V7a5 5 0 0 1 5-5z"/>
+          </svg>
+        </div>
+        <div style="flex: 1;">
+          <div style="display: flex; justify-content: space-between; align-items: center;">
+            <div class="modal-title">Agent Memory &amp; Knowledge Store (SQLite + FTS5)</div>
+            <button id="close-memory-modal-x" type="button" class="modal-close-icon" title="Close modal">✕</button>
+          </div>
+          <div class="modal-subtitle">Grounded environment facts, persistent knowledge, and previous workflow execution episodes.</div>
+        </div>
+      </div>
+
+      <div class="modal-body" style="padding-top: 14px;">
+        <!-- Tabs & Search Bar -->
+        <div style="display: flex; justify-content: space-between; align-items: center; gap: 12px; margin-bottom: 12px;">
+          <div class="template-selector-bar" style="margin: 0; padding: 0;">
+            <button type="button" class="template-btn active" id="mem-tab-facts">🧠 Known Facts (<span id="mem-facts-badge">0</span>)</button>
+            <button type="button" class="template-btn" id="mem-tab-episodes">📚 Workflow Episodes</button>
+          </div>
+          <div style="flex: 1; max-width: 320px;">
+            <input type="text" id="memory-search-input" class="prompt-box modal-input" placeholder="Search facts or episodes..." style="padding: 7px 12px; font-size: 13px;">
+          </div>
+        </div>
+
+        <!-- Facts View -->
+        <div id="mem-facts-view">
+          <!-- Add Fact Accordion -->
+          <details style="background: rgba(15, 23, 42, 0.6); padding: 10px 14px; border-radius: 8px; border: 1px solid var(--border-subtle); margin-bottom: 14px;">
+            <summary style="font-size: 12px; font-weight: 600; color: var(--accent-cyan); cursor: pointer;">➕ Add Verified Memory Fact</summary>
+            <form id="add-memory-form" style="display: grid; grid-template-columns: 1fr 2fr 100px auto; gap: 8px; align-items: end; margin-top: 10px;">
+              <div>
+                <label class="field-label" style="font-size: 11px;">Key</label>
+                <input type="text" id="mem-key-input" class="prompt-box modal-input" placeholder="e.g. redis_port" required style="padding: 6px 10px; font-size: 12px;">
+              </div>
+              <div>
+                <label class="field-label" style="font-size: 11px;">Value</label>
+                <input type="text" id="mem-val-input" class="prompt-box modal-input" placeholder="e.g. 6379" required style="padding: 6px 10px; font-size: 12px;">
+              </div>
+              <div style="display: flex; align-items: center; gap: 6px; padding-bottom: 8px;">
+                <input type="checkbox" id="mem-volatile-check" style="cursor: pointer;">
+                <label for="mem-volatile-check" style="font-size: 11px; color: var(--text-muted); cursor: pointer;" title="Volatile facts require runtime tool verification">Volatile</label>
+              </div>
+              <button type="submit" class="btn-approve" style="padding: 6px 14px; font-size: 12px;">Save Fact</button>
+            </form>
+          </details>
+
+          <!-- Facts List -->
+          <div id="memory-facts-list" class="tool-list" style="max-height: 300px; overflow-y: auto;">
+            <!-- Rendered facts -->
+          </div>
+        </div>
+
+        <!-- Episodes View -->
+        <div id="mem-episodes-view" style="display: none;">
+          <div id="memory-episodes-list" class="tool-list" style="max-height: 340px; overflow-y: auto;">
+            <!-- Rendered episodes -->
+          </div>
+        </div>
+      </div>
+
+      <div class="modal-actions" style="justify-content: flex-end; margin-top: 14px;">
+        <button type="button" id="close-memory-modal-btn" class="btn-reject">Close</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Distilled Skills Review Modal (Gap 5 HITL) -->
+  <div id="distilled-skills-modal" class="modal-overlay">
+    <div class="modal-card modal-large" style="max-width: 860px;">
+      <div class="modal-header">
+        <div class="brand-icon icon-circle gradient-purple">
+          <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="#fff" stroke-width="2">
+            <polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/>
+          </svg>
+        </div>
+        <div style="flex: 1;">
+          <div style="display: flex; justify-content: space-between; align-items: center;">
+            <div class="modal-title">Autonomously Distilled Skills (HITL Review)</div>
+            <button id="close-distilled-skills-modal-x" type="button" class="modal-close-icon" title="Close modal">✕</button>
+          </div>
+          <div class="modal-subtitle">Composite skills distilled from high-performing workflows. Review code safety before promoting.</div>
+        </div>
+      </div>
+
+      <div class="modal-body" style="padding-top: 14px;">
+        <!-- Tabs -->
+        <div class="template-selector-bar" style="margin-bottom: 14px;">
+          <button type="button" class="template-btn active" id="distilled-tab-pending">⏳ Pending Review (<span id="distilled-pending-badge">0</span>)</button>
+          <button type="button" class="template-btn" id="distilled-tab-approved">✅ Approved Skills (<span id="distilled-approved-badge">0</span>)</button>
+        </div>
+
+        <!-- Pending Skills Container -->
+        <div id="distilled-pending-view">
+          <div id="distilled-pending-list" class="tool-list" style="max-height: 360px; overflow-y: auto;">
+            <!-- Rendered pending skill cards -->
+          </div>
+        </div>
+
+        <!-- Approved Skills Container -->
+        <div id="distilled-approved-view" style="display: none;">
+          <div id="distilled-approved-list" class="tool-list" style="max-height: 360px; overflow-y: auto;">
+            <!-- Rendered approved skill cards -->
+          </div>
+        </div>
+      </div>
+
+      <div class="modal-actions" style="justify-content: flex-end; margin-top: 14px;">
+        <button type="button" id="close-distilled-skills-modal-btn" class="btn-reject">Close</button>
+      </div>
+    </div>
+  </div>
+
   <!-- Toast Notification Container -->
   <div id="toast-container" class="toast-container"></div>
 
   <!-- Scripts -->
   <script src="./js/marked.min.js"></script>
   <script src="./js/dag_renderer.js"></script>
-  <script src="./js/app.js"></script>
+  <script src="./js/app.js?v=2.6.2"></script>
 </body>
 </html>

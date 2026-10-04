@@ -19,11 +19,59 @@ from collections.abc import AsyncIterator
 
 import httpx
 
+from dataclasses import dataclass, field
+from typing import Any
+
 logger = logging.getLogger(__name__)
 
 # HTTP statuses worth retrying: the server is momentarily unavailable/overloaded.
 # 4xx like 400/413 are deterministic (e.g. context overflow) — retrying is futile.
 _RETRYABLE_STATUS_CODES = frozenset({408, 425, 429, 500, 502, 503, 504})
+
+_CAPABILITY_CACHE: dict[tuple[str, str], str] = {}
+
+
+@dataclass
+class LLMResponse:
+    """Structured response from the LLM cleanly separating content, reasoning, and tool calls."""
+
+    content: str = ""
+    reasoning: str = ""
+    tool_calls: list[dict[str, Any]] = field(default_factory=list)
+    finish_reason: str = "stop"
+
+    @property
+    def has_tool_calls(self) -> bool:
+        return bool(self.tool_calls)
+
+
+def extract_thinking_and_content(raw_text: str) -> tuple[str, str]:
+    """Extract <think>...</think> reasoning blocks from text.
+
+    Returns (cleaned_content, reasoning_trace) ensuring model reasoning
+    does not leak into final answers or content channels.
+    """
+    if not raw_text or "<think>" not in raw_text:
+        return raw_text or "", ""
+
+    parts = []
+    thoughts = []
+    curr = raw_text
+    while "<think>" in curr:
+        before, rest = curr.split("<think>", 1)
+        if before:
+            parts.append(before)
+        if "</think>" in rest:
+            thought, curr = rest.split("</think>", 1)
+            thoughts.append(thought.strip())
+        else:
+            thoughts.append(rest.strip())
+            curr = ""
+            break
+    if curr:
+        parts.append(curr)
+
+    return "".join(parts).strip(), "\n\n".join(thoughts).strip()
 
 
 def _is_retryable_error(exc: BaseException) -> bool:
@@ -54,7 +102,7 @@ def _is_retryable_error(exc: BaseException) -> bool:
 
 
 class LocalLLMClient:
-    """Async client for local LLM chat completions.
+    """Async client for local LLM chat completions with native tool calling support.
 
     Uses the OpenAI-compatible API format, which is the de facto
     standard for local inference servers.
@@ -77,40 +125,34 @@ class LocalLLMClient:
         self.temperature = temperature
         self.max_tokens = max_tokens
         self.timeout = timeout
-        # Baseline per-call resilience so a brief server blip (model reload,
-        # network hiccup) is absorbed transparently. Long outages are handled by
-        # the outer retry layer (Temporal activity policy / direct-engine task
-        # retry) which knows the per-request resilience level.
         self.max_retries = max(0, max_retries)
         self.retry_initial_interval = retry_initial_interval
         self.retry_backoff = retry_backoff
         self.retry_max_interval = retry_max_interval
 
     async def chat(self, messages: list[dict[str, str]]) -> str:
-        """Send a chat completion request with bounded retry on transient faults.
+        """Send a chat completion request returning clean assistant text."""
+        res = await self.chat_with_tools(messages, tools=None)
+        return res.content
 
-        Each attempt streams first (fast headers, avoids ReadTimeout on large
-        models) and falls back to a non-streaming POST. Transient failures
-        (connection drop, timeout, 5xx) are retried with exponential backoff;
-        deterministic failures propagate immediately.
-
-        Args:
-            messages: List of message dicts with 'role' and 'content' keys.
-
-        Returns:
-            The assistant's response text.
-        """
+    async def chat_with_tools(
+        self,
+        messages: list[dict[str, Any]],
+        tools: list[dict[str, Any]] | None = None,
+        max_tokens: int | None = None,
+    ) -> LLMResponse:
+        """Send a chat completion request with structured tool calls and reasoning separation."""
         interval = self.retry_initial_interval
         last_exc: Exception | None = None
         for attempt in range(self.max_retries + 1):
             try:
-                return await self._chat_once(messages)
+                return await self._chat_with_tools_once(messages, tools=tools, max_tokens=max_tokens)
             except Exception as exc:
                 last_exc = exc
                 if attempt >= self.max_retries or not _is_retryable_error(exc):
                     raise
                 logger.warning(
-                    "LLM chat transient failure (%s: %s); retry %d/%d in %.1fs",
+                    "LLM chat_with_tools transient failure (%s: %s); retry %d/%d in %.1fs",
                     type(exc).__name__,
                     exc,
                     attempt + 1,
@@ -119,42 +161,34 @@ class LocalLLMClient:
                 )
                 await asyncio.sleep(interval)
                 interval = min(interval * self.retry_backoff, self.retry_max_interval)
-        # Unreachable in practice (loop either returns or raises), but keep mypy happy.
         assert last_exc is not None
         raise last_exc
 
-    async def _chat_once(self, messages: list[dict[str, str]]) -> str:
-        """One chat attempt: stream first, then non-streaming POST fallback."""
-        # First attempt: stream accumulation to avoid long header wait timeouts
-        try:
-            tokens = []
-            async for token in self.chat_stream(messages):
-                tokens.append(token)
-            if tokens:
-                content = "".join(tokens)
-                logger.debug("LLM stream completed: %d chars", len(content))
-                return content
-        except Exception as stream_err:
-            # Re-raise transient stream failures so the retry loop can back off;
-            # otherwise fall through to a single non-streaming attempt.
-            if _is_retryable_error(stream_err):
-                raise
-            logger.debug("Streaming chat attempt failed, trying direct POST: %s", stream_err)
+    async def _chat_with_tools_once(
+        self,
+        messages: list[dict[str, Any]],
+        tools: list[dict[str, Any]] | None = None,
+        max_tokens: int | None = None,
+    ) -> LLMResponse:
+        """Execute a single HTTP request to /v1/chat/completions."""
+        effective_max_tokens = max_tokens or self.max_tokens
 
-        # Fallback to direct POST
-        payload = {
+        payload: dict[str, Any] = {
             "model": self.model,
             "messages": messages,
             "temperature": self.temperature,
-            "max_tokens": self.max_tokens,
+            "max_tokens": effective_max_tokens,
             "stream": False,
         }
+        if tools:
+            payload["tools"] = tools
 
         logger.debug(
-            "LLM request (direct): model=%s, messages=%d, max_tokens=%d",
+            "LLM request (direct): model=%s, messages=%d, tools=%s, max_tokens=%d",
             self.model,
             len(messages),
-            self.max_tokens,
+            len(tools) if tools else 0,
+            effective_max_tokens,
         )
 
         timeout_config = httpx.Timeout(
@@ -176,16 +210,77 @@ class LocalLLMClient:
         if not choices:
             raise ValueError(f"LLM returned no choices in response: {data}")
 
-        message = choices[0].get("message", {})
-        content = message.get("content") or message.get("reasoning_content") or ""
+        choice = choices[0]
+        message = choice.get("message", {})
+        raw_content = message.get("content") or ""
+        reasoning = message.get("reasoning_content") or ""
+        tool_calls = message.get("tool_calls") or []
+        finish_reason = choice.get("finish_reason", "stop")
+
+        # Channel separation: extract <think> blocks if present in raw_content
+        cleaned_content, extracted_thinking = extract_thinking_and_content(raw_content)
+        if extracted_thinking:
+            reasoning = f"{reasoning}\n\n{extracted_thinking}".strip() if reasoning else extracted_thinking
 
         logger.debug(
-            "LLM response: %d chars, finish_reason=%s",
-            len(content),
-            choices[0].get("finish_reason", "unknown"),
+            "LLM response: %d chars, %d tool calls, finish_reason=%s",
+            len(cleaned_content),
+            len(tool_calls),
+            finish_reason,
         )
 
-        return str(content)
+        return LLMResponse(
+            content=cleaned_content,
+            reasoning=reasoning,
+            tool_calls=tool_calls,
+            finish_reason=finish_reason,
+        )
+
+    async def probe_capability(self) -> str:
+        """Probe whether the inference server supports native OpenAI-style tool calls.
+
+        Returns one of: 'native' | 'tags' | 'legacy'
+        """
+        from src.core.config import get_settings
+        settings = get_settings()
+        mode = getattr(settings, "tool_call_mode", "legacy")
+        if mode in ("native", "tags", "legacy"):
+            return mode
+
+        key = (self.base_url, self.model)
+        if key in _CAPABILITY_CACHE:
+            return _CAPABILITY_CACHE[key]
+
+        test_tool = {
+            "type": "function",
+            "function": {
+                "name": "probe_tool",
+                "description": "Probe test tool",
+                "parameters": {
+                    "type": "object",
+                    "properties": {"test": {"type": "string"}},
+                },
+            },
+        }
+        test_msgs = [
+            {"role": "user", "content": "Call the probe_tool with test='hello'."}
+        ]
+        try:
+            res = await self._chat_with_tools_once(test_msgs, tools=[test_tool], max_tokens=150)
+            if res.tool_calls:
+                _CAPABILITY_CACHE[key] = "native"
+                logger.info("Probe detected native tool-calling support on %s (%s)", self.base_url, self.model)
+                return "native"
+            if "<tool_call>" in res.content:
+                _CAPABILITY_CACHE[key] = "tags"
+                logger.info("Probe detected Hermes XML tags tool-calling support on %s (%s)", self.base_url, self.model)
+                return "tags"
+        except Exception as e:
+            logger.debug("Probe failed on %s: %s; falling back to legacy", self.base_url, e)
+
+        _CAPABILITY_CACHE[key] = "legacy"
+        return "legacy"
+
 
     async def chat_stream(
         self, messages: list[dict[str, str]]

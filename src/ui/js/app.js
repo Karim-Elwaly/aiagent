@@ -616,6 +616,72 @@ document.addEventListener("DOMContentLoaded", () => {
         }
         break;
 
+      case "thought": {
+        const taskId = ev.task_id;
+        const thought = ev.thought || "";
+        if (!thought) break;
+        let stepEl = document.getElementById(`step-${taskId}`);
+        if (!stepEl) {
+          addTimelineStep(taskId, `Task ${taskId}`, "", "running");
+          stepEl = document.getElementById(`step-${taskId}`);
+        }
+        let thoughtEl = document.getElementById(`thought-${taskId}`);
+        if (!thoughtEl && stepEl) {
+          thoughtEl = document.createElement("details");
+          thoughtEl.id = `thought-${taskId}`;
+          thoughtEl.style.cssText = "background: rgba(30, 41, 59, 0.4); border: 1px solid rgba(148, 163, 184, 0.15); border-radius: 6px; padding: 6px 10px; margin: 6px 0; font-size: 11px;";
+          thoughtEl.innerHTML = `<summary style="cursor: pointer; color: #a78bfa; font-weight: 600;">💭 Reasoning &amp; Diagnostics</summary><div class="thought-body font-mono" style="margin-top: 4px; color: #cbd5e1; white-space: pre-wrap; font-size: 10.5px; max-height: 120px; overflow-y: auto;"></div>`;
+          const contentDiv = stepEl.querySelector(".step-content");
+          if (contentDiv) contentDiv.insertBefore(thoughtEl, contentDiv.firstChild);
+        }
+        if (thoughtEl) {
+          const bodyEl = thoughtEl.querySelector(".thought-body");
+          if (bodyEl) bodyEl.textContent += thought + "\n";
+        }
+        break;
+      }
+
+      case "memory_hit": {
+        const taskId = ev.task_id;
+        const key = ev.key || "fact";
+        const val = ev.value || "";
+        let stepEl = document.getElementById(`step-${taskId}`);
+        if (stepEl) {
+          const contentDiv = stepEl.querySelector(".step-content");
+          if (contentDiv) {
+            const hitBadge = document.createElement("div");
+            hitBadge.style.cssText = "display: inline-flex; align-items: center; gap: 6px; background: rgba(56, 189, 248, 0.15); border: 1px solid rgba(56, 189, 248, 0.35); border-radius: 4px; padding: 2px 8px; margin: 4px 0; font-size: 11px; color: #38bdf8;";
+            hitBadge.innerHTML = `🧠 <strong>Recalled:</strong> ${key}`;
+            if (val) hitBadge.title = val;
+            contentDiv.appendChild(hitBadge);
+          }
+        }
+        break;
+      }
+
+      case "skill_candidate": {
+        const skillName = ev.skill_name || "distilled_skill";
+        showToast(`✨ New Distilled Skill Candidate: ${skillName}! Review in Learned Skills.`, "info");
+        if (typeof loadDistilledSkillsStats === "function") loadDistilledSkillsStats();
+        break;
+      }
+
+      case "reflection": {
+        const taskId = ev.task_id;
+        const category = ev.category || "General";
+        let stepEl = document.getElementById(`step-${taskId}`);
+        if (stepEl) {
+          const contentDiv = stepEl.querySelector(".step-content");
+          if (contentDiv) {
+            const refBadge = document.createElement("div");
+            refBadge.style.cssText = "display: inline-flex; align-items: center; gap: 6px; background: rgba(245, 158, 11, 0.15); border: 1px solid rgba(245, 158, 11, 0.35); border-radius: 4px; padding: 2px 8px; margin: 4px 0; font-size: 11px; color: #fbbf24;";
+            refBadge.innerHTML = `🔄 <strong>In-Loop Reflection:</strong> ${category}`;
+            contentDiv.appendChild(refBadge);
+          }
+        }
+        break;
+      }
+
       case "final_solution": {
         const sol = ev.solution || ev.response || "";
         renderFinalSolution(sol, ev.tasks_completed || 0, ev.tasks_failed || 0);
@@ -4668,6 +4734,324 @@ Integrates with smart home sensors, switches, lighting, and scenes.`
       }
     });
   }
+
+  // ── Long-Term Memory Modal Logic (Gap 3) ──
+  const memoryModal = document.getElementById("memory-modal");
+  const openMemoryBtn = document.getElementById("open-memory-btn");
+  const closeMemoryModalX = document.getElementById("close-memory-modal-x");
+  const closeMemoryModalBtn = document.getElementById("close-memory-modal-btn");
+  const memTabFacts = document.getElementById("mem-tab-facts");
+  const memTabEpisodes = document.getElementById("mem-tab-episodes");
+  const memFactsView = document.getElementById("mem-facts-view");
+  const memEpisodesView = document.getElementById("mem-episodes-view");
+  const memorySearchInput = document.getElementById("memory-search-input");
+  const memoryFactsList = document.getElementById("memory-facts-list");
+  const memoryEpisodesList = document.getElementById("memory-episodes-list");
+  const memoryFactsCount = document.getElementById("memory-facts-count");
+  const memFactsBadge = document.getElementById("mem-facts-badge");
+  const addMemoryForm = document.getElementById("add-memory-form");
+
+  async function loadMemoryStats() {
+    try {
+      const res = await fetch("/api/memory");
+      if (res.ok) {
+        const data = await res.json();
+        const count = data.count || 0;
+        if (memoryFactsCount) memoryFactsCount.textContent = count;
+        if (memFactsBadge) memFactsBadge.textContent = count;
+        renderMemoryFacts(data.facts || []);
+      }
+    } catch (_) {}
+  }
+
+  function renderMemoryFacts(facts) {
+    if (!memoryFactsList) return;
+    if (!facts.length) {
+      memoryFactsList.innerHTML = `<div style="text-align: center; padding: 24px; color: var(--text-dim); font-size: 12px;">No stored memory facts found. Add verified environment facts above.</div>`;
+      return;
+    }
+    memoryFactsList.innerHTML = facts.map(f => {
+      const isVolatile = f.volatile || false;
+      const prov = f.provenance || "tool";
+      return `
+        <div class="tool-item" style="display: flex; justify-content: space-between; align-items: center; padding: 8px 12px; margin-bottom: 6px; background: rgba(15, 23, 42, 0.4); border-radius: 6px; border: 1px solid var(--border-subtle);">
+          <div style="flex: 1; min-width: 0; margin-right: 12px;">
+            <div style="display: flex; align-items: center; gap: 8px; margin-bottom: 3px;">
+              <span style="font-weight: 700; color: #fff; font-size: 12px;">${f.key}</span>
+              ${isVolatile ? '<span class="badge-pill" style="background: rgba(239, 68, 68, 0.2); color: #f87171; border-color: rgba(239, 68, 68, 0.4); font-size: 10px;">VOLATILE</span>' : ''}
+              <span class="badge-pill" style="font-size: 10px; color: var(--text-muted);">${prov}</span>
+            </div>
+            <div style="font-size: 11px; color: var(--text-muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis;" title="${f.value}">${f.value}</div>
+          </div>
+          <button type="button" class="btn-primary-sm delete-mem-btn" data-key="${f.key}" style="background: rgba(239, 68, 68, 0.2); color: #f87171; border: 1px solid rgba(239, 68, 68, 0.4); padding: 4px 8px; font-size: 11px;">✕</button>
+        </div>
+      `;
+    }).join("");
+
+    memoryFactsList.querySelectorAll(".delete-mem-btn").forEach(btn => {
+      btn.addEventListener("click", async (e) => {
+        const key = e.currentTarget.dataset.key;
+        if (!key) return;
+        try {
+          const res = await fetch(`/api/memory/${encodeURIComponent(key)}`, { method: "DELETE" });
+          if (res.ok) {
+            showToast(`Deleted memory key: ${key}`);
+            loadMemoryStats();
+          }
+        } catch (err) {
+          showToast(`Delete failed: ${err.message}`, "error");
+        }
+      });
+    });
+  }
+
+  async function loadMemoryEpisodes(query = "") {
+    if (!memoryEpisodesList) return;
+    try {
+      const url = query ? `/api/memory/episodes?q=${encodeURIComponent(query)}` : "/api/memory/episodes";
+      const res = await fetch(url);
+      if (res.ok) {
+        const data = await res.json();
+        const episodes = data.episodes || [];
+        if (!episodes.length) {
+          memoryEpisodesList.innerHTML = `<div style="text-align: center; padding: 24px; color: var(--text-dim); font-size: 12px;">No past workflow episodes recorded yet.</div>`;
+          return;
+        }
+        memoryEpisodesList.innerHTML = episodes.map(ep => `
+          <div class="tool-item" style="padding: 10px 12px; margin-bottom: 8px; background: rgba(15, 23, 42, 0.4); border-radius: 6px; border: 1px solid var(--border-subtle);">
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 4px;">
+              <span style="font-weight: 600; color: #fff; font-size: 12px;">Run: ${ep.run_id || 'unknown'}</span>
+              <span class="badge-pill" style="background: rgba(16, 185, 129, 0.2); color: #34d399; font-size: 10px;">${ep.outcome || 'accurate'}</span>
+            </div>
+            <div style="font-size: 12px; color: var(--accent-cyan); margin-bottom: 4px;">🎯 <strong>Goal:</strong> ${ep.goal || ep.query}</div>
+            <div style="font-size: 11px; color: var(--text-muted);">Query: ${ep.query}</div>
+          </div>
+        `).join("");
+      }
+    } catch (_) {}
+  }
+
+  if (openMemoryBtn) {
+    openMemoryBtn.addEventListener("click", () => {
+      if (memoryModal) {
+        memoryModal.classList.add("active");
+        loadMemoryStats();
+      }
+    });
+  }
+  if (closeMemoryModalX) closeMemoryModalX.addEventListener("click", () => memoryModal.classList.remove("active"));
+  if (closeMemoryModalBtn) closeMemoryModalBtn.addEventListener("click", () => memoryModal.classList.remove("active"));
+
+  if (memTabFacts) {
+    memTabFacts.addEventListener("click", () => {
+      memTabFacts.classList.add("active");
+      memTabEpisodes.classList.remove("active");
+      if (memFactsView) memFactsView.style.display = "block";
+      if (memEpisodesView) memEpisodesView.style.display = "none";
+    });
+  }
+  if (memTabEpisodes) {
+    memTabEpisodes.addEventListener("click", () => {
+      memTabEpisodes.classList.add("active");
+      memTabFacts.classList.remove("active");
+      if (memFactsView) memFactsView.style.display = "none";
+      if (memEpisodesView) memEpisodesView.style.display = "block";
+      loadMemoryEpisodes(memorySearchInput ? memorySearchInput.value : "");
+    });
+  }
+
+  if (memorySearchInput) {
+    memorySearchInput.addEventListener("input", (e) => {
+      const q = e.target.value.trim();
+      if (memTabFacts.classList.contains("active")) {
+        fetch(`/api/memory?q=${encodeURIComponent(q)}`)
+          .then(r => r.json())
+          .then(d => renderMemoryFacts(d.facts || []));
+      } else {
+        loadMemoryEpisodes(q);
+      }
+    });
+  }
+
+  if (addMemoryForm) {
+    addMemoryForm.addEventListener("submit", async (e) => {
+      e.preventDefault();
+      const key = document.getElementById("mem-key-input").value.trim();
+      const value = document.getElementById("mem-val-input").value.trim();
+      const isVolatile = document.getElementById("mem-volatile-check").checked;
+      if (!key || !value) return;
+
+      try {
+        const res = await fetch("/api/memory", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ key, value, scope: "project", volatile: isVolatile }),
+        });
+        if (res.ok) {
+          showToast(`Fact '${key}' saved to persistent memory!`);
+          addMemoryForm.reset();
+          loadMemoryStats();
+        } else {
+          showToast("Failed to save fact", "error");
+        }
+      } catch (err) {
+        showToast(`Save error: ${err.message}`, "error");
+      }
+    });
+  }
+
+  // ── Distilled Skills Modal Logic (Gap 5 HITL) ──
+  const distilledSkillsModal = document.getElementById("distilled-skills-modal");
+  const openDistilledSkillsBtn = document.getElementById("open-distilled-skills-btn");
+  const closeDistilledSkillsModalX = document.getElementById("close-distilled-skills-modal-x");
+  const closeDistilledSkillsModalBtn = document.getElementById("close-distilled-skills-modal-btn");
+  const distilledTabPending = document.getElementById("distilled-tab-pending");
+  const distilledTabApproved = document.getElementById("distilled-tab-approved");
+  const distilledPendingView = document.getElementById("distilled-pending-view");
+  const distilledApprovedView = document.getElementById("distilled-approved-view");
+  const distilledPendingList = document.getElementById("distilled-pending-list");
+  const distilledApprovedList = document.getElementById("distilled-approved-list");
+  const distilledSkillsBadge = document.getElementById("distilled-skills-badge");
+  const distilledPendingBadge = document.getElementById("distilled-pending-badge");
+  const distilledApprovedBadge = document.getElementById("distilled-approved-badge");
+
+  async function loadDistilledSkillsStats() {
+    try {
+      const [pendingRes, approvedRes] = await Promise.all([
+        fetch("/api/skills/distilled/pending"),
+        fetch("/api/skills/distilled/approved"),
+      ]);
+      let pendingCount = 0;
+      let approvedCount = 0;
+      if (pendingRes.ok) {
+        const pendingData = await pendingRes.json();
+        pendingCount = pendingData.length;
+        if (distilledPendingBadge) distilledPendingBadge.textContent = pendingCount;
+        renderPendingDistilledSkills(pendingData);
+      }
+      if (approvedRes.ok) {
+        const approvedData = await approvedRes.json();
+        approvedCount = approvedData.length;
+        if (distilledApprovedBadge) distilledApprovedBadge.textContent = approvedCount;
+        renderApprovedDistilledSkills(approvedData);
+      }
+      if (distilledSkillsBadge) {
+        distilledSkillsBadge.textContent = pendingCount;
+        distilledSkillsBadge.style.display = pendingCount > 0 ? "inline-block" : "none";
+      }
+    } catch (_) {}
+  }
+
+  function renderPendingDistilledSkills(skills) {
+    if (!distilledPendingList) return;
+    if (!skills.length) {
+      distilledPendingList.innerHTML = `<div style="text-align: center; padding: 28px; color: var(--text-dim); font-size: 12px;">No pending skill candidates awaiting operator review.</div>`;
+      return;
+    }
+    distilledPendingList.innerHTML = skills.map(s => `
+      <div class="tool-item" style="padding: 12px 14px; margin-bottom: 10px; background: rgba(15, 23, 42, 0.5); border-radius: 8px; border: 1px solid var(--border-subtle);">
+        <div style="display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 6px;">
+          <div>
+            <div style="display: flex; align-items: center; gap: 8px;">
+              <span style="font-weight: 700; color: #fff; font-size: 13px;">${s.name}</span>
+              <span class="badge-pill" style="background: rgba(245, 158, 11, 0.2); color: #fbbf24; font-size: 10px;">Score: ${s.supervisor_score}</span>
+              <span class="badge-pill" style="font-size: 10px; color: var(--text-muted);">${s.tool_trace_len} steps</span>
+            </div>
+            <div style="font-size: 12px; color: var(--accent-cyan); margin-top: 2px;">🎯 ${s.goal}</div>
+          </div>
+          <div style="display: flex; gap: 6px;">
+            <button type="button" class="btn-approve approve-skill-btn" data-name="${s.name}" style="padding: 5px 10px; font-size: 11px;">✅ Approve</button>
+            <button type="button" class="btn-reject reject-skill-btn" data-name="${s.name}" style="padding: 5px 10px; font-size: 11px;">❌ Reject</button>
+          </div>
+        </div>
+        <pre class="font-mono" style="background: rgba(0, 0, 0, 0.4); padding: 8px; border-radius: 4px; font-size: 10.5px; color: #e2e8f0; max-height: 90px; overflow-y: auto; margin-top: 6px;"><code>${s.code_preview || ''}</code></pre>
+      </div>
+    `).join("");
+
+    distilledPendingList.querySelectorAll(".approve-skill-btn").forEach(btn => {
+      btn.addEventListener("click", async (e) => {
+        const name = e.currentTarget.dataset.name;
+        try {
+          const res = await fetch(`/api/skills/distilled/${encodeURIComponent(name)}/approve`, { method: "POST" });
+          if (res.ok) {
+            showToast(`Skill '${name}' approved and hot-promoted to live registry!`);
+            loadDistilledSkillsStats();
+          }
+        } catch (err) {
+          showToast(`Approval failed: ${err.message}`, "error");
+        }
+      });
+    });
+
+    distilledPendingList.querySelectorAll(".reject-skill-btn").forEach(btn => {
+      btn.addEventListener("click", async (e) => {
+        const name = e.currentTarget.dataset.name;
+        try {
+          const res = await fetch(`/api/skills/distilled/${encodeURIComponent(name)}/reject`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ reason: "Rejected by operator in Mission Control" }),
+          });
+          if (res.ok) {
+            showToast(`Skill '${name}' rejected.`);
+            loadDistilledSkillsStats();
+          }
+        } catch (err) {
+          showToast(`Rejection failed: ${err.message}`, "error");
+        }
+      });
+    });
+  }
+
+  function renderApprovedDistilledSkills(skills) {
+    if (!distilledApprovedList) return;
+    if (!skills.length) {
+      distilledApprovedList.innerHTML = `<div style="text-align: center; padding: 28px; color: var(--text-dim); font-size: 12px;">No approved distilled skills yet.</div>`;
+      return;
+    }
+    distilledApprovedList.innerHTML = skills.map(s => `
+      <div class="tool-item" style="padding: 10px 12px; margin-bottom: 8px; background: rgba(15, 23, 42, 0.4); border-radius: 6px; border: 1px solid var(--border-subtle);">
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 4px;">
+          <span style="font-weight: 600; color: #fff; font-size: 12px;">⚡ ${s.name}</span>
+          <span class="badge-pill" style="background: rgba(16, 185, 129, 0.2); color: #34d399; font-size: 10px;">ACTIVE</span>
+        </div>
+        <div style="font-size: 11px; color: var(--text-muted);">${s.description}</div>
+      </div>
+    `).join("");
+  }
+
+  if (openDistilledSkillsBtn) {
+    openDistilledSkillsBtn.addEventListener("click", () => {
+      if (distilledSkillsModal) {
+        distilledSkillsModal.classList.add("active");
+        loadDistilledSkillsStats();
+      }
+    });
+  }
+  if (closeDistilledSkillsModalX) closeDistilledSkillsModalX.addEventListener("click", () => distilledSkillsModal.classList.remove("active"));
+  if (closeDistilledSkillsModalBtn) closeDistilledSkillsModalBtn.addEventListener("click", () => distilledSkillsModal.classList.remove("active"));
+
+  if (distilledTabPending) {
+    distilledTabPending.addEventListener("click", () => {
+      distilledTabPending.classList.add("active");
+      distilledTabApproved.classList.remove("active");
+      if (distilledPendingView) distilledPendingView.style.display = "block";
+      if (distilledApprovedView) distilledApprovedView.style.display = "none";
+    });
+  }
+  if (distilledTabApproved) {
+    distilledTabApproved.addEventListener("click", () => {
+      distilledTabApproved.classList.add("active");
+      distilledTabPending.classList.remove("active");
+      if (distilledPendingView) distilledPendingView.style.display = "none";
+      if (distilledApprovedView) distilledApprovedView.style.display = "block";
+    });
+  }
+
+  // Load initial stats
+  fetchAgents();
+  loadMemoryStats();
+  loadDistilledSkillsStats();
 
   // Global Keyboard Shortcuts (2026 Pro Experience)
   window.addEventListener("keydown", (e) => {

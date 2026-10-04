@@ -21,6 +21,7 @@ from src.brain.prompts import (
     PLANNER_SYSTEM_PROMPT,
     REPLAN_SYSTEM_PROMPT,
 )
+from src.core.config import get_settings
 from src.core.exceptions import JSONParseError
 from src.core.llm_client import LocalLLMClient
 from src.core.models import Task, TaskDAG
@@ -71,14 +72,35 @@ class MetaPlanner:
                 user_query[:100],
             )
 
+            system_content = PLANNER_SYSTEM_PROMPT.format(
+                available_skills=json.dumps(
+                    self.available_skills, indent=2
+                )
+            )
+            settings = get_settings()
+            if getattr(settings, "enable_memory", False):
+                try:
+                    from src.memory.retriever import get_memory_retriever
+                    mem_ctx = get_memory_retriever().build_context(user_query)
+                    if mem_ctx:
+                        system_content += f"\n\n=== RELEVANT LONG-TERM MEMORY ===\n{mem_ctx}\n================================"
+                except Exception as e:
+                    logger.debug("Memory retrieval in planner failed: %s", e)
+
+            if getattr(settings, "enable_skill_learning", False):
+                try:
+                    from src.skills.manager import get_skill_manager
+                    approved_skills = get_skill_manager().get_known_skills_summary()
+                    if approved_skills:
+                        skills_desc = "\n".join([f"- {s['name']}: {s['description']}" for s in approved_skills[:5]])
+                        system_content += f"\n\n=== REUSABLE DISTILLED SKILLS ===\n{skills_desc}\n================================"
+                except Exception as e:
+                    logger.debug("Failed to inject distilled skills into planner: %s", e)
+
             messages = [
                 {
                     "role": "system",
-                    "content": PLANNER_SYSTEM_PROMPT.format(
-                        available_skills=json.dumps(
-                            self.available_skills, indent=2
-                        )
-                    ),
+                    "content": system_content,
                 },
                 {"role": "user", "content": user_query},
             ]
@@ -187,15 +209,36 @@ class MetaPlanner:
         )
         failed_summary = json.dumps(failed, indent=2)
 
+        system_content = REPLAN_SYSTEM_PROMPT.format(
+            original_query=original_query,
+            completed_summary=completed_summary,
+            failed_summary=failed_summary,
+            available_skills=json.dumps(self.available_skills),
+        )
+        settings = get_settings()
+        if getattr(settings, "enable_memory", False):
+            try:
+                from src.memory.retriever import get_memory_retriever
+                mem_ctx = get_memory_retriever().build_context(original_query)
+                if mem_ctx:
+                    system_content += f"\n\n=== RELEVANT LONG-TERM MEMORY ===\n{mem_ctx}\n================================"
+            except Exception as e:
+                logger.debug("Memory retrieval in replan failed: %s", e)
+
+        if getattr(settings, "enable_skill_learning", False):
+            try:
+                from src.skills.manager import get_skill_manager
+                approved_skills = get_skill_manager().get_known_skills_summary()
+                if approved_skills:
+                    skills_desc = "\n".join([f"- {s['name']}: {s['description']}" for s in approved_skills[:5]])
+                    system_content += f"\n\n=== REUSABLE DISTILLED SKILLS ===\n{skills_desc}\n================================"
+            except Exception as e:
+                logger.debug("Failed to inject distilled skills into replan: %s", e)
+
         messages = [
             {
                 "role": "system",
-                "content": REPLAN_SYSTEM_PROMPT.format(
-                    original_query=original_query,
-                    completed_summary=completed_summary,
-                    failed_summary=failed_summary,
-                    available_skills=json.dumps(self.available_skills),
-                ),
+                "content": system_content,
             },
             {
                 "role": "user",

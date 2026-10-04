@@ -500,6 +500,47 @@ async def assemble_response(
     except Exception as bus_err:
         logger.debug("Failed to publish final solution event: %s", bus_err)
 
+    # Record episode to long-term memory store if enabled
+    settings = get_settings()
+    if getattr(settings, "enable_memory", False):
+        try:
+            from src.memory.store import Episode, get_memory_store
+            store = get_memory_store()
+            store.record_episode(
+                Episode(
+                    run_id=wf_id,
+                    query=user_query,
+                    goal=dag.goal or user_query,
+                    dag_json=json.dumps(dag_dict),
+                    outcome="accurate",
+                    score=1.0,
+                    tool_trace=json.dumps([{"task_id": tid, "output_preview": out[:200]} for tid, out in completed.items()]),
+                )
+            )
+            logger.info("Recorded episode %s in long-term memory store", wf_id)
+        except Exception as mem_err:
+            logger.debug("Failed to record episode in memory store: %s", mem_err)
+
+    # Autonomous Skill Distillation (Gap 5)
+    if getattr(settings, "enable_skill_learning", False):
+        try:
+            from src.skills.distiller import SkillDistiller
+            distiller = SkillDistiller(llm=llm)
+            # Reconstruct tool trace from tasks in dag_dict
+            full_trace = []
+            for t in dag_dict.get("tasks", []):
+                for tc in t.get("tool_calls_made", []):
+                    full_trace.append({"tool": tc, "args": {}, "result": completed.get(t.get("id"), "")[:200]})
+            if len(full_trace) >= 2:
+                await distiller.distill(
+                    goal=dag.goal or user_query,
+                    tool_trace=full_trace,
+                    supervisor_score=1.0,
+                    workflow_id=wf_id,
+                )
+        except Exception as distill_err:
+            logger.debug("Skill distillation check failed: %s", distill_err)
+
     return response
 
 

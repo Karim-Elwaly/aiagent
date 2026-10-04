@@ -51,6 +51,9 @@ def register_all_tools(registry: ToolRegistry) -> int:
             errors += 1
             continue
 
+        from src.core.config import get_settings
+        settings = get_settings()
+
         # Find all ToolSpec instances in the module
         for attr_name in dir(module):
             if not attr_name.endswith("_SPEC"):
@@ -58,6 +61,16 @@ def register_all_tools(registry: ToolRegistry) -> int:
 
             attr = getattr(module, attr_name)
             if isinstance(attr, ToolSpec):
+                # Feature flag gate: stateful python
+                if attr.name == "python_session" and not getattr(settings, "enable_stateful_python", False):
+                    logger.debug("Skipping registration of 'python_session' (enable_stateful_python=False)")
+                    continue
+
+                # Feature flag gate: browser tools
+                if attr.name.startswith("browser_") and not getattr(settings, "enable_browser", False):
+                    logger.debug("Skipping registration of '%s' (enable_browser=False)", attr.name)
+                    continue
+
                 try:
                     registry.register(attr)
                     registered += 1
@@ -69,6 +82,7 @@ def register_all_tools(registry: ToolRegistry) -> int:
                         e,
                     )
                     errors += 1
+
 
     logger.info(
         "Auto-discovery built-ins complete: %d tools registered, %d errors",

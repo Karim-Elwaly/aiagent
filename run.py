@@ -53,6 +53,13 @@ def main():
         print("[ERROR] Python 3.11+ is required.")
         sys.exit(1)
 
+    # 1b. Windows Event Loop Check (Phase 0.7)
+    if sys.platform == "win32":
+        import asyncio
+        asyncio.set_event_loop_policy(asyncio.WindowsProactorEventLoopPolicy())
+        print("[*] Configured Windows Proactor event loop policy.")
+
+
     # 2. Check Temporal Server connection
     temporal_host = os.getenv("TEMPORAL_HOST", "localhost:7234")
     host_parts = temporal_host.split(":")

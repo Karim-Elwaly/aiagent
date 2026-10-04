@@ -187,6 +187,12 @@ class LLMTestPayload(BaseModel):
     model: str | None = None
 
 
+class MemoryFactPayload(BaseModel):
+    key: str
+    value: str
+    scope: str = "project"
+    volatile: bool = False
+
 
 # ── Application Lifecycle ────────────────────────────────────────
 
@@ -1696,6 +1702,131 @@ async def register_skill(payload: SkillRegisterRequest):
     except Exception as e:
         logger.exception("Failed to register generated skill")
         raise HTTPException(400, f"Failed to register skill: {e}")
+
+
+# ── Distilled Autonomous Skills Endpoints (Gap 5) ────────────────
+
+
+@app.get("/api/skills/distilled/pending")
+async def list_pending_distilled_skills():
+    """List autonomously distilled skills awaiting operator approval."""
+    from src.skills.manager import get_skill_manager
+    manager = get_skill_manager()
+    cands = manager.list_pending()
+    return [
+        {
+            "id": c.id,
+            "name": c.name,
+            "goal": c.goal,
+            "description": c.description,
+            "supervisor_score": c.supervisor_score,
+            "tool_trace_len": c.tool_trace_len,
+            "created_at": c.created_at,
+            "status": c.status,
+            "code_preview": c.code[:300] + ("..." if len(c.code) > 300 else ""),
+        }
+        for c in cands
+    ]
+
+
+@app.get("/api/skills/distilled/approved")
+async def list_approved_distilled_skills():
+    """List approved autonomously distilled skills."""
+    from src.skills.manager import get_skill_manager
+    manager = get_skill_manager()
+    approved = manager.list_approved()
+    return [
+        {
+            "id": c.id,
+            "name": c.name,
+            "goal": c.goal,
+            "description": c.description,
+            "skills_provided": c.skills_provided,
+            "created_at": c.created_at,
+            "status": c.status,
+        }
+        for c in approved
+    ]
+
+
+@app.post("/api/skills/distilled/{skill_name}/approve")
+async def approve_distilled_skill(skill_name: str):
+    """Approve a distilled skill, promote to custom tools, and hot-load into registry."""
+    from src.skills.manager import get_skill_manager
+    manager = get_skill_manager()
+    success = manager.approve(skill_name)
+    if not success:
+        raise HTTPException(404, f"Pending skill '{skill_name}' not found")
+    return {"status": "approved", "skill_name": skill_name}
+
+
+@app.post("/api/skills/distilled/{skill_name}/reject")
+async def reject_distilled_skill(skill_name: str, payload: dict[str, str] | None = None):
+    """Reject a distilled candidate skill."""
+    reason = (payload or {}).get("reason", "")
+    from src.skills.manager import get_skill_manager
+    manager = get_skill_manager()
+    success = manager.reject(skill_name, reason=reason)
+    if not success:
+        raise HTTPException(404, f"Pending skill '{skill_name}' not found")
+    return {"status": "rejected", "skill_name": skill_name, "reason": reason}
+
+
+# ── Long-Term Memory Endpoints (Gap 3) ───────────────────────────
+
+
+@app.get("/api/memory")
+async def get_all_memory_facts(q: str = ""):
+    """List or search persistent long-term memory facts."""
+    from src.memory.store import get_memory_store
+    store = get_memory_store()
+    if q.strip():
+        facts = store.search_facts(q.strip(), limit=20)
+    else:
+        facts = store.get_all_facts()
+    return {
+        "facts": facts,
+        "count": len(facts),
+        "search_query": q,
+    }
+
+
+@app.post("/api/memory")
+async def save_memory_fact(payload: MemoryFactPayload):
+    """Save or update a persistent memory fact (operator verified)."""
+    from src.memory.store import Fact, get_memory_store
+    store = get_memory_store()
+    fact = Fact(
+        key=payload.key.strip(),
+        value=payload.value.strip(),
+        scope=payload.scope,
+        volatile=payload.volatile,
+        provenance="user",
+    )
+    success = store.save_fact(fact, verified_grounding=True)
+    if not success:
+        raise HTTPException(400, "Failed to save memory fact")
+    return {"status": "saved", "key": fact.key}
+
+
+@app.delete("/api/memory/{key}")
+async def delete_memory_fact(key: str):
+    """Delete a memory fact by key."""
+    from src.memory.store import get_memory_store
+    store = get_memory_store()
+    deleted = store.delete_fact(key)
+    if not deleted:
+        raise HTTPException(404, f"Memory key '{key}' not found")
+    return {"status": "deleted", "key": key}
+
+
+@app.get("/api/memory/episodes")
+async def search_memory_episodes(q: str = "", limit: int = 10):
+    """Search previous workflow run episodes."""
+    from src.memory.store import get_memory_store
+    store = get_memory_store()
+    episodes = store.search_episodes(q, limit=limit)
+    return {"episodes": episodes, "count": len(episodes)}
 
 
 # ── Hermes Skills Endpoints ──────────────────────────────────────

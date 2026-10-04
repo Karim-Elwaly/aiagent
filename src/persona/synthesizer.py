@@ -46,6 +46,7 @@ class PersonaSynthesizer:
         task: Task,
         tools: list[ToolSpec],
         upstream_context: dict[str, str] | None = None,
+        tool_call_mode: str | None = None,
     ) -> str:
         """Generate a complete system prompt for a worker agent.
 
@@ -53,12 +54,15 @@ class PersonaSynthesizer:
             task: The task to execute.
             tools: Resolved concrete tools from the ToolRegistry.
             upstream_context: {task_id: output} from completed dependencies.
+            tool_call_mode: Optional 'native' | 'tags' | 'legacy'. If None, reads from settings.
 
         Returns:
             A system prompt string ready to be injected as the worker's
             system message.
         """
-        tool_block = self._format_tools(tools)
+        from src.core.config import get_settings
+        mode = tool_call_mode or getattr(get_settings(), "tool_call_mode", "legacy")
+
         context_block = self._format_upstream_context(
             upstream_context or {}
         )
@@ -85,6 +89,26 @@ You are a Lead Domain Specialist, Executive Strategist, and Content Creator.
 FINAL_ANSWER: <your complete, well-structured deliverable>
 {context_block}"""
 
+        if mode == "tags":
+            from src.core.tool_call_parser import format_tools_to_hermes_xml
+            tool_format_instruction = (
+                "You have access to tools via Hermes XML syntax.\n"
+                f"{format_tools_to_hermes_xml(tools)}"
+            )
+        elif mode == "native":
+            tool_format_instruction = (
+                "# Available Tools\n"
+                "You have access to native tools declared in this conversation. "
+                "Call tools whenever needed to inspect targets or gather data."
+            )
+        else:
+            tool_block = self._format_tools(tools)
+            tool_format_instruction = f"""# Available Tools
+Tool call format:
+{{"tool": "<tool_name>", "args": {{"param1": "value1"}}}}
+
+{tool_block}"""
+
         return f"""# Your Role
 You are a worker agent executing ONE task on the host machine using available tools.
 
@@ -95,11 +119,7 @@ You are a worker agent executing ONE task on the host machine using available to
 # Expected Output
 {task.expected_output}
 
-# Available Tools
-Tool call format:
-{{"tool": "<tool_name>", "args": {{"param1": "value1"}}}}
-
-{tool_block}
+{tool_format_instruction}
 
 # Workflow & Rules
 1. Always call tools first to inspect real paths and compute data.

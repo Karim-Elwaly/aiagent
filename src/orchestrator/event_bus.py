@@ -96,6 +96,82 @@ class EventBus:
         self._history.pop(workflow_id, None)
         self._subscribers.pop(workflow_id, None)
 
+    # ── Phase 0.6: Structured Telemetry Helpers ──────────────
+
+    def emit_thought(self, workflow_id: str, task_id: str, thought: str) -> None:
+        """Emit a model reasoning / thought trace event."""
+        self.publish(workflow_id, {
+            "type": "thought",
+            "task_id": task_id,
+            "thought": thought,
+        })
+
+    def emit_tool_call(
+        self,
+        workflow_id: str,
+        task_id: str,
+        call_id: str,
+        tool: str,
+        args: dict[str, Any],
+    ) -> None:
+        """Emit a structured tool call event."""
+        self.publish(workflow_id, {
+            "type": "tool_call",
+            "task_id": task_id,
+            "call_id": call_id,
+            "tool": tool,
+            "args": args,
+        })
+
+    def emit_tool_result(
+        self,
+        workflow_id: str,
+        task_id: str,
+        call_id: str,
+        tool: str,
+        is_error: bool,
+        elapsed_ms: int,
+        output: str,
+    ) -> None:
+        """Emit a structured tool execution result event."""
+        self.publish(workflow_id, {
+            "type": "tool_result",
+            "task_id": task_id,
+            "call_id": call_id,
+            "tool": tool,
+            "is_error": is_error,
+            "elapsed_ms": elapsed_ms,
+            "output": output,
+        })
+
+    def emit_memory_hit(
+        self,
+        workflow_id: str,
+        query: str,
+        facts: list[dict[str, Any]],
+    ) -> None:
+        """Emit a long-term memory retrieval hit event."""
+        self.publish(workflow_id, {
+            "type": "memory_hit",
+            "query": query,
+            "facts": facts,
+        })
+
+    def emit_skill_candidate(
+        self,
+        workflow_id: str,
+        task_id: str,
+        skill_name: str,
+        status: str = "candidate",
+    ) -> None:
+        """Emit an autonomous skill distillation candidate event."""
+        self.publish(workflow_id, {
+            "type": "skill_candidate",
+            "task_id": task_id,
+            "skill_name": skill_name,
+            "status": status,
+        })
+
 
 # Global singleton instance
 _event_bus: EventBus | None = None
@@ -107,3 +183,4 @@ def get_event_bus() -> EventBus:
     if _event_bus is None:
         _event_bus = EventBus()
     return _event_bus
+
