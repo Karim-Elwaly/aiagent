@@ -92,6 +92,16 @@ document.addEventListener("DOMContentLoaded", () => {
   let workflowTemplates = {};
   let cachedSkillsList = [];
 
+  let scrollScheduled = false;
+  function scheduleTimelineScroll() {
+    if (scrollScheduled || !timelineList) return;
+    scrollScheduled = true;
+    requestAnimationFrame(() => {
+      timelineList.scrollTop = timelineList.scrollHeight;
+      scrollScheduled = false;
+    });
+  }
+
   // Initialize DAG Renderer
   const dagRenderer = new DAGRenderer("dag-svg", (task, status) => {
     onNodeClicked(task, status);
@@ -528,7 +538,7 @@ document.addEventListener("DOMContentLoaded", () => {
             descEl.textContent = "";
           }
           descEl.textContent += tokenText;
-          timelineList.scrollTop = timelineList.scrollHeight;
+          scheduleTimelineScroll();
         }
         break;
       }
@@ -741,7 +751,7 @@ document.addEventListener("DOMContentLoaded", () => {
             </div>
             <div style="font-size: 11px; margin-top: 4px; line-height: 1.4;">${escapeHtml(feedback)}</div>
           `;
-          timelineList.scrollTop = timelineList.scrollHeight;
+          scheduleTimelineScroll();
         }
 
         if (decision === "retry" && !isUnreviewed && !isAbort) {
@@ -795,12 +805,22 @@ document.addEventListener("DOMContentLoaded", () => {
   }
 
   function startStatusPolling(workflowId, originalQuery) {
-    if (pollInterval) clearInterval(pollInterval);
+    if (pollInterval) {
+      clearTimeout(pollInterval);
+      clearInterval(pollInterval);
+      pollInterval = null;
+    }
 
-    pollInterval = setInterval(async () => {
+    let isPolling = true;
+
+    async function pollTick() {
+      if (!isPolling) return;
       try {
         const res = await fetch(`/status/${workflowId}`);
-        if (!res.ok) return;
+        if (!res.ok) {
+          scheduleNext(3000);
+          return;
+        }
 
         const status = await res.json();
 
@@ -846,7 +866,6 @@ document.addEventListener("DOMContentLoaded", () => {
             false
           );
         } else if (approvalModal.classList.contains("active") && activeApprovalTaskName && !activeApprovalTaskName.includes("CVE-2024-3094")) {
-          // Task was approved/rejected or workflow advanced
           hideApprovalModal();
         }
 
@@ -867,8 +886,11 @@ document.addEventListener("DOMContentLoaded", () => {
 
         // 4. If completed or failed
         if (status.status === "completed" || status.status === "failed") {
-          clearInterval(pollInterval);
-          pollInterval = null;
+          isPolling = false;
+          if (pollInterval) {
+            clearTimeout(pollInterval);
+            pollInterval = null;
+          }
           setRunningState(false);
           if (status.result && status.result.response && status.status === "completed") {
             renderFinalSolution(status.result.response, status.result.tasks_completed, status.result.tasks_failed);
@@ -896,11 +918,23 @@ document.addEventListener("DOMContentLoaded", () => {
             activeEventSource.close();
             activeEventSource = null;
           }
+          return;
         }
       } catch (e) {
         console.warn("Polling status error:", e);
       }
-    }, 1500);
+
+      // Adaptive polling delay: lazy (5s) if SSE is streaming, faster (2.2s) as fallback
+      const delay = (activeEventSource && activeEventSource.readyState === EventSource.OPEN) ? 5000 : 2200;
+      scheduleNext(delay);
+    }
+
+    function scheduleNext(ms) {
+      if (!isPolling) return;
+      pollInterval = setTimeout(pollTick, ms);
+    }
+
+    scheduleNext(1200);
   }
 
   // 5. Interactive Approval Modal Actions
@@ -2125,6 +2159,10 @@ document.addEventListener("DOMContentLoaded", () => {
         const decision = isPass ? "pass" : "retry";
         const hasConf = evalObj.confidence !== undefined && evalObj.confidence !== null;
         const confLabel = hasConf ? `${Math.round(evalObj.confidence * 100)}%` : "unmeasured";
+        const verdictKey = `${evalObj.decision}_${evalObj.retry_count}_${confLabel}_${evalObj.feedback || ''}`;
+        if (verdictEl.dataset.key === verdictKey) return;
+        verdictEl.dataset.key = verdictKey;
+
         const verdictIcon = isUnreviewed
           ? "⚠️ Not Reviewed"
           : isAbort
@@ -2181,7 +2219,7 @@ document.addEventListener("DOMContentLoaded", () => {
       </div>
     `;
     timelineList.appendChild(el);
-    timelineList.scrollTop = timelineList.scrollHeight;
+    scheduleTimelineScroll();
   }
 
   function updateTimelineStep(id, desc, status = "completed", tools = []) {

@@ -89,6 +89,7 @@ class DAGRenderer {
   }
 
   updateNodeStatus(taskId, status) {
+    if (this.statusMap.get(taskId) === status) return;
     this.statusMap.set(taskId, status);
     const nodeData = this.nodeMap.get(taskId);
     if (!nodeData) return;

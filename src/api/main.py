@@ -24,6 +24,7 @@ from typing import Any
 from uuid import uuid4
 
 import asyncio
+import time
 import httpx
 from fastapi import FastAPI, HTTPException
 from fastapi.responses import FileResponse, StreamingResponse
@@ -1078,9 +1079,18 @@ async def get_workflow_templates():
     ]
 
 
+_status_cache: dict[str, tuple[float, StatusResponse]] = {}
+_STATUS_CACHE_TTL = 1.0  # seconds
+
 @app.get("/status/{workflow_id}", response_model=StatusResponse)
 async def get_status(workflow_id: str):
-    """Check the status of a running workflow."""
+    """Check the status of a running workflow with 1s cache throttling."""
+    now = time.time()
+    if workflow_id in _status_cache:
+        cached_ts, cached_resp = _status_cache[workflow_id]
+        if now - cached_ts < _STATUS_CACHE_TTL:
+            return cached_resp
+
     from src.core.clarification import get_clarification_hub
 
     active_clr = get_clarification_hub().get_pending(workflow_id)
@@ -1089,7 +1099,7 @@ async def get_status(workflow_id: str):
 
     if workflow_id in app.state.direct_workflows:
         dw = app.state.direct_workflows[workflow_id]
-        return StatusResponse(
+        resp = StatusResponse(
             workflow_id=workflow_id,
             status=dw.get("status", "running"),
             awaiting_approval=dw.get("awaiting_approval", False),
@@ -1106,6 +1116,8 @@ async def get_status(workflow_id: str):
             result=dw.get("result"),
             error=dw.get("error"),
         )
+        _status_cache[workflow_id] = (now, resp)
+        return resp
 
     if not app.state.temporal:
         raise HTTPException(404, f"Workflow '{workflow_id}' not found")
@@ -1127,7 +1139,7 @@ async def get_status(workflow_id: str):
             except Exception as r_err:
                 logger.debug("Could not get handle.result(): %s", r_err)
 
-        return StatusResponse(
+        resp = StatusResponse(
             workflow_id=workflow_id,
             status=desc.status.name.lower(),
             awaiting_approval=query_res.get("awaiting_approval", False),
@@ -1143,6 +1155,8 @@ async def get_status(workflow_id: str):
             supervisor_evaluations=query_res.get("supervisor_evaluations") or (result_data.get("supervisor_evaluations") if isinstance(result_data, dict) else []) or [],
             result=result_data,
         )
+        _status_cache[workflow_id] = (now, resp)
+        return resp
 
     except Exception as e:
         raise HTTPException(404, f"Workflow not found: {e}")

@@ -184,3 +184,53 @@ def get_event_bus() -> EventBus:
         _event_bus = EventBus()
     return _event_bus
 
+
+def emit_thought(workflow_id: str, task_id: str, thought: str) -> None:
+    """Emit model reasoning thought event via global event bus."""
+    get_event_bus().emit_thought(workflow_id, task_id, thought)
+
+
+def emit_tool_call(
+    workflow_id: str,
+    task_id: str,
+    call_id: str,
+    tool: str,
+    args: dict[str, Any],
+) -> None:
+    """Emit structured tool call event via global event bus."""
+    get_event_bus().emit_tool_call(workflow_id, task_id, call_id, tool, args)
+
+
+def emit_tool_result(
+    workflow_id: str,
+    task_id: str,
+    call_id: str,
+    tool: str,
+    is_error: bool,
+    elapsed_ms: int,
+    output: str,
+) -> None:
+    """Emit structured tool execution result event via global event bus."""
+    get_event_bus().emit_tool_result(
+        workflow_id, task_id, call_id, tool, is_error, elapsed_ms, output
+    )
+
+
+def emit_memory_hit(
+    workflow_id: str,
+    query: str,
+    facts: list[dict[str, Any]],
+) -> None:
+    """Emit memory hit retrieval event via global event bus."""
+    get_event_bus().emit_memory_hit(workflow_id, query, facts)
+
+
+def emit_skill_candidate(
+    workflow_id: str,
+    task_id: str,
+    skill_name: str,
+    status: Any = "candidate",
+) -> None:
+    """Emit skill distillation candidate event via global event bus."""
+    get_event_bus().emit_skill_candidate(workflow_id, task_id, skill_name, str(status))
+
