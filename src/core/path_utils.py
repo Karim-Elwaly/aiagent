@@ -31,6 +31,8 @@ def resolve_target_path(path_input: str | Path) -> Path:
       - Path objects and string paths
       - Single backslash escape artifacts (\\a -> 0x07, \\r -> 0x0d, \\t -> 0x09)
       - Trailing punctuation and surrounding quotes
+      - Leading colons or query noise (e.g. ": D:\\" -> "D:\\")
+      - Windows bare drive letters ("D:" -> "D:\\")
       - Forward-slash and backslash normalization
       - Relative to absolute resolution
     """
@@ -41,6 +43,17 @@ def resolve_target_path(path_input: str | Path) -> Path:
 
     if not raw_str:
         return Path(os.getcwd())
+
+    # Clean leading colons or query noise before drive letters (e.g. ": D:\" -> "D:\")
+    cleaned_lead = re.sub(r"^[a-zA-Z0-9_\s]*:\s*(?=[a-zA-Z]:)", "", raw_str).strip()
+    if cleaned_lead.startswith(":") or cleaned_lead.startswith(" "):
+        cleaned_lead = cleaned_lead.lstrip(": ")
+    if cleaned_lead:
+        raw_str = cleaned_lead
+
+    # Windows bare drive letter like "D:" or "d:" -> normalize to root "D:\"
+    if re.match(r"^[a-zA-Z]:$", raw_str):
+        raw_str = f"{raw_str}\\"
 
     # 1. Direct check
     candidate = Path(raw_str)
@@ -63,8 +76,14 @@ def resolve_target_path(path_input: str | Path) -> Path:
     except Exception:
         pass
 
-    # 3. Clean trailing punctuation from regex captures (e.g. "path/to/dir.")
-    stripped = healed_str.rstrip(",;.:)]}")
+    # 3. Clean trailing punctuation from regex captures, preserving Windows drive colons
+    if re.match(r"^[a-zA-Z]:[\\/]?$", healed_str):
+        stripped = healed_str if healed_str.endswith(("\\", "/")) else f"{healed_str}\\"
+    else:
+        stripped = healed_str.rstrip(",;.:)]}")
+        if re.match(r"^[a-zA-Z]:$", stripped):
+            stripped = f"{stripped}\\"
+
     candidate_stripped = Path(stripped)
     try:
         if candidate_stripped.exists():
@@ -106,6 +125,8 @@ def _longest_existing_prefix(raw: str) -> str | None:
         candidate = " ".join(tokens[:end]).rstrip(",;.:)]}")
         if not candidate:
             continue
+        if re.match(r"^[a-zA-Z]:$", candidate):
+            candidate = f"{candidate}\\"
         try:
             p = Path(candidate)
             if p.exists():
@@ -119,7 +140,7 @@ def extract_target_path(text: str) -> str | None:
     """Extract and heal a target filesystem path from a user query or prompt string.
     
     Looks for:
-      - Windows paths (e.g. D:\\Security-logs-test\\..., C:\\Logs, D:/...)
+      - Windows paths (e.g. D:\\Security-logs-test\\..., C:\\Logs, D:\\, D:, D:/...)
       - Unix absolute paths (e.g. /var/log/..., /tmp/...)
     """
     if not text:
@@ -131,18 +152,20 @@ def extract_target_path(text: str) -> str | None:
         if esc_char in healed_text:
             healed_text = healed_text.replace(esc_char, replacement)
 
-    # Windows drive path with backslashes or forward slashes
-    m_win = re.search(r'([a-zA-Z]:[\\/][^"\'\n\r\t<>|]+)', healed_text)
+    # Windows drive root or subpath: e.g. D:\, D:, D:/, D:\ai_gpu
+    m_win = re.search(r'([a-zA-Z]:(?:[\\/][^"\'\n\r\t<>|]*)?)', healed_text)
     if m_win:
         raw_p = m_win.group(1).rstrip(",;.:)]}")
+        if re.match(r"^[a-zA-Z]:$", raw_p):
+            raw_p = f"{raw_p}\\"
         existing = _longest_existing_prefix(raw_p)
         if existing:
             return existing
         resolved = resolve_target_path(raw_p)
         return str(resolved)
 
-    # Unix absolute path
-    m_unix = re.search(r'(/(?:[a-zA-Z0-9._-]+/)+[a-zA-Z0-9._-]+)', healed_text)
+    # Unix absolute path: require either known unix root (/var, /tmp, /etc, /usr, /home) or at least 2 directory segments
+    m_unix = re.search(r'((?:/(?:var|tmp|etc|usr|opt|home|root|bin|proc|sys|Users|private)/[a-zA-Z0-9._/-]+|/(?:[a-zA-Z0-9._-]+/){2,}[a-zA-Z0-9._-]+))', healed_text)
     if m_unix:
         raw_u = m_unix.group(1).rstrip(",;.:)]}")
         existing = _longest_existing_prefix(raw_u)

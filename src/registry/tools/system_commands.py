@@ -65,12 +65,66 @@ async def execute_command(
         return f"Error executing command: {e}"
 
 
+def get_system_info(**kwargs: Any) -> str:
+    """Retrieve local device and host environment specifications:
+    hostname, OS name and version, platform architecture, username,
+    local IP address, and Python runtime.
+    """
+    import getpass
+    import json
+    import socket
+
+    try:
+        hostname = socket.gethostname()
+    except Exception:
+        hostname = platform.node() or "Unknown"
+
+    try:
+        s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+        s.connect(("8.8.8.8", 80))
+        local_ip = s.getsockname()[0]
+        s.close()
+    except Exception:
+        local_ip = "127.0.0.1"
+
+    os_info = f"{platform.system()} {platform.release()} (Build {platform.version()})"
+    arch = platform.machine()
+    user = getpass.getuser()
+
+    lines = [
+        "# Local Device & System Information",
+        "",
+        "| Attribute | Value |",
+        "| :--- | :--- |",
+        f"| **Device Hostname** | `{hostname}` |",
+        f"| **Operating System** | {os_info} |",
+        f"| **Architecture** | {arch} |",
+        f"| **Current User** | `{user}` |",
+        f"| **Local Network IP** | `{local_ip}` |",
+        f"| **Python Runtime** | {platform.python_version()} |",
+        "",
+        "```json",
+        json.dumps({
+            "hostname": hostname,
+            "os": platform.system(),
+            "os_release": platform.release(),
+            "os_version": platform.version(),
+            "architecture": arch,
+            "username": user,
+            "local_ip": local_ip,
+            "python_version": platform.python_version(),
+        }, indent=2),
+        "```",
+    ]
+    return "\n".join(lines)
+
+
 EXECUTE_COMMAND_SPEC = ToolSpec(
     tool_id="system_command_v1",
     name="execute_command",
     description=(
         "Execute a system terminal command directly on the host (PowerShell on Windows, Bash on Linux). "
-        "Useful for running commands like 'fsutil volume diskfree D:', 'Get-ChildItem D:\\', 'dir', "
+        "Useful for running commands like 'hostname', 'fsutil volume diskfree D:', 'Get-ChildItem D:\\', 'dir', "
         "or inspecting processes and files. Has a 30-second timeout."
     ),
     skills_provided=[
@@ -90,4 +144,25 @@ EXECUTE_COMMAND_SPEC = ToolSpec(
     },
     function=execute_command,
     risk_level=RiskLevel.MEDIUM,
+)
+
+SYSTEM_INFO_SPEC = ToolSpec(
+    tool_id="system_info_v1",
+    name="get_system_info",
+    description=(
+        "Retrieve fundamental device and host environment specifications: "
+        "device hostname, operating system, machine architecture, current user, "
+        "and local IP address. Instant zero-argument inspection."
+    ),
+    skills_provided=[
+        "system_info",
+        "host_info",
+        "device_info",
+        "hostname_lookup",
+        "system_inspection",
+        "environment_query",
+    ],
+    parameters={},
+    function=get_system_info,
+    risk_level=RiskLevel.LOW,
 )

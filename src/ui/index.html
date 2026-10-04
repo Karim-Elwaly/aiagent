@@ -43,53 +43,53 @@
         <div class="divider-v"></div>
 
         <!-- Action Buttons -->
-        <button id="open-clarification-preview-btn" class="header-btn" title="Preview Operator Clarification Dialogue" style="border-color: rgba(6, 182, 212, 0.4); background: rgba(6, 182, 212, 0.1); color: #38bdf8;">
-          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+        <button id="open-clarification-preview-btn" class="header-btn" title="Preview Operator Clarification Dialogue" style="display: none;">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
             <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/>
           </svg>
-          <span>Clarify Dialogue</span>
+          <span>Clarify</span>
         </button>
 
         <button id="open-llm-settings-btn" class="header-btn" title="Configure Local LLM">
-          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
             <circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"/>
           </svg>
-          <span>LLM Settings</span>
+          <span>LLM Config</span>
         </button>
 
         <button id="open-agents-btn" class="header-btn" title="Create reusable agents & build AI skills">
-          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
             <path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/>
             <circle cx="9" cy="7" r="4"/>
             <path d="M22 21v-2a4 4 0 0 0-3-3.87"/>
             <path d="M16 3.13a4 4 0 0 1 0 7.75"/>
           </svg>
-          <span>Agent Studio</span>
+          <span>Agents</span>
           <span id="agents-count" class="badge-pill">0</span>
         </button>
 
         <button id="open-workflow-builder-btn" class="header-btn" title="Build custom workflows or load pipeline templates">
-          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
             <rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/>
           </svg>
-          <span>Workflow Studio</span>
+          <span>Workflows</span>
           <span id="workflow-nav-badge" class="badge-pill" style="display: none; background: rgba(59, 130, 246, 0.25); color: #93c5fd; border-color: rgba(59, 130, 246, 0.4);">0</span>
         </button>
 
         <button id="open-schedules-btn" class="header-btn" title="Automated Cron Workflows">
-          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
             <circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/>
           </svg>
-          <span>Scheduled Jobs</span>
+          <span>Schedules</span>
           <span id="schedules-count" class="badge-pill">0</span>
         </button>
 
         <button id="open-integrations-btn" class="header-btn" title="Inspect tools, connect MCP servers & OpenAPI">
-          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
             <path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z"/>
           </svg>
           <span>Tools & Connectors</span>
-          <span id="tools-count" class="badge-pill">12</span>
+          <span id="tools-count" class="badge-pill">76</span>
         </button>
 
         <a href="http://localhost:8234" target="_blank" class="header-btn icon-only" title="Open Temporal Web UI">
@@ -553,14 +553,11 @@
 
       <!-- Clean Tab Switcher -->
       <div class="tabs-header">
-        <button type="button" id="tab-btn-tools" class="tab-btn active">
-          🧩 Installed Tools
-        </button>
-        <button type="button" id="tab-btn-connectors" class="tab-btn">
+        <button type="button" id="tab-btn-connectors" class="tab-btn active">
           🛡️ Security Connectors (13)
         </button>
-        <button type="button" id="tab-btn-hermes" class="tab-btn" style="display: none;">
-          ⚡ Skills Hub (97,986)
+        <button type="button" id="tab-btn-tools" class="tab-btn">
+          🧩 Installed Tools
         </button>
         <button type="button" id="tab-btn-mcp" class="tab-btn">
           ⚡ Model Context Protocol (MCP)
@@ -773,7 +770,7 @@
       </div>
 
       <!-- Tab 0: Installed Tools List -->
-      <div id="tab-content-tools" class="tab-content" style="display: flex; flex-direction: column;">
+      <div id="tab-content-tools" class="tab-content" style="display: none; flex-direction: column;">
         <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 4px;">
           <span class="field-tip">Tools available to the Meta-Planner for autonomous execution:</span>
         </div>
@@ -786,7 +783,7 @@
       </div>
 
       <!-- Tab: Enterprise Security Connectors (SIEM, EDR, Firewall, IAM, CTI, ITSM) -->
-      <div id="tab-content-connectors" class="tab-content" style="display: none; flex-direction: column;">
+      <div id="tab-content-connectors" class="tab-content" style="display: flex; flex-direction: column;">
         <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px;">
           <div>
             <div style="font-weight: 600; font-size: 13px; color: #fff;">Enterprise Security Tool Connectors</div>

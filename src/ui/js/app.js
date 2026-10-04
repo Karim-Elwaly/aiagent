@@ -2459,7 +2459,8 @@ document.addEventListener("DOMContentLoaded", () => {
   if (openIntegrationsBtn && integrationsModal) {
     openIntegrationsBtn.addEventListener("click", () => {
       integrationsModal.classList.add("active");
-      switchIntegrationsTab(tabBtnTools);
+      switchIntegrationsTab(tabBtnConnectors);
+      loadSecurityConnectors();
       fetchTools();
       fetchMcpServers();
     });

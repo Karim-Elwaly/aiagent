@@ -706,7 +706,17 @@ class UniversalWorkerAgent:
             elif "recursive" in pl:
                 args[pname] = True
             elif "command" in pl or "cmd" in pl:
-                args[pname] = f'dir "{detected_path}"'
+                combined = f"{task.name} {task.description} {user_query}".lower()
+                if "hostname" in combined or "computer name" in combined or "device name" in combined:
+                    args[pname] = "hostname"
+                elif "ip address" in combined or "local ip" in combined or "network adapter" in combined:
+                    args[pname] = "ipconfig" if platform.system() == "Windows" else "ip addr"
+                elif "system info" in combined or "os version" in combined:
+                    args[pname] = "systeminfo" if platform.system() == "Windows" else "uname -a"
+                elif detected_path and os.path.exists(detected_path):
+                    args[pname] = f'dir "{detected_path}"'
+                else:
+                    args[pname] = "hostname"
             elif required:
                 args[pname] = f"{task.name}: {task.description}"[:1000]
 
@@ -727,7 +737,15 @@ class UniversalWorkerAgent:
                     drive = os.path.splitdrive(detected_path)[0]
                     args_example[pname] = f"{drive}\\" if drive else os.path.abspath(os.sep)
                 elif "command" in pname_lower or "cmd" in pname_lower:
-                    args_example[pname] = f"dir \"{detected_path}\""
+                    combined = f"{task.name} {task.description} {user_query}".lower()
+                    if "hostname" in combined or "device name" in combined:
+                        args_example[pname] = "hostname"
+                    elif "ip" in combined:
+                        args_example[pname] = "ipconfig"
+                    elif detected_path and os.path.exists(detected_path):
+                        args_example[pname] = f"dir \"{detected_path}\""
+                    else:
+                        args_example[pname] = "hostname"
                 elif "recursive" in pname_lower:
                     args_example[pname] = True
                 elif "alert_text" in pname_lower or "raw_evidence" in pname_lower or "evidence_summary" in pname_lower:

@@ -688,6 +688,10 @@ async def run_direct_workflow(
                                 f"{task_dict.get('description', '')}\n\n"
                                 f"[SUPERVISOR EVALUATION FEEDBACK - PLEASE GATHER MORE INFO]: {feedback}"
                             )
+                            req_skills = list(task_dict.get("required_skills", []))
+                            if req_skills == ["general_reasoning"] or not req_skills:
+                                task_dict["required_skills"] = ["system_command", "code_execution", "general_reasoning"]
+
                             retry_result = await _execute_task_with_retries(task_dict, completed, agent_id, profile)
                             if retry_result.get("status") == "completed":
                                 task_output = retry_result.get("output", "")

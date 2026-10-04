@@ -1,0 +1,115 @@
+{
+  "elasticsearch": {
+    "enabled": true,
+    "url": "https://localhost:9200",
+    "api_key": "",
+    "username": "elastic",
+    "password": "",
+    "default_index": "logs-*",
+    "verify_ssl": false,
+    "timeout_seconds": 15.0,
+    "simulated": false
+  },
+  "crowdstrike": {
+    "enabled": true,
+    "base_url": "https://api.crowdstrike.com",
+    "client_id": "",
+    "client_secret": "",
+    "verify_ssl": true,
+    "timeout_seconds": 15.0,
+    "simulated": false
+  },
+  "splunk": {
+    "enabled": true,
+    "base_url": "https://localhost:8089",
+    "token": "",
+    "username": "admin",
+    "password": "",
+    "verify_ssl": false,
+    "timeout_seconds": 20.0,
+    "simulated": false
+  },
+  "sentinel": {
+    "enabled": true,
+    "workspace_id": "8b3f9104-e3c2-4912-8700-112233445566",
+    "tenant_id": "",
+    "client_id": "",
+    "client_secret": "",
+    "bearer_token": "",
+    "timeout_seconds": 15.0,
+    "simulated": false
+  },
+  "defender": {
+    "enabled": true,
+    "tenant_id": "",
+    "client_id": "",
+    "client_secret": "",
+    "bearer_token": "",
+    "base_url": "https://api.securitycenter.microsoft.com",
+    "timeout_seconds": 15.0,
+    "simulated": false
+  },
+  "sentinelone": {
+    "enabled": true,
+    "base_url": "https://usea1-partners.sentinelone.net",
+    "api_token": "",
+    "verify_ssl": true,
+    "timeout_seconds": 15.0,
+    "simulated": false
+  },
+  "paloalto": {
+    "enabled": true,
+    "host": "https://panorama.corp.internal",
+    "api_key": "",
+    "default_tag": "block_adversary_ioc",
+    "verify_ssl": false,
+    "timeout_seconds": 15.0,
+    "simulated": false
+  },
+  "fortigate": {
+    "enabled": true,
+    "host": "https://10.10.10.2",
+    "api_token": "",
+    "verify_ssl": false,
+    "timeout_seconds": 15.0,
+    "simulated": false
+  },
+  "okta": {
+    "enabled": true,
+    "org_url": "https://corp.okta.com",
+    "api_token": "",
+    "timeout_seconds": 15.0,
+    "simulated": false
+  },
+  "entra_id": {
+    "enabled": true,
+    "tenant_id": "",
+    "client_id": "",
+    "client_secret": "",
+    "bearer_token": "",
+    "timeout_seconds": 15.0,
+    "simulated": false
+  },
+  "virustotal": {
+    "enabled": true,
+    "api_key": "",
+    "base_url": "https://www.virustotal.com/api/v3",
+    "timeout_seconds": 15.0,
+    "simulated": false
+  },
+  "abuseipdb": {
+    "enabled": true,
+    "api_key": "",
+    "base_url": "https://api.abuseipdb.com/api/v2",
+    "timeout_seconds": 15.0,
+    "simulated": false
+  },
+  "thehive": {
+    "enabled": true,
+    "base_url": "https://thehive.corp.internal:9000",
+    "api_key": "",
+    "verify_ssl": false,
+    "timeout_seconds": 15.0,
+    "simulated": false
+  }
+}

@@ -781,6 +781,21 @@ async def evaluate_task_output(
         for s in ("file_tree", "filesystem_inspection", "file_enumeration", "directory_listing", "evidence_collection")
     )
     low_output = worker_output.lower()
+    has_concrete_data = any(
+        marker in low_output
+        for marker in (
+            "total_bytes",
+            "free_bytes",
+            "total_gigabytes",
+            "directory tree",
+            "files and directories",
+            "items enumerated",
+            "items found",
+            "host disk partition",
+            "host drive / volume",
+            "total capacity",
+        )
+    )
     has_missing_target = any(
         marker in low_output
         for marker in (
@@ -793,10 +808,10 @@ async def evaluate_task_output(
             "path not a file / 0 files found",
         )
     )
-    if is_initial_discovery and has_missing_target:
+    if is_initial_discovery and has_missing_target and not has_concrete_data:
         decision = "abort"
         feedback = (
-            "Target log directory yielded 0 files or could not be accessed. "
+            "Target directory or logs yielded 0 items or could not be accessed. "
             "Downstream analysis tasks aborted to prevent ungrounded hallucinations."
         )
 
@@ -809,8 +824,6 @@ async def evaluate_task_output(
         "i cannot fulfill this request",
         "prime list is missing",
     ]
-    # If the output already contains tool results or disk/directory details, do not override
-    has_concrete_data = any(marker in worker_output.lower() for marker in ["total_bytes", "free_bytes", "total_gigabytes", "directory tree", "files and directories", "items found"])
     if decision != "abort" and not has_concrete_data and any(cue in worker_output.lower() for cue in refusal_cues):
         decision = "needs_retry"
         if not feedback:
