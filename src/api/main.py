@@ -1178,6 +1178,7 @@ async def approve_task(workflow_id: str, request: ApproveRequest):
             "modified_params": request.modified_params or {},
         }
         dw["awaiting_approval"] = False
+        _status_cache.pop(workflow_id, None)
         ev = dw.get("approval_event")
         if ev and isinstance(ev, asyncio.Event):
             ev.set()
@@ -1225,6 +1226,7 @@ async def approve_task(workflow_id: str, request: ApproveRequest):
         )
 
         # Notify event bus
+        _status_cache.pop(workflow_id, None)
         get_event_bus().publish(
             workflow_id,
             {
@@ -1254,6 +1256,7 @@ async def clarify_workflow(workflow_id: str, request: ClarifyRequest):
     from src.core.clarification import get_clarification_hub
 
     hub = get_clarification_hub()
+    _status_cache.pop(workflow_id, None)
     resolved = hub.resolve_clarification(
         workflow_id=workflow_id,
         answer=request.answer,

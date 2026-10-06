@@ -102,6 +102,50 @@ document.addEventListener("DOMContentLoaded", () => {
     });
   }
 
+  // ── High-Performance Frame-Batched Token Micro-Buffer ──
+  const tokenStreamBuffers = new Map();
+  let tokenFlushRaf = null;
+
+  function bufferStreamToken(taskId, taskName, tokenText) {
+    if (!tokenStreamBuffers.has(taskId)) {
+      tokenStreamBuffers.set(taskId, { taskName: taskName || `Task ${taskId}`, text: "" });
+    }
+    const buf = tokenStreamBuffers.get(taskId);
+    buf.text += tokenText;
+
+    if (!tokenFlushRaf) {
+      tokenFlushRaf = requestAnimationFrame(() => {
+        flushStreamTokens();
+      });
+    }
+  }
+
+  function flushStreamTokens() {
+    if (tokenFlushRaf) {
+      cancelAnimationFrame(tokenFlushRaf);
+      tokenFlushRaf = null;
+    }
+    if (tokenStreamBuffers.size === 0) return;
+
+    tokenStreamBuffers.forEach((data, tid) => {
+      let stepEl = document.getElementById(`step-${tid}`);
+      if (!stepEl) {
+        addTimelineStep(tid, data.taskName || `Task ${tid}`, "", "running");
+        if (activeDag) dagRenderer.updateNodeStatus(tid, "running");
+      }
+      const descEl = document.getElementById(`desc-${tid}`);
+      if (descEl) {
+        if (descEl.dataset.streaming !== "true") {
+          descEl.dataset.streaming = "true";
+          descEl.textContent = "";
+        }
+        descEl.textContent += data.text;
+      }
+    });
+    tokenStreamBuffers.clear();
+    scheduleTimelineScroll();
+  }
+
   // Initialize DAG Renderer
   const dagRenderer = new DAGRenderer("dag-svg", (task, status) => {
     onNodeClicked(task, status);
@@ -292,7 +336,23 @@ document.addEventListener("DOMContentLoaded", () => {
   updateSchedulesBadge();
   fetchWorkflowTemplates();
   fetchResilienceOptions();
-  setInterval(fetchHealth, 10000);
+  let healthInterval = setInterval(fetchHealth, 10000);
+
+  // Tab Visibility API: pause background polling when tab is hidden
+  document.addEventListener("visibilitychange", () => {
+    if (document.hidden) {
+      if (healthInterval) {
+        clearInterval(healthInterval);
+        healthInterval = null;
+      }
+    } else {
+      fetchHealth();
+      updateSchedulesBadge();
+      if (!healthInterval) {
+        healthInterval = setInterval(fetchHealth, 10000);
+      }
+    }
+  });
 
   // 2. Preset Queries
   document.querySelectorAll(".preset-chip").forEach((chip) => {
@@ -501,6 +561,7 @@ document.addEventListener("DOMContentLoaded", () => {
       }
 
       case "task_completed": {
+        flushStreamTokens();
         const taskId = ev.task_id;
         const output = ev.output || "Task completed successfully.";
         const tools = ev.tools_used || [];
@@ -523,27 +584,15 @@ document.addEventListener("DOMContentLoaded", () => {
       }
 
       case "token": {
-        // Real-time token streaming from worker ReAct loop
+        // Real-time token streaming batched per animation frame
         const taskId = ev.task_id;
         const tokenText = ev.content !== undefined ? ev.content : (ev.token || "");
-        let stepEl = document.getElementById(`step-${taskId}`);
-        if (!stepEl) {
-          addTimelineStep(taskId, ev.task_name || `Task ${taskId}`, "", "running");
-          if (activeDag) dagRenderer.updateNodeStatus(taskId, "running");
-        }
-        const descEl = document.getElementById(`desc-${taskId}`);
-        if (descEl) {
-          if (descEl.dataset.streaming !== "true") {
-            descEl.dataset.streaming = "true";
-            descEl.textContent = "";
-          }
-          descEl.textContent += tokenText;
-          scheduleTimelineScroll();
-        }
+        bufferStreamToken(taskId, ev.task_name, tokenText);
         break;
       }
 
       case "tool_start": {
+        flushStreamTokens();
         const taskId = ev.task_id;
         const toolName = ev.tool || ev.tool_name || "tool";
         let toolsEl = document.getElementById(`tools-${taskId}`);
@@ -693,6 +742,7 @@ document.addEventListener("DOMContentLoaded", () => {
       }
 
       case "final_solution": {
+        flushStreamTokens();
         const sol = ev.solution || ev.response || "";
         renderFinalSolution(sol, ev.tasks_completed || 0, ev.tasks_failed || 0);
         setRunningState(false);
@@ -815,6 +865,11 @@ document.addEventListener("DOMContentLoaded", () => {
 
     async function pollTick() {
       if (!isPolling) return;
+      if (document.hidden) {
+        // Slow down polling to 12s when tab is in background
+        scheduleNext(12000);
+        return;
+      }
       try {
         const res = await fetch(`/status/${workflowId}`);
         if (!res.ok) {
