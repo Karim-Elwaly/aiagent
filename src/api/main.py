@@ -24,6 +24,7 @@ from typing import Any
 from uuid import uuid4
 
 import asyncio
+import time
 import httpx
 from fastapi import FastAPI, HTTPException
 from fastapi.responses import FileResponse, StreamingResponse
@@ -188,6 +189,12 @@ class LLMTestPayload(BaseModel):
     model: str | None = None
 
 
+class MemoryFactPayload(BaseModel):
+    key: str
+    value: str
+    scope: str = "project"
+    volatile: bool = False
+
 
 # ── Application Lifecycle ────────────────────────────────────────
 
@@ -202,6 +209,16 @@ async def lifespan(app: FastAPI):
     register_all_tools(registry)
     app.state.registry = registry
     logger.info("Tool Registry: %s", registry)
+
+    # Initialize Enterprise Security Connectors
+    try:
+        from src.connectors.manager import get_connector_manager
+        connector_mgr = get_connector_manager()
+        await connector_mgr.initialize(registry)
+        app.state.connector_manager = connector_mgr
+        logger.info("Enterprise Security Connectors initialized: %d active", len(connector_mgr.list_connectors()))
+    except Exception as e:
+        logger.warning("Could not initialize security connectors: %s", e)
 
     # In-memory storage for standalone in-process workflows (fallback when Temporal is offline)
     app.state.direct_workflows = {}
@@ -696,6 +713,10 @@ async def run_direct_workflow(
                                 f"{task_dict.get('description', '')}\n\n"
                                 f"[SUPERVISOR EVALUATION FEEDBACK - PLEASE GATHER MORE INFO]: {feedback}"
                             )
+                            req_skills = list(task_dict.get("required_skills", []))
+                            if req_skills == ["general_reasoning"] or not req_skills:
+                                task_dict["required_skills"] = ["system_command", "code_execution", "general_reasoning"]
+
                             retry_result = await _execute_task_with_retries(task_dict, completed, agent_id, profile)
                             if retry_result.get("status") == "completed":
                                 task_output = retry_result.get("output", "")
@@ -1076,9 +1097,18 @@ async def get_workflow_templates():
     ]
 
 
+_status_cache: dict[str, tuple[float, StatusResponse]] = {}
+_STATUS_CACHE_TTL = 1.0  # seconds
+
 @app.get("/status/{workflow_id}", response_model=StatusResponse)
 async def get_status(workflow_id: str):
-    """Check the status of a running workflow."""
+    """Check the status of a running workflow with 1s cache throttling."""
+    now = time.time()
+    if workflow_id in _status_cache:
+        cached_ts, cached_resp = _status_cache[workflow_id]
+        if now - cached_ts < _STATUS_CACHE_TTL:
+            return cached_resp
+
     from src.core.clarification import get_clarification_hub
 
     active_clr = get_clarification_hub().get_pending(workflow_id)
@@ -1087,7 +1117,7 @@ async def get_status(workflow_id: str):
 
     if workflow_id in app.state.direct_workflows:
         dw = app.state.direct_workflows[workflow_id]
-        return StatusResponse(
+        resp = StatusResponse(
             workflow_id=workflow_id,
             status=dw.get("status", "running"),
             awaiting_approval=dw.get("awaiting_approval", False),
@@ -1104,6 +1134,8 @@ async def get_status(workflow_id: str):
             result=dw.get("result"),
             error=dw.get("error"),
         )
+        _status_cache[workflow_id] = (now, resp)
+        return resp
 
     if not app.state.temporal:
         raise HTTPException(404, f"Workflow '{workflow_id}' not found")
@@ -1125,7 +1157,7 @@ async def get_status(workflow_id: str):
             except Exception as r_err:
                 logger.debug("Could not get handle.result(): %s", r_err)
 
-        return StatusResponse(
+        resp = StatusResponse(
             workflow_id=workflow_id,
             status=desc.status.name.lower(),
             awaiting_approval=query_res.get("awaiting_approval", False),
@@ -1141,6 +1173,8 @@ async def get_status(workflow_id: str):
             supervisor_evaluations=query_res.get("supervisor_evaluations") or (result_data.get("supervisor_evaluations") if isinstance(result_data, dict) else []) or [],
             result=result_data,
         )
+        _status_cache[workflow_id] = (now, resp)
+        return resp
 
     except Exception as e:
         raise HTTPException(404, f"Workflow not found: {e}")
@@ -1162,6 +1196,7 @@ async def approve_task(workflow_id: str, request: ApproveRequest):
             "modified_params": request.modified_params or {},
         }
         dw["awaiting_approval"] = False
+        _status_cache.pop(workflow_id, None)
         ev = dw.get("approval_event")
         if ev and isinstance(ev, asyncio.Event):
             ev.set()
@@ -1209,6 +1244,7 @@ async def approve_task(workflow_id: str, request: ApproveRequest):
         )
 
         # Notify event bus
+        _status_cache.pop(workflow_id, None)
         get_event_bus().publish(
             workflow_id,
             {
@@ -1238,6 +1274,7 @@ async def clarify_workflow(workflow_id: str, request: ClarifyRequest):
     from src.core.clarification import get_clarification_hub
 
     hub = get_clarification_hub()
+    _status_cache.pop(workflow_id, None)
     resolved = hub.resolve_clarification(
         workflow_id=workflow_id,
         answer=request.answer,
@@ -1715,6 +1752,131 @@ async def register_skill(payload: SkillRegisterRequest):
         raise HTTPException(400, f"Failed to register skill: {e}")
 
 
+# ── Distilled Autonomous Skills Endpoints (Gap 5) ────────────────
+
+
+@app.get("/api/skills/distilled/pending")
+async def list_pending_distilled_skills():
+    """List autonomously distilled skills awaiting operator approval."""
+    from src.skills.manager import get_skill_manager
+    manager = get_skill_manager()
+    cands = manager.list_pending()
+    return [
+        {
+            "id": c.id,
+            "name": c.name,
+            "goal": c.goal,
+            "description": c.description,
+            "supervisor_score": c.supervisor_score,
+            "tool_trace_len": c.tool_trace_len,
+            "created_at": c.created_at,
+            "status": c.status,
+            "code_preview": c.code[:300] + ("..." if len(c.code) > 300 else ""),
+        }
+        for c in cands
+    ]
+
+
+@app.get("/api/skills/distilled/approved")
+async def list_approved_distilled_skills():
+    """List approved autonomously distilled skills."""
+    from src.skills.manager import get_skill_manager
+    manager = get_skill_manager()
+    approved = manager.list_approved()
+    return [
+        {
+            "id": c.id,
+            "name": c.name,
+            "goal": c.goal,
+            "description": c.description,
+            "skills_provided": c.skills_provided,
+            "created_at": c.created_at,
+            "status": c.status,
+        }
+        for c in approved
+    ]
+
+
+@app.post("/api/skills/distilled/{skill_name}/approve")
+async def approve_distilled_skill(skill_name: str):
+    """Approve a distilled skill, promote to custom tools, and hot-load into registry."""
+    from src.skills.manager import get_skill_manager
+    manager = get_skill_manager()
+    success = manager.approve(skill_name)
+    if not success:
+        raise HTTPException(404, f"Pending skill '{skill_name}' not found")
+    return {"status": "approved", "skill_name": skill_name}
+
+
+@app.post("/api/skills/distilled/{skill_name}/reject")
+async def reject_distilled_skill(skill_name: str, payload: dict[str, str] | None = None):
+    """Reject a distilled candidate skill."""
+    reason = (payload or {}).get("reason", "")
+    from src.skills.manager import get_skill_manager
+    manager = get_skill_manager()
+    success = manager.reject(skill_name, reason=reason)
+    if not success:
+        raise HTTPException(404, f"Pending skill '{skill_name}' not found")
+    return {"status": "rejected", "skill_name": skill_name, "reason": reason}
+
+
+# ── Long-Term Memory Endpoints (Gap 3) ───────────────────────────
+
+
+@app.get("/api/memory")
+async def get_all_memory_facts(q: str = ""):
+    """List or search persistent long-term memory facts."""
+    from src.memory.store import get_memory_store
+    store = get_memory_store()
+    if q.strip():
+        facts = store.search_facts(q.strip(), limit=20)
+    else:
+        facts = store.get_all_facts()
+    return {
+        "facts": facts,
+        "count": len(facts),
+        "search_query": q,
+    }
+
+
+@app.post("/api/memory")
+async def save_memory_fact(payload: MemoryFactPayload):
+    """Save or update a persistent memory fact (operator verified)."""
+    from src.memory.store import Fact, get_memory_store
+    store = get_memory_store()
+    fact = Fact(
+        key=payload.key.strip(),
+        value=payload.value.strip(),
+        scope=payload.scope,
+        volatile=payload.volatile,
+        provenance="user",
+    )
+    success = store.save_fact(fact, verified_grounding=True)
+    if not success:
+        raise HTTPException(400, "Failed to save memory fact")
+    return {"status": "saved", "key": fact.key}
+
+
+@app.delete("/api/memory/{key}")
+async def delete_memory_fact(key: str):
+    """Delete a memory fact by key."""
+    from src.memory.store import get_memory_store
+    store = get_memory_store()
+    deleted = store.delete_fact(key)
+    if not deleted:
+        raise HTTPException(404, f"Memory key '{key}' not found")
+    return {"status": "deleted", "key": key}
+
+
+@app.get("/api/memory/episodes")
+async def search_memory_episodes(q: str = "", limit: int = 10):
+    """Search previous workflow run episodes."""
+    from src.memory.store import get_memory_store
+    store = get_memory_store()
+    episodes = store.search_episodes(q, limit=limit)
+    return {"episodes": episodes, "count": len(episodes)}
+
+
 # ── Hermes Skills Endpoints ──────────────────────────────────────
 
 
@@ -1888,6 +2050,70 @@ async def toggle_schedule(schedule_id: str):
     if not job:
         raise HTTPException(404, f"Schedule '{schedule_id}' not found")
     return app.state.scheduler.update_job(schedule_id, ScheduleUpdateRequest(enabled=not job.enabled))
+
+
+# ── Enterprise Security Connector Endpoints ─────────────────────
+
+
+@app.get("/api/connectors")
+async def list_security_connectors():
+    """List all enterprise security connectors (SIEM, EDR, Firewall, IAM, CTI, ITSM)."""
+    from src.connectors.manager import get_connector_manager
+
+    mgr = get_connector_manager()
+    return {"connectors": mgr.list_connectors(mask_secrets=True)}
+
+
+@app.get("/api/connectors/{connector_id}")
+async def get_security_connector(connector_id: str):
+    """Get metadata, connection status, and exported tools for a specific connector."""
+    from src.connectors.manager import get_connector_manager
+
+    mgr = get_connector_manager()
+    conn = mgr.get_connector(connector_id)
+    if not conn:
+        raise HTTPException(404, f"Connector '{connector_id}' not found")
+    return conn.to_dict(mask_secrets=True)
+
+
+@app.post("/api/connectors/{connector_id}/test")
+async def test_security_connector(connector_id: str):
+    """Test API authentication and latency for a connector."""
+    from src.connectors.manager import get_connector_manager
+
+    mgr = get_connector_manager()
+    conn = mgr.get_connector(connector_id)
+    if not conn:
+        raise HTTPException(404, f"Connector '{connector_id}' not found")
+    success, message, latency_ms = await mgr.test_connector(connector_id)
+    return {
+        "connector_id": connector_id,
+        "success": success,
+        "message": message,
+        "latency_ms": round(latency_ms, 2),
+        "status": conn.status.value,
+        "is_live": conn.is_live,
+    }
+
+
+@app.post("/api/connectors/{connector_id}/configure")
+async def configure_security_connector(connector_id: str, payload: dict[str, Any]):
+    """Update settings, credentials, or toggles for a connector."""
+    from src.connectors.manager import get_connector_manager
+
+    mgr = get_connector_manager()
+    try:
+        updated = await mgr.configure_connector(
+            connector_id,
+            payload,
+            registry=getattr(app.state, "registry", None),
+        )
+        return updated
+    except ValueError as ve:
+        raise HTTPException(404, str(ve))
+    except Exception as e:
+        logger.exception("Failed to configure connector %s: %s", connector_id, e)
+        raise HTTPException(400, f"Configuration failed: {e}")
 
 
 # ── Mount Messaging Gateways ─────────────────────────────────────

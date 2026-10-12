@@ -27,7 +27,7 @@ from typing import Any
 
 import httpx
 
-from src.core.config import ROOT_DIR
+from src.core.config import ROOT_DIR, get_settings
 from src.core.models import RiskLevel
 from src.registry.tool_registry import ToolSpec
 
@@ -74,6 +74,21 @@ async def web_extract(url: str, max_length: int = 4000) -> str:
         # Collapse whitespace
         text = re.sub(r"[ \t]+", " ", text)
         text = re.sub(r"\n\s*\n+", "\n\n", text).strip()
+
+        # Check if JS rendering is needed (SPA or empty body)
+        js_required_cues = ["javascript is required", "enable javascript", "please turn javascript on"]
+        needs_js = (len(text) < 150 and len(html) > 500) or any(cue in text.lower() for cue in js_required_cues)
+        if needs_js:
+            settings = get_settings()
+            if getattr(settings, "enable_browser", False):
+                try:
+                    from src.registry.tools.browser_tools import browser_open, browser_snapshot
+                    logger.info("Auto-escalating web_extract to interactive browser for %s", url)
+                    await browser_open(url)
+                    snap_res = await browser_snapshot(max_chars=max_length)
+                    return f"=== Rendered Content (via Interactive Browser) from {url} ===\n\n{snap_res}"
+                except Exception as b_err:
+                    logger.debug("Auto-escalation to browser failed: %s", b_err)
 
         if len(text) > max_length:
             text = text[:max_length] + f"\n\n[... Truncated from {len(text)} characters ...]"
@@ -200,16 +215,26 @@ async def memory_manager(action: str = "get", key: str = "", value: str = "") ->
     """
     mem = _load_memory()
     action = action.lower().strip()
+    settings = get_settings()
 
     if action == "list":
         notes = list(mem.get("notes", {}).keys())
         prefs = list(mem.get("user_preferences", {}).keys())
         procs = list(mem.get("learned_procedures", {}).keys())
+        sqlite_facts_count = 0
+        if getattr(settings, "enable_memory", False):
+            try:
+                from src.memory.store import get_memory_store
+                sqlite_facts = get_memory_store().get_all_facts()
+                sqlite_facts_count = len(sqlite_facts)
+            except Exception:
+                pass
         return json.dumps({
             "notes": notes,
             "user_preferences": prefs,
             "learned_procedures": procs,
-            "total_items": len(notes) + len(prefs) + len(procs),
+            "sqlite_facts_count": sqlite_facts_count,
+            "total_items": len(notes) + len(prefs) + len(procs) + sqlite_facts_count,
         }, indent=2)
 
     if action == "set":
@@ -220,15 +245,34 @@ async def memory_manager(action: str = "get", key: str = "", value: str = "") ->
             "updated_at": datetime.now(timezone.utc).isoformat(),
         }
         _save_memory(mem)
+
+        # Sync to SQLite store if enabled
+        if getattr(settings, "enable_memory", False):
+            try:
+                from src.memory.store import Fact, get_memory_store
+                get_memory_store().save_fact(Fact(key=key, value=value, provenance="user"), verified_grounding=True)
+            except Exception as e:
+                logger.debug("Failed to sync fact to SQLite store: %s", e)
+
         return f"Stored memory under key '{key}'."
 
     if action == "get":
         if not key:
             return json.dumps(mem, indent=2)
         val = mem.get("notes", {}).get(key) or mem.get("user_preferences", {}).get(key) or mem.get("learned_procedures", {}).get(key)
-        if val is None:
-            return f"No memory found for key '{key}'."
-        return json.dumps(val, indent=2)
+        if val is not None:
+            return json.dumps(val, indent=2)
+
+        if getattr(settings, "enable_memory", False):
+            try:
+                from src.memory.store import get_memory_store
+                matches = get_memory_store().search_facts(key, limit=1)
+                if matches:
+                    return json.dumps(matches[0], indent=2)
+            except Exception:
+                pass
+
+        return f"No memory found for key '{key}'."
 
     if action == "delete":
         found = False
@@ -238,6 +282,16 @@ async def memory_manager(action: str = "get", key: str = "", value: str = "") ->
                 found = True
         if found:
             _save_memory(mem)
+
+        if getattr(settings, "enable_memory", False):
+            try:
+                from src.memory.store import get_memory_store
+                if get_memory_store().delete_fact(key):
+                    found = True
+            except Exception:
+                pass
+
+        if found:
             return f"Deleted memory key '{key}'."
         return f"Key '{key}' not found."
 
@@ -404,6 +458,20 @@ async def session_search(query: str, max_results: int = 5) -> str:
                     results.append(f"[Custom Tool] {py_file.stem}: {content[:150]}...")
             except Exception:
                 pass
+
+    # Search in SQLite long-term memory episodes if enabled
+    settings = get_settings()
+    if getattr(settings, "enable_memory", False):
+        try:
+            from src.memory.store import get_memory_store
+            store = get_memory_store()
+            episodes = store.search_episodes(query, limit=max_results)
+            for ep in episodes:
+                results.append(
+                    f"[Past Episode {ep.get('run_id')}] Query: {ep.get('query')} | Goal: {ep.get('goal')} (Outcome: {ep.get('outcome')})"
+                )
+        except Exception as e:
+            logger.debug("Failed to search episodes in memory store: %s", e)
 
     if not results:
         return f"No past session records matching '{query}' found."
@@ -585,9 +653,111 @@ async def delegate_task(subagent_type: str, goal: str, context: str = "") -> str
         context: Relevant background or constraints for the delegated task.
     """
     import uuid
+    from src.core.config import get_settings
+    from src.core.llm_client import LocalLLMClient
+    from src.core.models import Task, TaskStatus
+    from src.core.tool_context import ToolContext, get_tool_context, reset_tool_context, set_tool_context
+    from src.workers.universal_worker import UniversalWorkerAgent
+
+    ctx = get_tool_context()
+    current_depth = int(ctx.extras.get("delegation_depth", 0))
+    if current_depth >= 2:
+        return (
+            f"Error: Subagent delegation depth limit reached ({current_depth}/2). "
+            f"Cannot spawn nested subagents beyond depth 2."
+        )
+
     subagent_id = f"sub-{uuid.uuid4().hex[:8]}"
-    logger.info("Spawning Hermes subagent [%s] (role=%s) for goal: %s", subagent_id, subagent_type, goal)
+    logger.info(
+        "Spawning Hermes subagent [%s] (role=%s, depth=%d) for goal: %s",
+        subagent_id, subagent_type, current_depth + 1, goal
+    )
     
+    # Resolve available tools for subagent (excluding delegate_task and clarify_question)
+    from src.registry.auto_discover import register_all_tools
+    from src.registry.tool_registry import ToolRegistry
+    reg = ToolRegistry()
+    register_all_tools(reg)
+    subagent_tools = [
+        t for t in reg.get_all_tools()
+        if t.name not in ("delegate_task", "clarify_question")
+        and "delegate_task" not in t.skills_provided
+        and "subagent_delegation" not in t.skills_provided
+    ]
+
+    persona = (
+        f"You are a specialized autonomous subagent worker.\n"
+        f"Assigned Role: {subagent_type.upper()}\n"
+        f"Objective: {goal}\n"
+    )
+    if context:
+        persona += f"\nBackground Context & Parameters:\n{context}\n"
+    persona += (
+        "\nExecution Guidelines:\n"
+        "1. Accomplish the goal using your tools directly and efficiently.\n"
+        "2. Do not hallucinate data; gather evidence from your tools.\n"
+        "3. Conclude with FINAL_ANSWER: <detailed findings, data, or output>."
+    )
+
+    subagent_task = Task(
+        id=subagent_id,
+        name=f"Subtask: {goal[:50]}",
+        description=goal,
+        required_skills=[],
+        expected_output="Direct execution results, artifacts, or findings.",
+        timeout_seconds=90,
+    )
+
+    settings = get_settings()
+    worker_llm = LocalLLMClient(
+        base_url=settings.llm_base_url,
+        model=settings.worker_llm_model or settings.llm_model,
+        temperature=settings.llm_temperature,
+        max_tokens=settings.llm_max_tokens,
+        timeout=min(settings.llm_timeout_seconds, 90.0),
+    )
+
+    worker = UniversalWorkerAgent(
+        llm=worker_llm,
+        max_iterations=4,  # Bounded iteration budget for subagents
+        max_output_chars=4000,
+    )
+
+    sub_ctx = ToolContext(
+        workflow_id=ctx.workflow_id,
+        task_id=subagent_id,
+        session_id=ctx.session_id,
+        user_query=goal,
+        extras={**ctx.extras, "delegation_depth": current_depth + 1},
+    )
+    sub_token = set_tool_context(sub_ctx)
+
+    ctx.emit("subagent_start", {
+        "subagent_id": subagent_id,
+        "role": subagent_type,
+        "goal": goal,
+        "depth": current_depth + 1,
+    })
+
+    try:
+        task_res = await worker.execute(
+            task=subagent_task,
+            persona=persona,
+            tools=subagent_tools,
+            workflow_id=ctx.workflow_id,
+        )
+    except Exception as e:
+        logger.error("Subagent [%s] execution error: %s", subagent_id, e)
+        task_res = None
+        error_msg = str(e)
+    finally:
+        reset_tool_context(sub_token)
+
+    status_str = task_res.status.value if task_res else "failed"
+    output_str = task_res.output if task_res and task_res.output else (task_res.error if task_res else error_msg)
+    tools_used = task_res.tool_calls_made if task_res else []
+    exec_time = task_res.execution_time_ms if task_res else 0
+
     delegations_file = ROOT_DIR / "data" / "hermes_delegations.json"
     delegations = []
     if delegations_file.exists():
@@ -602,21 +772,35 @@ async def delegate_task(subagent_type: str, goal: str, context: str = "") -> str
         "role": subagent_type,
         "goal": goal,
         "context": context,
-        "status": "completed",
+        "depth": current_depth + 1,
+        "status": status_str,
+        "tools_used": tools_used,
+        "execution_time_ms": exec_time,
         "created_at": datetime.now(timezone.utc).isoformat(),
-        "summary": f"Worker {subagent_type} analyzed goal and prepared modular execution artifact.",
+        "summary": output_str[:1000] if output_str else "No output",
     }
     delegations.append(record)
     delegations_file.parent.mkdir(parents=True, exist_ok=True)
-    with open(delegations_file, "w", encoding="utf-8") as f:
-        json.dump(delegations, f, indent=2)
+    try:
+        with open(delegations_file, "w", encoding="utf-8") as f:
+            json.dump(delegations, f, indent=2)
+    except Exception as e:
+        logger.warning("Failed to save delegations file: %s", e)
+
+    ctx.emit("subagent_end", {
+        "subagent_id": subagent_id,
+        "status": status_str,
+        "execution_time_ms": exec_time,
+    })
         
     return (
         f"=== Subagent Delegation Result [{subagent_id}] ===\n"
         f"Worker Role: {subagent_type}\n"
         f"Goal: {goal}\n"
-        f"Status: Completed\n"
-        f"Trace: Worker spawned in sandbox, executed goal constraints, verified outputs, and returned final artifact cleanly."
+        f"Status: {status_str.capitalize()}\n"
+        f"Tools Used: {', '.join(tools_used) or 'None'}\n"
+        f"Execution Time: {exec_time}ms\n\n"
+        f"Output:\n{output_str}"
     )
 
 

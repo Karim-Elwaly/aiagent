@@ -102,6 +102,40 @@ class Settings(BaseSettings):
     # a human rather than acted on automatically.
     decision_auto_accept_threshold: float = 0.9
 
+    # ── Phase 0: Feature Flags (Hermes-Level Gaps) ────────
+    # Each flag defaults OFF. Enable per-gap once acceptance tests pass.
+
+    # Gap 1: Tool-calling mode. "auto" probes the server; "native" forces
+    # OpenAI-style tools array; "tags" forces Hermes <tool_call> XML;
+    # "legacy" uses the existing heuristic JSON parser only.
+    tool_call_mode: str = "legacy"
+
+    # Gap 2: Persistent Python sessions backed by a Jupyter kernel.
+    # Requires optional [repl] deps (jupyter_client, ipykernel).
+    enable_stateful_python: bool = False
+
+    # Gap 3: Cross-workflow long-term memory (SQLite + FTS5).
+    enable_memory: bool = False
+
+    # Gap 4: In-loop reflection on tool errors.
+    enable_reflection: bool = False
+
+    # Gap 5: Autonomous skill learning and distillation.
+    enable_skill_learning: bool = False
+    skill_auto_promote: bool = False  # If False, skills require HITL approval before promotion
+    skill_min_score: float = 0.9
+
+    # Gap 6: Interactive browser tooling (Playwright).
+    # Requires optional [browser] deps (playwright).
+    enable_browser: bool = False
+    browser_headless: bool = True
+    browser_timeout_ms: int = 30000
+    browser_ssrf_allow_private: bool = False
+
+    # Gap 3b: Optional dense vector embeddings for hybrid memory retrieval
+    enable_memory_embeddings: bool = False
+    embedding_model: str = "text-embedding-nomic-embed-text-v1.5"
+
     # ── API Configuration ────────────────────────────────
     api_host: str = "0.0.0.0"
     api_port: int = 8000

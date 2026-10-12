@@ -55,6 +55,7 @@ class PersonaSynthesizer:
         task: Task,
         tools: list[ToolSpec],
         upstream_context: dict[str, str] | None = None,
+        tool_call_mode: str | None = None,
         protocol: str = "legacy",
     ) -> str:
         """Generate a complete system prompt for a worker agent.
@@ -63,6 +64,7 @@ class PersonaSynthesizer:
             task: The task to execute.
             tools: Resolved concrete tools from the ToolRegistry.
             upstream_context: {task_id: output} from completed dependencies.
+            tool_call_mode: Optional 'native' | 'tags' | 'legacy'. If None, reads from settings.
             protocol: "legacy" (JSON ReAct) or "hermes" (function calling).
 
         Returns:
@@ -76,10 +78,54 @@ class PersonaSynthesizer:
                 tools,
                 upstream_context,
             )
-        tool_block = self._format_tools(tools)
+        from src.core.config import get_settings
+        mode = tool_call_mode or getattr(get_settings(), "tool_call_mode", "legacy")
+
         context_block = self._format_upstream_context(
             upstream_context or {}
         )
+
+        if not tools:
+            return f"""# Your Role
+You are a Lead Domain Specialist, Executive Strategist, and Content Creator.
+
+# Your Task
+**{task.name}**
+{task.description}
+
+# Expected Output
+{task.expected_output}
+
+# Workflow & Core Directives
+1. Deliver the COMPLETE, finished deliverable requested directly.
+2. When asked to write, design, draft, or plan (e.g. pitch decks, business strategy, architecture, reports, or outlines):
+   - Write out the complete, exhaustive content in full detail with no placeholders.
+   - Provide realistic, industry-standard projections, market figures, structured tables, and compelling narratives.
+   - Never output refusals, data collection checklists, or claim missing information when asked to create or draft.
+3. Format with clean GitHub-flavored Markdown: clear headers, structured tables, bullet points, and speaker notes.
+4. Conclude with your complete deliverable under:
+FINAL_ANSWER: <your complete, well-structured deliverable>
+{context_block}"""
+
+        if mode == "tags":
+            from src.core.tool_call_parser import format_tools_to_hermes_xml
+            tool_format_instruction = (
+                "You have access to tools via Hermes XML syntax.\n"
+                f"{format_tools_to_hermes_xml(tools)}"
+            )
+        elif mode == "native":
+            tool_format_instruction = (
+                "# Available Tools\n"
+                "You have access to native tools declared in this conversation. "
+                "Call tools whenever needed to inspect targets or gather data."
+            )
+        else:
+            tool_block = self._format_tools(tools)
+            tool_format_instruction = f"""# Available Tools
+Tool call format:
+{{"tool": "<tool_name>", "args": {{"param1": "value1"}}}}
+
+{tool_block}"""
 
         return f"""# Your Role
 You are a worker agent executing ONE task on the host machine using available tools.
@@ -91,11 +137,7 @@ You are a worker agent executing ONE task on the host machine using available to
 # Expected Output
 {task.expected_output}
 
-# Available Tools
-Tool call format:
-{{"tool": "<tool_name>", "args": {{"param1": "value1"}}}}
-
-{tool_block}
+{tool_format_instruction}
 
 # Workflow & Rules
 1. Always call tools first to inspect real paths and compute data.
@@ -168,6 +210,26 @@ CANNOT_COMPLETE: <specific explanation of what's missing>
             return prompt
 
         # Fallback: standard synthesis steered by agent's custom persona name and description
+        if not tools:
+            return f"""# Your Role: {profile.name}
+{profile.description}
+
+You are operating as the specialized agent '{profile.name}'. Your entire focus is on delivering a comprehensive, authoritative solution for this task.
+
+# Your Task
+**{task.name}**
+{task.description}
+
+# Expected Output
+{task.expected_output}
+
+# Workflow & Guidelines
+1. Deliver the COMPLETE, finished deliverable requested directly.
+2. Provide rich, professional content with real-world frameworks, structured tables, and detailed actionable sections. Do NOT give placeholder refusals or demand missing data when asked to draft or create.
+3. Conclude with your complete deliverable under:
+FINAL_ANSWER: <your complete, well-structured deliverable>
+{context_block}"""
+
         return f"""# Your Role: {profile.name}
 {profile.description}
 
@@ -201,12 +263,9 @@ FINAL_ANSWER: <your complete, well-structured response>
 CANNOT_COMPLETE: <specific explanation of what's missing>
 
 # Rules
-- You run on the host machine. Tools have real access to filesystem and drives (C:, D:).
-- Always execute tools first to get real data (e.g. call list_directory or get_disk_usage).
+- Use tools proactively to gather concrete data from the environment.
 - After receiving tool results, provide your full response under: FINAL_ANSWER: <complete findings, table, and data>.
-- Never return an empty or blank FINAL_ANSWER. Always include the data and findings obtained from the tools.
-- Never claim to lack filesystem access or be in a sandbox. Call tools to inspect real paths.
-- Use tools proactively — do not guess.
+- Never return an empty or blank FINAL_ANSWER. Always include the findings obtained from tools.
 - Do NOT invent tool names. Only use tools listed above.
 - Do NOT call a tool and provide a FINAL_ANSWER in the same response.
 {context_block}"""

@@ -6,9 +6,9 @@ Write-Host "Checking Python environment..." -ForegroundColor Cyan
 
 # Optional: Auto-start Temporal and Web UI (ports 7234 & 8234) if Docker is present
 if (Get-Command docker -ErrorAction SilentlyContinue) {
-    Write-Host "[*] Checking Temporal container on Docker..." -ForegroundColor Cyan
+    Write-Host "[*] Checking Temporal container stack on Docker..." -ForegroundColor Cyan
     try {
-        docker compose up -d temporal 2>$null
+        docker compose up -d postgresql temporal temporal-ui 2>$null
     } catch {}
 }
 

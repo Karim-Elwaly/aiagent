@@ -575,6 +575,11 @@ class UAOSWorkflow:
                             f"{retry_task_dict.get('description', '')}\n\n"
                             f"[SUPERVISOR EVALUATION FEEDBACK - PLEASE GATHER MORE INFO]: {feedback}"
                         )
+                        # If the task originally lacked tools (only general_reasoning), equip it with execution tools on retry
+                        req_skills = list(retry_task_dict.get("required_skills", []))
+                        if req_skills == ["general_reasoning"] or not req_skills:
+                            retry_task_dict["required_skills"] = ["system_command", "code_execution", "general_reasoning"]
+
                         retry_result = await workflow.execute_activity(
                             execute_task,
                             args=[retry_task_dict, dict(completed), agent_id],

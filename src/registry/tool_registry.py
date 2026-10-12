@@ -219,6 +219,13 @@ class ToolRegistry:
         return self._tools.get(tool_id)
 
     def get_tool_by_name(self, name: str) -> ToolSpec | None:
+        """Look up a tool by its function name."""
+        for spec in self._tools.values():
+            if spec.name == name:
+                return spec
+        return None
+
+    def get_tool_by_name(self, name: str) -> ToolSpec | None:
         """Look up a tool by the name the LLM calls it by."""
         return next((spec for spec in self._tools.values() if spec.name == name), None)
 

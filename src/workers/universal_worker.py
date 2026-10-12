@@ -27,13 +27,21 @@ import os
 import re
 import time
 from collections.abc import Callable
-from typing import Any
-
-from src.core.llm_client import LocalLLMClient
+from src.core.config import get_settings
+from src.core.llm_client import LLMResponse, LocalLLMClient
 from src.core.exceptions import TransientLLMError
+from src.core.messages import ToolCallRecord, ToolResult as StructuredToolResult, make_checkpoint, read_checkpoint
 from src.core.models import Task, TaskResult, TaskStatus
 from src.core.path_utils import extract_target_path, resolve_target_path, sanitize_json_string_backslashes
+from src.core.reflection import RepeatGuard, classify_tool_error, generate_reflection_prompt
 from src.core.text_utils import smart_truncate
+from src.core.tool_call_parser import (
+    coerce_and_validate_args,
+    format_tools_to_openai_schema,
+    parse_tool_calls,
+    suggest_closest_tool,
+)
+from src.core.tool_context import ToolContext, get_tool_context, reset_tool_context, set_tool_context
 from src.registry.tool_registry import ToolSpec
 
 logger = logging.getLogger(__name__)
@@ -87,35 +95,57 @@ class UniversalWorkerAgent:
         resume_checkpoint: dict[str, Any] | None = None,
         workflow_id: str = "",
     ) -> TaskResult:
-        """Execute a single task via the guarded ReAct loop.
+        """Execute a single task via the guarded ReAct loop with ToolContext isolation."""
+        ctx = ToolContext(
+            workflow_id=workflow_id,
+            task_id=task.id if task else "",
+            user_query=user_query,
+        )
+        ctx_token = set_tool_context(ctx)
+        try:
+            return await self._execute_inner(
+                task=task,
+                persona=persona,
+                tools=tools,
+                upstream_context=upstream_context,
+                user_query=user_query,
+                on_token=on_token,
+                on_event=on_event,
+                on_heartbeat=on_heartbeat,
+                resume_checkpoint=resume_checkpoint,
+                workflow_id=workflow_id,
+            )
+        finally:
+            reset_tool_context(ctx_token)
 
-        Args:
-            task: The task to execute.
-            persona: System prompt from PersonaSynthesizer.
-            tools: Resolved concrete tools from ToolRegistry.
-            upstream_context: Optional {task_id: output} from prior tasks.
-            user_query: Optional overall user request containing target paths and goals.
-            on_token: Optional callback for streaming tokens.
-            on_event: Optional callback for tool/task lifecycle events.
-            on_heartbeat: Optional callback to pulse liveness/heartbeat to orchestrator.
-            resume_checkpoint: Checkpoint data from Temporal activity heartbeat.
-            workflow_id: Optional ID of the parent workflow.
-
-        Returns:
-            TaskResult with status, output, and metadata.
-        """
+    async def _execute_inner(
+        self,
+        task: Task,
+        persona: str,
+        tools: list[ToolSpec],
+        upstream_context: dict[str, str] | None = None,
+        user_query: str = "",
+        on_token: Callable[[str], None] | None = None,
+        on_event: Callable[[dict[str, Any]], None] | None = None,
+        on_heartbeat: Callable[..., None] | None = None,
+        resume_checkpoint: dict[str, Any] | None = None,
+        workflow_id: str = "",
+    ) -> TaskResult:
+        """Internal execution body for ReAct loop."""
         start_time = time.monotonic()
         tool_map = {t.name: t for t in tools}
         tool_calls_made: list[str] = []
+        tool_history: list[ToolCallRecord] = []
         steering_attempts = 0
+
 
         # Set execution contextvars for clarification dialogue
         try:
-            from src.core.clarification import current_workflow_id, current_task_id
+            from src.core.clarification import current_workflow_id as clar_wf, current_task_id as clar_tk
             if workflow_id:
-                current_workflow_id.set(workflow_id)
+                clar_wf.set(workflow_id)
             if task and task.id:
-                current_task_id.set(task.id)
+                clar_tk.set(task.id)
         except Exception:
             pass
 
@@ -148,18 +178,23 @@ class UniversalWorkerAgent:
 
         start_iteration = 1
         if resume_checkpoint and isinstance(resume_checkpoint, dict):
-            if "messages" in resume_checkpoint and isinstance(resume_checkpoint["messages"], list):
-                messages = resume_checkpoint["messages"]
-            if "tool_calls_made" in resume_checkpoint:
-                tool_calls_made = list(resume_checkpoint["tool_calls_made"])
-            start_iteration = int(resume_checkpoint.get("step", 0)) + 1
+            cp = read_checkpoint(resume_checkpoint)
+            if cp.get("messages") and isinstance(cp["messages"], list):
+                messages = cp["messages"]
+            if cp.get("tool_calls_made"):
+                tool_calls_made = list(cp["tool_calls_made"])
+            if cp.get("tool_history"):
+                tool_history = list(cp["tool_history"])
+            start_iteration = int(cp.get("step", 0)) + 1
             logger.info(
-                "Worker resuming task '%s' from Temporal checkpoint at step %d/%d (restored %d previous tool calls)",
+                "Worker resuming task '%s' from Temporal checkpoint (schema v%s) at step %d/%d (restored %d previous tool calls)",
                 task.id,
+                cp.get("schema_version", 1),
                 start_iteration,
                 self.max_iterations,
                 len(tool_calls_made),
             )
+
 
         logger.info(
             "Worker starting task '%s' (%s) with %d tools, max %d iterations",
@@ -168,6 +203,18 @@ class UniversalWorkerAgent:
             len(tools),
             self.max_iterations,
         )
+
+        # Determine tool calling mode and native payload
+        settings = get_settings()
+        tool_call_mode = getattr(settings, "tool_call_mode", "legacy")
+        if tool_call_mode == "auto":
+            tool_call_mode = await self.llm.probe_capability()
+
+        native_tools_payload = None
+        if tool_call_mode == "native" and tools:
+            native_tools_payload = format_tools_to_openai_schema(tools)
+
+        repeat_guard = RepeatGuard(max_identical_allowed=1)
 
         for iteration in range(start_iteration, self.max_iterations + 1):
             logger.debug(
@@ -193,32 +240,26 @@ class UniversalWorkerAgent:
             # ── Step 1: LLM thinks ──────────────────────────
             active_messages = self._compress_context_history(messages)
             try:
-                if on_token:
-                    try:
-                        tokens_list: list[str] = []
-                        async for token in self.llm.chat_stream(active_messages):
-                            tokens_list.append(token)
-                            on_token(token)
-                        response = "".join(tokens_list)
-                    except Exception as stream_err:
-                        # Streams drop mid-flight on server reloads or context overflow.
-                        logger.warning(
-                            "Task '%s' token stream failed at iteration %d (%s: %s); "
-                            "retrying without streaming",
-                            task.id,
-                            iteration,
-                            type(stream_err).__name__,
-                            stream_err,
-                        )
-                        response = await asyncio.wait_for(
-                            self.llm.chat(active_messages),
-                            timeout=task.timeout_seconds,
-                        )
-                else:
-                    response = await asyncio.wait_for(
-                        self.llm.chat(active_messages),
-                        timeout=task.timeout_seconds,
-                    )
+                llm_response = await asyncio.wait_for(
+                    self.llm.chat_with_tools(
+                        active_messages,
+                        tools=native_tools_payload,
+                        max_tokens=self.llm.max_tokens,
+                    ),
+                    timeout=task.timeout_seconds,
+                )
+                response = llm_response.content
+                reasoning = llm_response.reasoning
+
+                if on_token and response:
+                    on_token(response)
+
+                if reasoning and on_event:
+                    on_event({
+                        "type": "thought",
+                        "task_id": task.id,
+                        "thought": reasoning,
+                    })
             except TimeoutError as e:
                 elapsed = int((time.monotonic() - start_time) * 1000)
                 logger.warning(
@@ -258,6 +299,15 @@ class UniversalWorkerAgent:
                 ) from e
 
             def _get_accumulated_tool_outputs() -> str:
+                # Prefer structured records if available
+                if tool_history:
+                    outputs = [
+                        r.result_content for r in tool_history
+                        if r.result_content and not r.is_error
+                    ]
+                    if outputs:
+                        return "\n\n---\n\n".join(outputs)
+                # Fallback to message parsing for legacy/v1 checkpoints
                 tool_outputs: list[str] = []
                 for msg in messages:
                     if msg["role"] == "user" and " returned:\n\n" in msg["content"]:
@@ -269,9 +319,23 @@ class UniversalWorkerAgent:
                             tool_outputs.append(body)
                 return "\n\n---\n\n".join(tool_outputs)
 
+
             # ── Step 2: Extract tool call ───────────────────
-            tool_call = self._extract_tool_call(response)
+            parsed_calls = parse_tool_calls(
+                response,
+                native_tool_calls=llm_response.tool_calls if llm_response else None,
+            )
+            tool_call = None
             forced_call = False
+            if parsed_calls:
+                first_call = parsed_calls[0]
+                tool_call = {
+                    "tool": first_call.name,
+                    "args": first_call.args,
+                    "source": first_call.source,
+                }
+            else:
+                tool_call = self._extract_tool_call(response)
 
             # If tools are available for this task and no tool has been executed yet,
             # we MUST NOT exit. Unverified output would be pure model recall, not evidence.
@@ -392,10 +456,13 @@ class UniversalWorkerAgent:
 
             # ── Guardrail 2: Validate tool exists ───────────
             if tool_name not in tool_map:
+                closest = suggest_closest_tool(tool_name, list(tool_map.keys()))
+                suggestion_str = f" Did you mean '{closest}'?" if closest else ""
                 logger.warning(
-                    "Task '%s' hallucinated tool: '%s'",
+                    "Task '%s' hallucinated tool: '%s'.%s",
                     task.id,
                     tool_name,
+                    suggestion_str,
                 )
                 messages.append(
                     {"role": "assistant", "content": response}
@@ -404,7 +471,7 @@ class UniversalWorkerAgent:
                     {
                         "role": "user",
                         "content": (
-                            f"Error: Tool '{tool_name}' does not exist. "
+                            f"Error: Tool '{tool_name}' does not exist.{suggestion_str} "
                             f"Available tools: {list(tool_map.keys())}. "
                             f"Use one of the listed tools or provide your "
                             f"FINAL_ANSWER."
@@ -413,23 +480,53 @@ class UniversalWorkerAgent:
                 )
                 continue
 
-            # ── Step 4: Execute tool ────────────────────────
+            # ── Step 4: Validate and coerce arguments ───────
             tool_spec = tool_map[tool_name]
+            coerced_args, validation_err = coerce_and_validate_args(tool_spec, tool_args)
+            if validation_err and not forced_call:
+                logger.warning(
+                    "Task '%s' tool '%s' parameter validation failed: %s",
+                    task.id,
+                    tool_name,
+                    validation_err,
+                )
+                messages.append({"role": "assistant", "content": response})
+                messages.append({
+                    "role": "user",
+                    "content": f"Error: {validation_err} Please correct the parameters and try again.",
+                })
+                continue
+            tool_args = coerced_args
+
+            # ── Repeat Guard (Gap 4) ────────────────────────
+            if not forced_call:
+                is_blocked, repeat_warn = repeat_guard.record_and_check(tool_name, tool_args)
+                if is_blocked:
+                    messages.append({"role": "assistant", "content": response})
+                    messages.append({"role": "user", "content": repeat_warn})
+                    continue
+
+            # ── Step 4: Execute tool ────────────────────────
+            call_id = f"{task.id}-{iteration}-{tool_name}"
             logger.debug(
-                "Task '%s' calling tool '%s' with args: %s",
+                "Task '%s' calling tool '%s' (call_id=%s) with args: %s",
                 task.id,
                 tool_name,
+                call_id,
                 json.dumps(tool_args)[:200],
             )
 
             if on_event:
                 on_event({
-                    "type": "tool_start",
+                    "type": "tool_call",
                     "task_id": task.id,
+                    "call_id": call_id,
                     "tool": tool_name,
                     "args": tool_args,
                 })
 
+            tool_start = time.monotonic()
+            is_error = False
             try:
                 import inspect
                 if hasattr(tool_spec, "invoke"):
@@ -445,20 +542,13 @@ class UniversalWorkerAgent:
 
                 tool_calls_made.append(tool_name)
 
-                if on_event:
-                    on_event({
-                        "type": "tool_end",
-                        "task_id": task.id,
-                        "tool": tool_name,
-                        "output": result_str[:200],
-                    })
-
             except TypeError as e:
                 # Wrong arguments passed to tool
                 result_str = (
                     f"Error: Invalid arguments for tool '{tool_name}': {e}. "
                     f"Check the parameter names and types."
                 )
+                is_error = True
                 logger.warning(
                     "Task '%s' tool '%s' argument error: %s",
                     task.id,
@@ -468,6 +558,7 @@ class UniversalWorkerAgent:
 
             except Exception as e:
                 result_str = f"Error: Tool '{tool_name}' failed: {e}"
+                is_error = True
                 logger.error(
                     "Task '%s' tool '%s' execution error: %s",
                     task.id,
@@ -475,14 +566,47 @@ class UniversalWorkerAgent:
                     e,
                 )
 
+            tool_elapsed_ms = int((time.monotonic() - tool_start) * 1000)
+
+            # Build structured tool result
+            structured_result = StructuredToolResult(
+                call_id=call_id,
+                name=tool_name,
+                content=result_str,
+                is_error=is_error,
+                elapsed_ms=tool_elapsed_ms,
+            )
+
+            # Record for eval / memory
+            tool_history.append(ToolCallRecord(
+                call_id=call_id,
+                tool_name=tool_name,
+                args=tool_args,
+                result_content=result_str[:2000],
+                is_error=is_error,
+                elapsed_ms=tool_elapsed_ms,
+                source="forced" if forced_call else "parsed",
+            ))
+
+            if on_event:
+                on_event({
+                    "type": "tool_result",
+                    "task_id": task.id,
+                    "call_id": call_id,
+                    "tool": tool_name,
+                    "is_error": is_error,
+                    "elapsed_ms": tool_elapsed_ms,
+                    "output": result_str[:200],
+                })
+
             if on_heartbeat:
                 try:
-                    on_heartbeat({
-                        "task_id": task.id,
-                        "step": iteration,
-                        "messages": messages,
-                        "tool_calls_made": tool_calls_made,
-                    })
+                    on_heartbeat(make_checkpoint(
+                        step=iteration,
+                        messages=messages,
+                        tool_calls_made=tool_calls_made,
+                        tool_history=tool_history,
+                    ))
                 except TypeError:
                     on_heartbeat()
                 except Exception:
@@ -493,7 +617,11 @@ class UniversalWorkerAgent:
                 "Analyze this result. Either call another tool "
                 "or provide your FINAL_ANSWER."
             )
-            if forced_call:
+            if is_error and getattr(get_settings(), "enable_reflection", False):
+                classification = classify_tool_error(tool_name, result_str, is_error=True)
+                if classification:
+                    followup = generate_reflection_prompt(classification, tool_name, result_str)
+            elif forced_call:
                 followup = (
                     "This tool output is the ONLY verified evidence for this task. "
                     "Discard every IP, domain, hash, CVE, hostname, account, and timestamp "
@@ -504,16 +632,11 @@ class UniversalWorkerAgent:
             messages.append(
                 {"role": "assistant", "content": response}
             )
-            messages.append(
-                {
-                    "role": "user",
-                    "content": (
-                        f"Tool `{tool_name}` returned:\n\n"
-                        f"{result_str}\n\n"
-                        f"{followup}"
-                    ),
-                }
-            )
+            # Use structured result to build the tool-result message
+            tool_msg = structured_result.to_message()
+            if not is_error:
+                tool_msg["content"] += f"\n\n{followup}"
+            messages.append(tool_msg)
 
         # ── Guardrail 1: Max iterations reached ────────────
         elapsed = int((time.monotonic() - start_time) * 1000)
@@ -662,8 +785,10 @@ class UniversalWorkerAgent:
                 if pval and str(pval).strip():
                     return str(resolve_target_path(str(pval).strip()))
 
-        # 2. Extract from combined text (task name, description, user_query)
-        combined_text = f"{task.name} {task.description} {user_query}"
+        # 2. Extract from combined text (excluding supervisor feedback prose to prevent cross-platform poisoning)
+        clean_desc = re.sub(r"(?i)###\s*Supervisor Feedback:[\s\S]*?(?=\n\n|\Z)", "", task.description)
+        clean_query = re.sub(r"(?i)###\s*Supervisor Feedback:[\s\S]*?(?=\n\n|\Z)", "", user_query)
+        combined_text = f"{task.name} {clean_desc} {clean_query}"
         extracted = extract_target_path(combined_text)
         if extracted:
             return extracted
@@ -706,7 +831,17 @@ class UniversalWorkerAgent:
             elif "recursive" in pl:
                 args[pname] = True
             elif "command" in pl or "cmd" in pl:
-                args[pname] = f'dir "{detected_path}"'
+                combined = f"{task.name} {task.description} {user_query}".lower()
+                if "hostname" in combined or "computer name" in combined or "device name" in combined:
+                    args[pname] = "hostname"
+                elif "ip address" in combined or "local ip" in combined or "network adapter" in combined:
+                    args[pname] = "ipconfig" if platform.system() == "Windows" else "ip addr"
+                elif "system info" in combined or "os version" in combined:
+                    args[pname] = "systeminfo" if platform.system() == "Windows" else "uname -a"
+                elif detected_path and os.path.exists(detected_path):
+                    args[pname] = f'dir "{detected_path}"'
+                else:
+                    args[pname] = "hostname"
             elif required:
                 args[pname] = f"{task.name}: {task.description}"[:1000]
 
@@ -727,7 +862,15 @@ class UniversalWorkerAgent:
                     drive = os.path.splitdrive(detected_path)[0]
                     args_example[pname] = f"{drive}\\" if drive else os.path.abspath(os.sep)
                 elif "command" in pname_lower or "cmd" in pname_lower:
-                    args_example[pname] = f"dir \"{detected_path}\""
+                    combined = f"{task.name} {task.description} {user_query}".lower()
+                    if "hostname" in combined or "device name" in combined:
+                        args_example[pname] = "hostname"
+                    elif "ip" in combined:
+                        args_example[pname] = "ipconfig"
+                    elif detected_path and os.path.exists(detected_path):
+                        args_example[pname] = f"dir \"{detected_path}\""
+                    else:
+                        args_example[pname] = "hostname"
                 elif "recursive" in pname_lower:
                     args_example[pname] = True
                 elif "alert_text" in pname_lower or "raw_evidence" in pname_lower or "evidence_summary" in pname_lower:
