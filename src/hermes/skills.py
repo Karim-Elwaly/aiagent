@@ -37,9 +37,21 @@ def slug(name: str) -> str:
     return re.sub(r"[^a-z0-9]+", "-", name.lower()).strip("-") or "skill"
 
 
+def flat_parameters(spec: ToolSpec) -> dict[str, Any]:
+    """``{name: {type, required, ...}}`` for both parameter styles: flat (native tools) and JSON schema (connectors)."""
+    params = spec.parameters or {}
+    if not isinstance(params.get("properties"), dict):
+        return params
+    required = set(params.get("required") or [])
+    return {
+        name: {**prop, "required": name in required} if isinstance(prop, dict) else prop
+        for name, prop in params["properties"].items()
+    }
+
+
 def _param_lines(spec: ToolSpec) -> list[str]:
     lines = []
-    for pname, raw in spec.parameters.items():
+    for pname, raw in flat_parameters(spec).items():
         prop = raw if isinstance(raw, dict) else {}
         flags = [str(prop.get("type", "any"))]
         if prop.get("required"):

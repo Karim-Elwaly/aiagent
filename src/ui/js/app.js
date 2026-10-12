@@ -3835,7 +3835,7 @@ Enforces strict types and feeds validation tracebacks back to the LLM for self-c
 
     drug: `---
 name: drug_discovery
-description: Computational cheminformatics: parse chemical SMILES representations, compute descriptors, and bioactivity.
+description: "Computational cheminformatics: parse chemical SMILES representations, compute descriptors, and bioactivity."
 author: Nous Research / Hermes Science
 version: 1.0.0
 metadata:
@@ -3900,7 +3900,7 @@ Transforms component interactions into structured Mermaid diagrams.`,
 
     herenow: `---
 name: here_now
-description: Real-time contextual briefing: compute local sunrise/sunset, timezone offsets, and weather forecasts.
+description: "Real-time contextual briefing: compute local sunrise/sunset, timezone offsets, and weather forecasts."
 author: Nous Research / Hermes Productivity
 version: 1.1.0
 metadata:
@@ -3915,7 +3915,7 @@ Provides real-time local intelligence and operational context.`,
 
     fitness: `---
 name: fitness_nutrition
-description: Quantitative nutritional science: calculate basal metabolic rate (BMR), TDEE, and macronutrient partitioning.
+description: "Quantitative nutritional science: calculate basal metabolic rate (BMR), TDEE, and macronutrient partitioning."
 author: Nous Research / Hermes Health
 version: 1.0.0
 metadata:

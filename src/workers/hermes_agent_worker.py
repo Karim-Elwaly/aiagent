@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import re
 import time
 import uuid
 from collections.abc import Callable
@@ -32,6 +33,12 @@ ENGINE = "hermes"
 # Hermes 0.21.5 registers MCP tools as mcp__<server>__<tool>.
 MCP_TOOL_PREFIX = f"mcp__{MCP_SERVER_NAME}__"
 MCP_READY_TIMEOUT_SECONDS = 180
+CONFIG_PICKUP_SECONDS = 20
+# Sampling-dependent model-server faults, e.g. LM Studio rejecting a gpt-oss harmony message it can't parse.
+MODEL_ERROR = re.compile(
+    r"server_error|\"code\"\s*:\s*5\d\d|error code:?\s*5\d\d|does not match the expected|predict stream", re.I
+)
+MODEL_ERROR_RETRIES = 2
 APPROVAL_LABELS = {
     "once": "Allow once",
     "session": "Allow for this run",
@@ -39,6 +46,8 @@ APPROVAL_LABELS = {
     "deny": "Deny",
 }
 _profile_locks: dict[str, asyncio.Lock] = {}
+_gateway_lock = asyncio.Lock()
+_gateway_restarted_at = float("-inf")
 
 
 def display_tool_name(name: str) -> str:
@@ -100,12 +109,19 @@ class HermesAgentWorker:
         except HermesError as exc:
             return self._failed(task, start, f"Could not prepare the Hermes profile: {exc}")
 
-        if info.changed and not await self._wait_for_mcp(info.name):
-            return self._failed(task, start, (
-                f"Hermes has not connected aiagent's tools on profile '{info.name}' within "
-                f"{MCP_READY_TIMEOUT_SECONDS}s of configuring it. Check that the Hermes gateway is running "
-                f"(hermes gateway restart) and can reach {self.settings.hermes_mcp_url}."
-            ))
+        if info.restarted:
+            global _gateway_restarted_at
+            _gateway_restarted_at = time.monotonic()
+        if not self.profiles.state.mcp_connected(info.name):
+            # The gateway connects MCP servers at startup, so a new or reconfigured profile usually needs a restart.
+            if not (info.changed and await self._wait_for_mcp(info.name, CONFIG_PICKUP_SECONDS)):
+                await self._restart_gateway(info.name)
+            if not await self._wait_for_mcp(info.name, MCP_READY_TIMEOUT_SECONDS):
+                return self._failed(task, start, (
+                    f"Hermes has not connected aiagent's tools on profile '{info.name}' within "
+                    f"{MCP_READY_TIMEOUT_SECONDS}s. Check that the Hermes gateway is running "
+                    f"(hermes gateway restart) and can reach {self.settings.hermes_mcp_url}."
+                ))
 
         lock = _profile_locks.setdefault(info.name, asyncio.Lock())
         async with lock:
@@ -138,51 +154,74 @@ class HermesAgentWorker:
         start: float,
     ) -> TaskResult:
         run_id, last_seq = self._resumable(resume_checkpoint, profile)
-        try:
-            if not run_id:
-                run_id = await self.client.create_run(
-                    profile, key, self._user_content(task, user_query, upstream_context), instructions=persona,
-                    session_id=f"aiagent-{workflow_id or 'run'}-{task.id}-{uuid.uuid4().hex[:6]}",
-                )
-                logger.info("Task '%s' started Hermes run %s on profile '%s'", task.id, run_id, profile)
-            else:
-                logger.info("Task '%s' reattaching to Hermes run %s after seq %d", task.id, run_id, last_seq)
-        except HermesAPIError as exc:
-            return self._failed(task, start, str(exc))
-        except httpx.HTTPError as exc:
-            raise TransientLLMError(f"Hermes Agent unreachable at {self.settings.hermes_api_url}: {exc}",
-                                    original_error=exc) from exc
-
+        session_id = self._new_session_id(workflow_id, task)
+        follow_up: str | None = None
+        model_errors = 0
+        steered = False
         tool_calls: list[str] = []
-        outcome: dict[str, Any] = {}
-        try:
-            async with asyncio.timeout(self.settings.hermes_run_timeout_seconds):
-                async for event in self.client.events(profile, key, run_id, last_seq):
-                    last_seq = int(event.get("seq", last_seq))
-                    self._heartbeat(on_heartbeat, task, run_id, profile, last_seq)
-                    if await self._handle(event, task, profile, key, run_id, tool_calls, on_token, on_event,
-                                          workflow_id):
-                        outcome = event
-                        break
-                if not outcome:
-                    outcome = await self.client.get_run(profile, key, run_id)
-        except TimeoutError:
-            await self._stop(profile, key, run_id)
-            return self._failed(task, start, f"Hermes run {run_id} timed out after "
-                                             f"{self.settings.hermes_run_timeout_seconds}s", tool_calls)
-        except HermesAPIError as exc:
-            return self._failed(task, start, str(exc), tool_calls)
-        except httpx.HTTPError as exc:
-            raise TransientLLMError(f"Lost the Hermes run {run_id}: {exc}", original_error=exc) from exc
+        while True:
+            try:
+                if not run_id:
+                    run_id = await self.client.create_run(
+                        profile, key, follow_up or self._user_content(task, user_query, upstream_context),
+                        instructions=persona, session_id=session_id,
+                    )
+                    logger.info("Task '%s' started Hermes run %s on profile '%s'", task.id, run_id, profile)
+                else:
+                    logger.info("Task '%s' reattaching to Hermes run %s after seq %d", task.id, run_id, last_seq)
+            except HermesAPIError as exc:
+                return self._failed(task, start, str(exc))
+            except httpx.HTTPError as exc:
+                raise TransientLLMError(f"Hermes Agent unreachable at {self.settings.hermes_api_url}: {exc}",
+                                        original_error=exc) from exc
 
-        status = str(outcome.get("status") or str(outcome.get("event", "")).removeprefix("run."))
-        if status != "completed":
-            reason = outcome.get("error") or f"Hermes run ended as '{status or 'unknown'}'"
+            outcome: dict[str, Any] = {}
+            try:
+                async with asyncio.timeout(self.settings.hermes_run_timeout_seconds):
+                    async for event in self.client.events(profile, key, run_id, last_seq):
+                        last_seq = int(event.get("seq", last_seq))
+                        self._heartbeat(on_heartbeat, task, run_id, profile, last_seq)
+                        if await self._handle(event, task, profile, key, run_id, tool_calls, on_token, on_event,
+                                              workflow_id):
+                            outcome = event
+                            break
+                    if not outcome:
+                        outcome = await self.client.get_run(profile, key, run_id)
+            except TimeoutError:
+                await self._stop(profile, key, run_id)
+                return self._failed(task, start, f"Hermes run {run_id} timed out after "
+                                                 f"{self.settings.hermes_run_timeout_seconds}s", tool_calls)
+            except HermesAPIError as exc:
+                return self._failed(task, start, str(exc), tool_calls)
+            except httpx.HTTPError as exc:
+                raise TransientLLMError(f"Lost the Hermes run {run_id}: {exc}", original_error=exc) from exc
+
+            status = str(outcome.get("status") or str(outcome.get("event", "")).removeprefix("run."))
+            if status == "completed":
+                if tools and not tool_calls and not steered:
+                    # Same session: Hermes replays its history, so the model sees its own ungrounded answer.
+                    logger.info("Task '%s' Hermes run %s answered without tools; steering it to use them",
+                                task.id, run_id)
+                    session_id = str(outcome.get("session_id") or session_id)
+                    follow_up, steered = self._steering_message(tools), True
+                    run_id, last_seq = None, -1
+                    continue
+                break
+            reason = str(outcome.get("error") or f"Hermes run ended as '{status or 'unknown'}'")
+            if model_errors < MODEL_ERROR_RETRIES and MODEL_ERROR.search(reason):
+                model_errors += 1
+                logger.warning("Task '%s' Hermes run %s hit an inference-server error (retry %d/%d), "
+                               "starting a fresh run: %s", task.id, run_id, model_errors, MODEL_ERROR_RETRIES,
+                               reason)
+                run_id, last_seq = None, -1
+                session_id, follow_up, steered, tool_calls = self._new_session_id(workflow_id, task), None, False, []
+                continue
             return self._failed(task, start, f"Hermes run {run_id}: {reason}", tool_calls)
+
         if tools and not tool_calls:
             return self._failed(task, start, (
                 f"No evidence collected: Hermes finished without calling any of the {len(tools)} tools "
-                "available for this task. Any findings would be unverified model recall."
+                "available for this task, even after being asked to. Any findings would be unverified model recall."
             ), tool_calls)
 
         output = str(outcome.get("output") or "").strip() or f"Task completed: {task.name}."
@@ -240,9 +279,19 @@ class HermesAgentWorker:
         await self.client.respond_approval(profile, key, run_id, choice, event.get("request_id"))
         logger.info("Task '%s' Hermes approval on run %s answered '%s'", task.id, run_id, choice)
 
-    async def _wait_for_mcp(self, profile: str) -> bool:
-        """A (re)configured profile picks up its MCP server on Hermes's next config scan, usually within a minute."""
-        deadline = time.monotonic() + MCP_READY_TIMEOUT_SECONDS
+    async def _restart_gateway(self, profile: str) -> None:
+        global _gateway_restarted_at
+        async with _gateway_lock:
+            if self.profiles.state.mcp_connected(profile):
+                return
+            if time.monotonic() - _gateway_restarted_at < MCP_READY_TIMEOUT_SECONDS:
+                return  # a concurrent task already restarted it; just wait for the listing
+            logger.info("Hermes has not listed aiagent's tools on profile '%s'; restarting the gateway", profile)
+            await asyncio.to_thread(self.profiles.restart_gateway)
+            _gateway_restarted_at = time.monotonic()
+
+    async def _wait_for_mcp(self, profile: str, timeout: float) -> bool:
+        deadline = time.monotonic() + timeout
         while time.monotonic() < deadline:
             if self.profiles.state.mcp_connected(profile):
                 return True
@@ -279,6 +328,19 @@ class HermesAgentWorker:
             on_heartbeat()
         except Exception:
             pass
+
+    @staticmethod
+    def _new_session_id(workflow_id: str, task: Task) -> str:
+        return f"aiagent-{workflow_id or 'run'}-{task.id}-{uuid.uuid4().hex[:6]}"
+
+    @staticmethod
+    def _steering_message(tools: list[ToolSpec]) -> str:
+        names = ", ".join(f"{MCP_TOOL_PREFIX}{t.name}" for t in tools)
+        return (
+            "You answered without calling any tool, so nothing in that answer is backed by evidence. "
+            f"Call at least one of these tools now: {names}. Point it at the investigation target or the "
+            "data from previous tasks, then give your final answer based on what the tools returned."
+        )
 
     @staticmethod
     def _user_content(task: Task, user_query: str, upstream_context: dict[str, str] | None) -> str:

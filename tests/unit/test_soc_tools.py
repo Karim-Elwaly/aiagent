@@ -91,20 +91,45 @@ async def test_propose_containment_response():
     assert "Target Entity  : 198.51.100.44" in res_str
     assert "Action Type    : BLOCK_IP" in res_str
     assert "iptables" in res_str
-    assert "Ready for operator approval" in res_str
+    # The tool has no enforcement path, so it must never imply the rules were applied.
+    assert "NOT APPLIED" in res_str
+    assert "successfully applied" not in res_str.lower()
 
 
 @pytest.mark.asyncio
-async def test_analyze_incident_impact():
+async def test_propose_containment_never_claims_success_when_dry_run_disabled():
+    """dry_run=False must not turn a proposal into a claimed enforcement action."""
+    from src.registry.tools.soc_tools import propose_containment_response
+
+    res_str = await propose_containment_response(
+        target_entity="198.51.100.44",
+        action_type="block_ip",
+        justification="Active SSH brute force and C2 egress",
+        dry_run=False,
+    )
+    assert "NOT APPLIED" in res_str
+    assert "successfully applied" not in res_str.lower()
+
+
+@pytest.mark.asyncio
+async def test_analyze_incident_impact_reports_only_grounded_entities():
+    """The impact report must not invent assets, accounts, or volumes.
+
+    This previously passed because the tool carried a hardcoded expansion that
+    injected a specific host, two account names and an exfiltration volume whenever
+    it recognised one phrase. That is fabricated evidence: none of it is derivable
+    from the input, so on any unseen incident it would be simply false.
+    """
     from src.registry.tools.soc_tools import analyze_incident_impact
 
     impact_report = await analyze_incident_impact("Compromised domain admin credentials on WKSTN-FIN-04")
     assert "=== [ENTERPRISE BLAST RADIUS & IMPACT ASSESSMENT REPORT] ===" in impact_report
-    assert "WKSTN-FIN-04" in impact_report
-    assert "DC01" in impact_report
-    assert "da_admin" in impact_report
-    assert "svc_backup_admin" in impact_report
-    assert "452.8 MB" in impact_report
+
+    # Entities absent from the input must be absent from the report.
+    for invented in ("DC01", "da_admin", "svc_backup_admin", "452.8 MB", "PSEXESVC"):
+        assert invented not in impact_report, (
+            f"impact report invented {invented!r}, which does not appear in its input"
+        )
 
 
 @pytest.mark.asyncio
@@ -875,7 +900,7 @@ async def test_case5_dns_tunneling_and_exfiltration_full_pipeline(tmp_path):
 
     # Verify Benign Traps are discriminated
     assert "BENIGN BASELINE ENTERPRISE TRAFFIC" in evidence
-    assert "Corporate cloud backup" in evidence
+    assert "Sanctioned bulk transfer" in evidence
 
     # Verify Host Noise is filtered: Benign hosts must NOT be in compromised internal IPs list
     assert "192.168.10.5" not in evidence or "BENIGN" in evidence or "Spamhaus" in evidence

@@ -49,6 +49,7 @@ class ProfileInfo:
     name: str
     api_key: str
     changed: bool  # the aiagent MCP connection was (re)configured: wait for Hermes to list the tools again
+    restarted: bool = False
 
 
 def hermes_home(settings: Any) -> Path:
@@ -136,10 +137,25 @@ class ProfileState:
                 return {"profile": name, **entry}
         return None
 
+    @property
+    def _endpoint_path(self) -> Path:
+        return self.path.with_name("mcp_endpoint.json")
+
+    def mark_endpoint_started(self) -> None:
+        self._endpoint_path.parent.mkdir(parents=True, exist_ok=True)
+        self._endpoint_path.write_text(json.dumps({"started_at": time.time()}), encoding="utf-8")
+
+    def endpoint_started_at(self) -> float:
+        try:
+            return float(json.loads(self._endpoint_path.read_text(encoding="utf-8")).get("started_at", 0))
+        except (OSError, ValueError, AttributeError):
+            return 0.0
+
     def mcp_connected(self, name: str) -> bool:
-        """Hermes has listed aiagent's tools since the profile was last (re)configured."""
+        """Hermes has listed aiagent's tools since the profile was last (re)configured and the endpoint started."""
         entry = self.get(name)
-        return float(entry.get("mcp_listed_at", 0)) >= float(entry.get("configured_at", 0))
+        since = max(float(entry.get("configured_at", 0)), self.endpoint_started_at())
+        return float(entry.get("mcp_listed_at", 0)) >= since
 
 
 _SOUL_PLACEHOLDERS = {
@@ -217,6 +233,7 @@ class HermesProfiles:
         name = profile_name(agent_id)
         pdir = self.home / "profiles" / name
         changed = False
+        restarted = False
         created = not pdir.is_dir()
         if created:
             description = (render_description(agent) if agent else
@@ -275,6 +292,11 @@ class HermesProfiles:
             self._run(["-p", name, "config", "set", f"mcp_servers.{MCP_SERVER_NAME}.timeout",
                        str(self.settings.hermes_run_timeout_seconds)])
             changed = True
+            if applied.get("mcp_url"):
+                # The running gateway keeps the old URL for new runs until it restarts (no MCP reload command).
+                logger.info("aiagent's MCP URL moved %s -> %s", applied["mcp_url"], mcp_url)
+                self.restart_gateway()
+                restarted = True
 
         self.state.update(name, {
             "agent_id": agent_id or "",
@@ -285,7 +307,15 @@ class HermesProfiles:
             **identity,
             **({"configured_at": time.time()} if changed else {}),
         })
-        return ProfileInfo(name=name, api_key=api_key, changed=changed)
+        return ProfileInfo(name=name, api_key=api_key, changed=changed, restarted=restarted)
+
+    def restart_gateway(self) -> None:
+        """The only way to revive a parked MCP server or drop a cached URL in a running gateway."""
+        try:
+            self._run(["gateway", "restart"])
+            logger.info("Restarted the Hermes gateway")
+        except HermesError as exc:
+            logger.warning("Could not restart the Hermes gateway: %s", exc)
 
     def add_default_toolset(self, toolset: str) -> None:
         extra = set(self.state.get(DEFAULT_PROFILE).get("extra_toolsets", []))

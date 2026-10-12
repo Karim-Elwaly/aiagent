@@ -1,6 +1,6 @@
 ---
 name: fitness_nutrition
-description: Quantitative nutritional science: calculate basal metabolic rate (BMR), total daily energy expenditure (TDEE), and macronutrient partitioning.
+description: "Quantitative nutritional science: calculate basal metabolic rate (BMR), total daily energy expenditure (TDEE), and macronutrient partitioning."
 author: Nous Research / Hermes Health
 version: 1.0.0
 license: MIT

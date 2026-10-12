@@ -3,6 +3,7 @@ import logging
 import os
 from pathlib import Path
 from typing import Any
+from pydantic import model_validator
 from pydantic_settings import BaseSettings
 
 logger = logging.getLogger(__name__)
@@ -44,7 +45,7 @@ class Settings(BaseSettings):
     hermes_api_url: str = "http://127.0.0.1:8642"
     hermes_home: str = ""  # empty: %LOCALAPPDATA%\hermes when it exists, else ~/.hermes
     hermes_bin: str = ""  # empty: the hermes executable under hermes_home, else PATH
-    hermes_mcp_url: str = "http://127.0.0.1:8000/mcp/"  # where Hermes reaches aiagent's tools
+    hermes_mcp_url: str = ""  # where Hermes reaches aiagent's tools; empty: derived from api_port
     hermes_default_toolsets: list[str] = ["web"]  # Hermes built-ins every aiagent profile gets
     hermes_run_timeout_seconds: int = 1800
     hermes_approval_timeout_seconds: int = 600
@@ -145,6 +146,12 @@ class Settings(BaseSettings):
         "env_file_encoding": "utf-8",
         "extra": "ignore",
     }
+
+    @model_validator(mode="after")
+    def _default_hermes_mcp_url(self) -> "Settings":
+        if not self.hermes_mcp_url:
+            self.hermes_mcp_url = f"http://127.0.0.1:{self.api_port}/mcp/"
+        return self
 
 
 # Singleton instance

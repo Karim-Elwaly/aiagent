@@ -62,16 +62,100 @@ def _is_private_ip(ip: str) -> bool:
     return False
 
 
-def _is_cellular_ip(ip: str) -> bool:
-    """Check if an IP belongs to known mobile cellular dynamic client pools (e.g. T-Mobile US 172.56.0.0/16)."""
-    return bool(ip and ip.startswith("172.56."))
+def _is_same_network_allocation(ip1: str, ip2: str) -> bool:
+    """Check whether two public addresses sit in the same provider allocation.
 
-
-def _is_cloud_provider_ip(ip: str) -> bool:
-    """Check if an IP belongs to legitimate enterprise cloud providers (Azure/M365 13.107.0.0/16, AWS S3 52.216.0.0/15)."""
-    if not ip:
+    A client that changes address within one provider's block while its other
+    attributes stay constant is reassignment (mobile roaming, DHCP renewal, carrier
+    NAT rotation), not relocation. This is inferred from the addresses themselves so
+    it holds for any provider, rather than depending on a list of known carriers.
+    """
+    if not ip1 or not ip2 or ip1 == ip2:
         return False
-    return ip.startswith("13.107.") or ip.startswith("52.216.") or ip.startswith("52.217.")
+    if _is_private_ip(ip1) or _is_private_ip(ip2):
+        return False
+    return ip1.split(".")[:2] == ip2.split(".")[:2]
+
+
+def _format_byte_volume(num_bytes: int) -> str:
+    """Render a byte count in decimal SI units alongside the exact figure.
+
+    Network devices log byte counts as plain decimal integers, so a volume must be
+    scaled by powers of 1000 (MB = 10^6, GB = 10^9) rather than 1024. Scaling by
+    1024 and labelling the result "MB"/"GB" silently understates every transfer by
+    ~5% per order of magnitude. The exact byte count is always included so that
+    downstream analysis can quote the source figure verbatim.
+    """
+    if num_bytes >= 1_000_000_000:
+        return f"{num_bytes / 1_000_000_000:.2f} GB ({num_bytes:,} bytes)"
+    if num_bytes >= 1_000_000:
+        return f"{num_bytes / 1_000_000:.1f} MB ({num_bytes:,} bytes)"
+    if num_bytes >= 1_000:
+        return f"{num_bytes / 1_000:.1f} KB ({num_bytes:,} bytes)"
+    return f"{num_bytes:,} bytes"
+
+
+# A next-generation firewall labels every flow with an application identity. When
+# deep inspection cannot resolve the flow to a specific application, the vendor
+# falls back to one of the generic transport placeholders below - these are the
+# published, vendor-defined "unclassified" vocabulary, not a list of known-good
+# applications. Any label outside this set means the device positively identified
+# the application carrying the flow.
+_GENERIC_TRANSPORT_APPS = frozenset({
+    "", "-", "none", "any",
+    "ssl", "tls", "ssh", "tcp", "udp", "ip", "http", "https", "web-browsing",
+    "unknown", "unknown-tcp", "unknown-udp", "unknown-p2p", "unknown-ip",
+    "incomplete", "insufficient-data", "not-applicable",
+})
+
+
+def _is_identified_application(app: str) -> bool:
+    """True when the firewall resolved the flow to a specific named application.
+
+    Bulk egress attributed to an identified application is accountable traffic whose
+    destination is that application's own service infrastructure. Bulk egress carried
+    by a generic transport placeholder is unclassified and stays eligible for
+    exfiltration analysis. This reads the device's own verdict instead of assuming
+    any particular vendor or destination.
+    """
+    return (app or "").strip().lower() not in _GENERIC_TRANSPORT_APPS
+
+
+def _is_reputation_lookup_query(text: str) -> bool:
+    """Detect a blocklist / reputation lookup by its structure, not by provider name.
+
+    These services are queried by encoding the subject address as the leading labels
+    of the query name, so the query begins with a dotted quad. Matching that shape
+    covers every such provider, including ones no list would contain, and avoids
+    treating an ordinary lookup as encoded exfiltration.
+    """
+    if not text:
+        return False
+    return bool(re.search(r'(?:^|\s)\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}\.[a-z]', text))
+
+
+def _is_established_service_domain(domain: str) -> bool:
+    """Heuristic: does this name look like an established service rather than a DGA?
+
+    Judged from the name's own structure - a recognisable, pronounceable registrable
+    label under a common generic or country top-level domain - rather than from a
+    list of known providers. Machine-generated service hostnames legitimately carry
+    high-entropy leftmost labels, so entropy must be measured against the registrable
+    domain and corroborated before a name is called algorithmically generated.
+    """
+    if not domain:
+        return False
+    labels = domain.strip(".").lower().split(".")
+    if len(labels) < 2:
+        return False
+    registrable = labels[-2]
+    if len(registrable) < 3:
+        return False
+    # A registrable label with no vowels, or with an unusually high digit ratio, is
+    # characteristic of algorithmic generation rather than a chosen brand name.
+    has_vowel = any(ch in "aeiou" for ch in registrable)
+    digit_ratio = sum(ch.isdigit() for ch in registrable) / len(registrable)
+    return has_vowel and digit_ratio < 0.3 and _shannon_entropy(registrable) < 3.4
 
 
 def _haversine_distance(lat1: float, lon1: float, lat2: float, lon2: float) -> float:
@@ -89,27 +173,38 @@ _DYNAMIC_GEO_CACHE: dict[str, dict[str, Any]] = {}
 
 
 def _resolve_ip_geo(ip: str) -> dict[str, Any]:
-    """Resolve geographic coordinates and location metadata for an IP address."""
+    """Resolve geographic location for an IP address from observed evidence only.
+
+    There is no offline prefix-to-city table here by design. A hardcoded mapping can
+    only ever cover addresses someone anticipated, and on any unseen incident it
+    either returns nothing useful or, worse, asserts a location the evidence does
+    not support. Locations must therefore be registered from the telemetry itself -
+    identity providers generally record the location they resolved - via
+    ``_register_ip_geo``.
+
+    The returned ``known`` flag is the important part of the contract. An unknown
+    location is NOT the coordinate (0, 0): treating it as one places the address off
+    the coast of Africa, which silently manufactures a ~10,000 km displacement
+    against any real location. Callers MUST check ``known`` before computing
+    distance, velocity, or any other geographic claim.
+    """
+    unknown = {"city": "Unknown", "country": "Unknown", "lat": 0.0, "lon": 0.0, "known": False}
     if not ip:
-        return {"city": "Unknown", "country": "Unknown", "lat": 0.0, "lon": 0.0}
-    if ip in _DYNAMIC_GEO_CACHE:
-        return _DYNAMIC_GEO_CACHE[ip]
+        return unknown
+    return _DYNAMIC_GEO_CACHE.get(ip, unknown)
 
-    # Standard regional Autonomous System network prefix mapping (offline GeoIP fallback)
-    geo_fallbacks: dict[str, dict[str, Any]] = {
-        "203.0.113.": {"city": "New York", "country": "US", "lat": 40.7128, "lon": -74.0060},
-        "194.165.16.": {"city": "Frankfurt", "country": "DE", "lat": 50.1109, "lon": 8.6821},
-        "102.164.12.": {"city": "Lagos", "country": "NG", "lat": 6.5244, "lon": 3.3792},
-        "194.26.29.": {"city": "Amsterdam", "country": "NL", "lat": 52.3676, "lon": 4.9041},
-        "185.196.220.": {"city": "St. Petersburg", "country": "RU", "lat": 59.9343, "lon": 30.3351},
-        "185.220.101.": {"city": "Tor Exit Node", "country": "DE", "lat": 52.5200, "lon": 13.4050},
-        "172.56.": {"city": "Dallas", "country": "US", "lat": 32.7767, "lon": -96.7970},
+
+def _register_ip_geo(ip: str, city: str, country: str, lat: float, lon: float) -> None:
+    """Record a location observed in the evidence so later correlation can use it."""
+    if not ip:
+        return
+    _DYNAMIC_GEO_CACHE[ip] = {
+        "city": city or "Unknown",
+        "country": country or "Unknown",
+        "lat": lat,
+        "lon": lon,
+        "known": True,
     }
-    for prefix, data in geo_fallbacks.items():
-        if ip.startswith(prefix):
-            return data
-
-    return {"city": "Unknown", "country": "Unknown", "lat": 0.0, "lon": 0.0}
 
 
 def _shannon_entropy(s: str) -> float:
@@ -407,7 +502,7 @@ async def triage_security_alert(alert_text: str) -> str:
     m_conf = re.search(r'Confirmed Adversary IPs\s*:\s*([^\n\r]+)', alert_text)
     if m_conf:
         for ip in re.findall(IPV4_REGEX, m_conf.group(1)):
-            if not _is_private_ip(ip) and not _is_trusted_cloud_or_cdn(ip) and ip != "198.51.100.99":
+            if not _is_private_ip(ip) and not _is_trusted_cloud_or_cdn(ip):
                 if ip not in confirmed_threat_ips:
                     confirmed_threat_ips.append(ip)
 
@@ -417,11 +512,14 @@ async def triage_security_alert(alert_text: str) -> str:
         "mimikatz", "psexec", "reverse shell", "rootkit", "breakout", "impossible travel",
         "pass-the-prt", "anomaloustoken", "port scan", "syn flood"
     )
+    # Upstream parsers tag lines they have already cleared as baseline activity.
+    # Honour those tags rather than matching against any specific address or service.
+    _triage_benign_markers = ("benign", "authorized", "whitelisted", "do not block")
     for line in alert_text.splitlines():
         ll = line.lower()
-        if any(kw in ll for kw in _triage_atk_keywords) and not any(b in ll for b in ("benign", "cloud backup", "onedrive")):
+        if any(kw in ll for kw in _triage_atk_keywords) and not any(b in ll for b in _triage_benign_markers):
             for ip in re.findall(IPV4_REGEX, line):
-                if not _is_private_ip(ip) and not _is_trusted_cloud_or_cdn(ip) and ip != "198.51.100.99":
+                if not _is_private_ip(ip) and not _is_trusted_cloud_or_cdn(ip):
                     if ip not in confirmed_threat_ips:
                         confirmed_threat_ips.append(ip)
 
@@ -1041,12 +1139,23 @@ def _parse_pfsense_records(
 
     # 3. Benign Internet Noise & Authorized Scanner Identification
     for s_ip, cnt in total_by_src.items():
-        if s_ip == "10.10.10.99":
-            suspicious.append(
-                f"[{filename}] [BENIGN BASELINE AUDIT] Authorized internal security assessment scanner 10.10.10.99 "
-                f"active - Routine vulnerability management audit (Whitelisted)"
-            )
-        elif not _is_private_ip(s_ip) and cnt <= 2:
+        if _is_private_ip(s_ip):
+            # An internal source whose probes the firewall consistently PERMITTED is
+            # operating inside policy. Judge this from the log's own action field
+            # rather than from any specific address.
+            acts = action_by_src.get(s_ip, {})
+            if acts.get("pass", 0) == 0 or acts.get("block", 0) > 0:
+                continue
+            dst_ports = {p for ports in traffic_by_src.get(s_ip, {}).values() for p in ports}
+            if len(dst_ports) >= 3:
+                suspicious.append(
+                    f"[{filename}] [BENIGN BASELINE AUDIT] Internal source {s_ip} probed "
+                    f"{len(dst_ports)} ports from inside the trusted zone with every connection "
+                    f"PERMITTED by policy - consistent with an authorized internal assessment "
+                    f"scanner rather than hostile reconnaissance; confirm against the asset "
+                    f"inventory before acting (DO NOT BLOCK on this evidence alone)"
+                )
+        elif cnt <= 2:
             p_count = sum(len(ports) for ports in traffic_by_src.get(s_ip, {}).values())
             if p_count <= 2 and not any(len(h) >= 3 for (s, _), h in horizontal_by_src_port.items() if s == s_ip):
                 suspicious.append(
@@ -1150,7 +1259,9 @@ def _parse_firewall_traffic_records(
                 if not any(d.lower().startswith(p) for p in ("net.", "system.", "io.", "webclient", "microsoft.", "windows.")):
                     domains.add(d)
 
-        for u in re.findall(r'(?:[a-zA-Z0-9_\-\.\\]+)?(?:da_admin|svc_backup_admin)(?:[a-zA-Z0-9_\-]+)?', line_clean, re.IGNORECASE):
+        # Capture privileged-looking account tokens by naming convention rather than
+        # by a list of known account names, so unfamiliar environments are covered.
+        for u in re.findall(r'\b[a-zA-Z0-9_\-\\.]*(?:admin|adm_|_adm|root|svc[_\-]|backup_op)[a-zA-Z0-9_\-]*\b', line_clean, re.IGNORECASE):
             if len(u) > 3 and not u.endswith((".dll", ".exe", ".log", ".txt", ".pcap", ".csv")):
                 identities.add(u)
 
@@ -1203,9 +1314,12 @@ def _parse_firewall_traffic_records(
                 dst_port = int(parts[25])
             except (ValueError, IndexError):
                 pass
-            rule_name = parts[10] if len(parts) > 10 else ""
-            user_name = parts[11] if len(parts) > 11 else ""
-            app_name = parts[13] if len(parts) > 13 else ""
+            # PAN-OS TRAFFIC log schema: 7=Source IP, 8=Destination IP,
+            # 9=NAT Source, 10=NAT Destination, 11=Rule Name, 12=Source User,
+            # 13=Destination User, 14=Application.
+            rule_name = parts[11] if len(parts) > 11 else ""
+            user_name = parts[12] if len(parts) > 12 else ""
+            app_name = parts[14] if len(parts) > 14 else ""
 
             # Check columns 30 to 35 for bytes numbers dynamically
             found_bytes = []
@@ -1221,6 +1335,22 @@ def _parse_firewall_traffic_records(
                     bytes_rcvd = found_bytes[1]
             elif len(found_bytes) == 1:
                 bytes_sent = found_bytes[0]
+
+        # Non-positional formats (key=value syslog, CEF, LEEF) carry the same
+        # policy/identity/application fields under named keys. Read them from the
+        # log's own field names rather than inferring them from message text.
+        if not rule_name:
+            m_rule = re.search(r'(?:rule_name|policy_name|rule|policy|acl)[=:]\s*"?([^",\s]+)', line_clean, re.IGNORECASE)
+            if m_rule:
+                rule_name = m_rule.group(1)
+        if not user_name:
+            m_user = re.search(r'(?:src_user|srcuser|user_name|username|account|user)[=:]\s*"?([^",\s]+)', line_clean, re.IGNORECASE)
+            if m_user:
+                user_name = m_user.group(1)
+        if not app_name:
+            m_app = re.search(r'(?:application|app_id|appid|app)[=:]\s*"?([^",\s]+)', line_clean, re.IGNORECASE)
+            if m_app:
+                app_name = m_app.group(1)
 
         if not dst_port:
             m_port = re.search(r'(?:dstport|dpt|dport|port)[=:\s]+(\d+)', line_clean, re.IGNORECASE)
@@ -1238,11 +1368,6 @@ def _parse_firewall_traffic_records(
             m_rcvd = re.search(r'(?:bytes_received|rcvd_bytes|bytesin|bytes_in|in_bytes)[=:\s]+(\d+)', line_clean, re.IGNORECASE)
             if m_rcvd:
                 bytes_rcvd = int(m_rcvd.group(1))
-
-        if "ms-onedrive" in line_clean.lower() or "onedrive" in line_clean.lower():
-            app_name = "ms-onedrive"
-        if "backup" in line_clean.lower():
-            rule_name = "Backup-To-Cloud"
 
         if src_ip and dst_ip:
             flows[(src_ip, dst_ip, dst_port or 0)].append({
@@ -1299,38 +1424,56 @@ def _parse_firewall_traffic_records(
                 )
                 ips.add(d_ip)
 
-        # 2. Bulk Data Exfiltration vs. Whitelisted Corporate Cloud Backup
+        # 2. Bulk Data Exfiltration vs. Sanctioned Corporate Cloud Backup
         has_bulk_size = total_sent >= 50_000_000
         if has_bulk_size:
             is_backup = False
             backup_reason = ""
             for f in f_list:
-                if "backup" in f["rule"].lower() or "backup" in f["user"].lower() or "svc-backup" in f["raw"].lower():
+                # Judge sanctioned bulk transfer from the log's own policy/identity
+                # fields - the firewall rule it matched and the account that ran it -
+                # rather than from any hardcoded provider address or application name.
+                rule_l = (f["rule"] or "").lower()
+                user_l = (f["user"] or "").lower()
+                if any(k in rule_l for k in ("backup", "archive", "sync", "replicat")):
                     is_backup = True
-                    backup_reason = f"Rule '{f['rule'] or 'Backup-To-Cloud'}', user '{f['user'] or 'svc-backup'}'"
+                    backup_reason = (
+                        f"Matched sanctioned egress policy '{f['rule']}'"
+                        + (f" under service account '{f['user']}'" if f["user"] else "")
+                    )
                     break
-                if f["app"] == "ms-onedrive" or "onedrive" in f["raw"].lower() or d_ip.startswith("13.107."):
+                if any(k in user_l for k in ("backup", "svc-", "svc_", "service")):
                     is_backup = True
-                    backup_reason = "Microsoft Azure OneDrive enterprise synchronization"
+                    backup_reason = (
+                        f"Transfer performed by service account '{f['user']}'"
+                        + (f" under policy '{f['rule']}'" if f["rule"] else "")
+                    )
                     break
-                if d_ip.startswith("52.216.") or d_ip.startswith("52.217.") or "s3" in f["raw"].lower():
+                # Policy names alone cannot separate sanctioned from malicious egress
+                # when both traverse the same broad allow rule. Fall back to the
+                # device's own application verdict: an identified application means
+                # the destination is that application's service infrastructure, while
+                # a generic transport placeholder means the egress is unclassified.
+                if _is_identified_application(f["app"]):
                     is_backup = True
-                    backup_reason = "Amazon Web Services (AWS) S3 bucket enterprise storage"
+                    backup_reason = (
+                        f"Firewall application inspection resolved this flow to the "
+                        f"identified application '{f['app']}'"
+                        + (f" under policy '{f['rule']}'" if f["rule"] else "")
+                        + (f" for account '{f['user']}'" if f["user"] else "")
+                    )
                     break
 
-            # Calculate size string dynamically
-            if total_sent >= 1_000_000_000:
-                size_str = f"{total_sent / (1024**3):.2f} GB ({total_sent:,} bytes)"
-            elif total_sent >= 1_000_000:
-                size_str = f"{total_sent / (1024**2):.1f} MB ({total_sent:,} bytes)"
-            else:
-                size_str = f"{total_sent:,} bytes"
+            # Report volume in decimal SI units (MB = 10^6, GB = 10^9) to match the
+            # convention network devices use when logging byte counts, and always
+            # carry the exact byte count so downstream analysis never has to re-derive it.
+            size_str = _format_byte_volume(total_sent)
 
             if is_backup:
                 suspicious.append(
                     f"[{filename}] [BENIGN BASELINE ENTERPRISE TRAFFIC] "
-                    f"Corporate cloud backup: {size_str} transferred from {s_ip} to {d_ip}:{d_port or 443} "
-                    f"({backup_reason}) - Filtered as authorized enterprise backup (Whitelisted)"
+                    f"Sanctioned bulk transfer: {size_str} sent from {s_ip} to {d_ip}:{d_port or 443} "
+                    f"({backup_reason}) - attributable business egress, not exfiltration to an unclassified endpoint"
                 )
             else:
                 ratio_str = f"{total_sent / (total_rcvd + 1):.0f}:1" if total_rcvd > 0 else "Asymmetric Egress"
@@ -1406,8 +1549,14 @@ def _parse_dns_log_records(
         root_dom = ".".join(parts_dom[-2:]).lower() if len(parts_dom) >= 2 else query_domain.lower()
 
         # 1. Hex-encoded Subdomain Exfiltration
+        # A reputation/blocklist lookup encodes a reversed IPv4 address as the leading
+        # labels of the query. That is a structural signature, so detect it directly
+        # instead of maintaining a list of blocklist provider names.
+        is_reputation_lookup = bool(
+            re.match(r'^\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}\.', query_domain)
+        )
         hex_match = re.search(r'([0-9a-fA-F]{16,})', query_domain)
-        if hex_match and not any(k in query_domain.lower() for k in ["spamhaus", "sorbs", "dnsbl"]):
+        if hex_match and not is_reputation_lookup:
             chunk_hex = hex_match.group(1)
             m_chk = re.search(r'chunk(\d+)', query_domain, re.IGNORECASE)
             seq = int(m_chk.group(1)) if m_chk else len(hex_exfil_queries[(client_ip, root_dom)])
@@ -1485,7 +1634,7 @@ def _parse_dns_log_records(
     for c_ip, q_list in nxdomain_queries.items():
         dga_candidates = [
             q for q in q_list
-            if q["entropy"] >= 3.4 and not any(k in q["domain"].lower() for k in ["cloudfront", "spamhaus", "google", "microsoft", "azure"])
+            if q["entropy"] >= 3.4 and not _is_established_service_domain(q["domain"])
         ]
         if len(dga_candidates) >= 3:
             d_names = [q["domain"] for q in dga_candidates]
@@ -1507,7 +1656,7 @@ def _parse_dns_log_records(
                 f"CloudFront/CDN edge cache distribution - Filtered as authorized corporate CDN infrastructure"
             )
             break
-        elif any(dnsbl in line_lower for dnsbl in ["spamhaus.org", "zen.spamhaus", "sorbs.net"]):
+        elif _is_reputation_lookup_query(line_lower):
             suspicious.append(
                 f"[{filename}] [BENIGN BASELINE DNS] Legitimate mail server DNSBL reputation lookup: "
                 f"DNSBL query - Filtered as routine inbound spam filtering"
@@ -1916,12 +2065,15 @@ def _parse_identity_logs(
                     loc = ev.get("location") or {}
                     geo = loc.get("geoCoordinates") or {}
                     if ip_addr and geo.get("latitude") is not None and geo.get("longitude") is not None:
-                        _DYNAMIC_GEO_CACHE[ip_addr] = {
-                            "city": loc.get("city", "Unknown"),
-                            "country": loc.get("countryOrRegion", "Unknown"),
-                            "lat": float(geo["latitude"]),
-                            "lon": float(geo["longitude"])
-                        }
+                        # The identity provider resolved this location; record it so
+                        # other sources observing the same address can reuse it.
+                        _register_ip_geo(
+                            ip_addr,
+                            loc.get("city", "Unknown"),
+                            loc.get("countryOrRegion", "Unknown"),
+                            float(geo["latitude"]),
+                            float(geo["longitude"]),
+                        )
             except Exception:
                 pass
 
@@ -1958,18 +2110,19 @@ def _parse_identity_logs(
                         )
                         break
 
-    # 1C. Trap 2: Benign Cellular Roaming on VPN (Alice Wang)
+    # 1C. Trap: address reassignment within one provider allocation is not travel
     cellular_pairs = set()
     for u, sess_list in vpn_sessions_by_user.items():
         if len(sess_list) >= 2:
             for j in range(1, len(sess_list)):
                 ip1 = sess_list[j - 1]["src_ip"]
                 ip2 = sess_list[j]["src_ip"]
-                if _is_cellular_ip(ip1) and _is_cellular_ip(ip2):
+                if _is_same_network_allocation(ip1, ip2):
                     cellular_pairs.add((u, ip1, ip2))
                     suspicious.append(
-                        f"[{filename}] [BENIGN CELLULAR ROAMING] Normal mobile carrier IP handoff for '{u}' "
-                        f"({ip1} -> {ip2}) - Dynamic cellular client roaming (DO NOT BLOCK)"
+                        f"[{filename}] [BENIGN CELLULAR ROAMING] Address reassignment within a single "
+                        f"provider allocation for '{u}' ({ip1} -> {ip2}) - dynamic client roaming, "
+                        f"not geographic relocation (DO NOT BLOCK)"
                     )
 
     # 1D. Valid Account Compromise via Spray Success (T1078.002 - David Clark)
@@ -1995,7 +2148,7 @@ def _parse_identity_logs(
                 curr_s = sess_list[j]
                 ip1 = prev_s["src_ip"]
                 ip2 = curr_s["src_ip"]
-                if ip1 != ip2 and (u, ip1, ip2) not in cellular_pairs and not (_is_cellular_ip(ip1) and _is_cellular_ip(ip2)):
+                if ip1 != ip2 and (u, ip1, ip2) not in cellular_pairs and not _is_same_network_allocation(ip1, ip2):
                     t1 = prev_s["time"]
                     t2 = curr_s["time"]
                     if not (t1 and t2):
@@ -2004,6 +2157,21 @@ def _parse_identity_logs(
                     if 0 < dt_sec <= 14400:
                         g1 = _resolve_ip_geo(ip1)
                         g2 = _resolve_ip_geo(ip2)
+                        if not (g1["known"] and g2["known"]):
+                            # No observed location for one of the endpoints. Report the
+                            # address change as a lead rather than inventing coordinates:
+                            # a velocity computed against an unknown location would be
+                            # fabricated, and treating unknown as (0, 0) would produce a
+                            # spurious intercontinental distance.
+                            suspicious.append(
+                                f"[{filename}] [VPN SESSION ORIGIN CHANGE - LOCATION UNRESOLVED] "
+                                f"Account '{u}' established sessions from {ip1} then {ip2} "
+                                f"within {dt_sec/60:.1f} minutes. Geographic velocity could NOT be "
+                                f"computed because no location was observed in the evidence for "
+                                f"{ip1 if not g1['known'] else ip2}. Enrich with geolocation data "
+                                f"before concluding impossible travel."
+                            )
+                            continue
                         dist_km = _haversine_distance(g1["lat"], g1["lon"], g2["lat"], g2["lon"])
                         if dist_km > 500:
                             vel_kmh = dist_km / (dt_sec / 3600.0)
@@ -2089,11 +2257,12 @@ def _parse_identity_logs(
                     )
                     continue
 
-                # 2D. Cellular Roaming
-                if _is_cellular_ip(prev_ip) and _is_cellular_ip(ip) and prev_city == city:
+                # 2D. Address reassignment inside one provider allocation, same location
+                if _is_same_network_allocation(prev_ip, ip) and prev_city == city:
                     suspicious.append(
-                        f"[{filename}] [BENIGN CELLULAR ROAMING] Normal mobile carrier IP handoff for '{upn}' "
-                        f"({prev_ip} -> {ip} in {city}) - Dynamic cellular client roaming (DO NOT BLOCK)"
+                        f"[{filename}] [BENIGN CELLULAR ROAMING] Address reassignment within a single "
+                        f"provider allocation for '{upn}' ({prev_ip} -> {ip}, both in {city}) - "
+                        f"dynamic client roaming, not geographic relocation (DO NOT BLOCK)"
                     )
                     continue
 
@@ -2212,7 +2381,8 @@ def _parse_email_gateway_records(
             if m_sc:
                 messages[mid]["spam_score"] = int(m_sc.group(1))
 
-        # Client IP from ICID connection lines (e.g. "New ICID 58212 interface Management address 203.0.113.119" or "interface Management (10.20.10.25) address 203.0.113.119")
+        # Client IP from ICID connection lines, e.g. "New ICID <id> interface Management address <ip>"
+        # or "interface Management (<gateway-ip>) address <client-ip>".
         m_cip = re.search(r'\bICID\s+(\d+)\b.*?\b(?:address|connect from|from)\s+(' + IPV4_REGEX + r')', line_clean, re.IGNORECASE)
         if not m_cip:
             m_icid = re.search(r'\bICID\s+(\d+)\b', line_clean, re.IGNORECASE)
@@ -2675,7 +2845,7 @@ async def gather_log_evidence(
             for ip in re.findall(IPV4_REGEX, sf):
                 typo_ips.add(ip)
                 authorized_ips.add(ip)
-        elif any(k in sf_lower for k in ["cloud backup", "cloud sync", "onedrive", "enterprise cloud egress", "whitelisted baseline"]):
+        elif any(k in sf_lower for k in ["cloud backup", "cloud sync", "enterprise cloud egress", "whitelisted baseline", "benign baseline enterprise traffic", "sanctioned bulk transfer", "attributable business egress"]):
             for ip in re.findall(IPV4_REGEX, sf):
                 cloud_ips.add(ip)
                 authorized_ips.add(ip)
@@ -2702,7 +2872,7 @@ async def gather_log_evidence(
             "spearphishing", "weaponized", "initial access", "phishing",
             "credential dump", "mimikatz", "lateral movement", "service installed",
             "backdoor", "persistence", "cobalt",
-            "finit_module", "sys_call_table", "diamorphine", "kernel module",
+            "finit_module", "sys_call_table", "kernel module",
         ]):
             labeled_attackers = re.findall(r'(?:from\s+(?:adversary\s+|external\s+scanner\s+)?|adversary\s+(?:external\s+scanner\s+|external\s+ip\s+)?|scanner\s+)(\d+\.\d+\.\d+\.\d+)', sf, re.IGNORECASE)
             if labeled_attackers:
@@ -2714,16 +2884,10 @@ async def gather_log_evidence(
                     if not _is_private_ip(ip) and ip not in ("0.0.0.0", "255.255.255.255"):
                         active_threat_ips.add(ip)
 
-    # Dynamic suppression of cloud providers, cellular pools, and single probe noise
-    for ip in ext_ips:
-        if _is_cellular_ip(ip):
-            cellular_ips.add(ip)
-            authorized_ips.add(ip)
-        elif _is_cloud_provider_ip(ip):
-            cloud_ips.add(ip)
-            authorized_ips.add(ip)
-        elif ip == "198.51.100.99":
-            noise_ips.add(ip)
+    # Endpoints are treated as authorized only when the evidence itself classified
+    # the traffic to them as sanctioned business egress (above). No provider address
+    # ranges are assumed benign, so an attacker hosting on a major cloud is still
+    # reported rather than silently suppressed.
 
     # Remove any noise, authorized, or victim target IPs from confirmed active attackers
     confirmed_attackers = sorted([
@@ -2737,8 +2901,13 @@ async def gather_log_evidence(
         "system:kube-scheduler", "sysstat", "logrotate", "daemon",
         "administrators", "domain admins", "enterprise admins", "backup operators",
         "none", "unknown", "system", "local service", "network service", "anonymous logon",
-        "svc-backup", "domain\\svc-backup"
     }
+    # Adversary-controlled sender addresses are infrastructure, not victims. Collect
+    # them from the evidence tags instead of maintaining a list of sender domains.
+    adversary_senders: set[str] = set()
+    for sf in suspicious_findings:
+        if any(k in sf.lower() for k in ("sender", "phishing", "spearphishing", "mailer")):
+            adversary_senders.update(a.lower() for a in re.findall(EMAIL_REGEX, sf))
     for sf in suspicious_findings:
         if "[BENIGN BASELINE ADMIN MAINTENANCE]" in sf:
             for u in re.findall(r"administrator '([^']+)'", sf):
@@ -2754,7 +2923,7 @@ async def gather_log_evidence(
         u for u in targeted_identities
         if u.lower() not in benign_identities
         and not any(u.lower().startswith(p) for p in ["system:node:", "system:kube-"])
-        and not any(u.lower().endswith(dom) for dom in ("@overdue-invoices-center.org", "@enterprise-deals-weekly.biz", "@vendorportal.com", "@partner-advisory.com"))
+        and u.lower() not in adversary_senders
     }
 
     # Filter out loopback and benign controller IPs from compromised internal assets
@@ -2940,19 +3109,15 @@ async def lookup_threat_indicators(indicator: str, indicator_type: str = "auto")
 
         if ind_type == "ip":
             if _is_private_ip(clean_ind):
-                if clean_ind.endswith(".99") or "scanner" in clean_ind.lower():
-                    results.append("Classification: Authorized Internal Vulnerability Assessment Scanner.")
-                    results.append("Risk Level: BENIGN / AUTHORIZED AUDIT ASSET (Whitelisted Baseline).")
-                    results.append("Action: Whitelist from automated containment; verify against scheduled vulnerability assessment.")
+                if "scanner" in clean_ind.lower():
+                    results.append("Classification: Internal asset identified by the evidence as an assessment scanner.")
+                    results.append("Risk Level: BENIGN / AUTHORIZED AUDIT ASSET (confirm against the asset inventory).")
+                    results.append("Action: Verify against scheduled vulnerability assessment before any containment.")
                 else:
                     results.append("Classification: RFC 1918 Private Internal Address (Internal Network Asset).")
                     results.append("Risk Level: LOW (Internal infrastructure / workstation subnet).")
                     results.append("Action: Correlate internal lateral movement from this endpoint.")
-            elif _is_cellular_ip(clean_ind):
-                results.append("Classification: Mobile Carrier ASN / Dynamic Cellular Client Pool (T-Mobile US).")
-                results.append("Risk Level: BENIGN / CELLULAR ROAMING (Legitimate mobile subscriber traffic).")
-                results.append("Action: Whitelist from automated firewall blocking; monitor user account session tokens.")
-            elif _is_cloud_provider_ip(clean_ind) or any(k in clean_ind.lower() for k in ["azure", "microsoft", "aws", "s3"]):
+            elif any(k in clean_ind.lower() for k in ["azure", "microsoft", "aws", "s3"]):
                 results.append("Classification: Verified Enterprise Cloud Infrastructure (Microsoft Azure / M365 / AWS S3).")
                 results.append("Risk Level: BENIGN / WHITELISTED (Legitimate corporate cloud synchronization / backup).")
                 results.append("Action: Whitelist from automated blocking; maintain routine baseline monitoring.")
@@ -2981,7 +3146,7 @@ async def lookup_threat_indicators(indicator: str, indicator_type: str = "auto")
                 results.append("Classification: Verified Content Delivery Network (CDN) Edge Cache Distribution.")
                 results.append("Risk Level: BENIGN / WHITELISTED BASELINE (Legitimate web asset distribution).")
                 results.append("Action: Whitelist from automated blocking.")
-            elif any(k in clean_ind.lower() for k in ["spamhaus.org", "sorbs.net", "dnsbl"]):
+            elif _is_reputation_lookup_query(clean_ind.lower()):
                 results.append("Classification: Email DNSBL Spam Reputation Query Domain.")
                 results.append("Risk Level: BENIGN / ROUTINE MAIL FILTERING.")
                 results.append("Action: Maintain normal recursive DNS resolution.")
@@ -3035,7 +3200,7 @@ async def analyze_incident_impact(evidence_summary: str, target_scope: str = "")
     exfil_vol = ""
     for line in summary_text.splitlines():
         ll = line.lower()
-        if any(k in ll for k in ("exfiltrat", "unauthorized outbound", "data transfer", "covert dns data exfiltration", "bulk data transfer")) and not any(b in ll for b in ("benign", "cloud backup", "onedrive", "whitelisted")):
+        if any(k in ll for k in ("exfiltrat", "unauthorized outbound", "data transfer", "covert dns data exfiltration", "bulk data transfer")) and not any(b in ll for b in ("benign", "cloud backup", "sanctioned bulk transfer", "whitelisted")):
             m_vol = re.search(r'(\d+(?:\.\d+)?\s*(?:GB|MB|bytes)(?:\s*\([^)]+\))?)', line, re.IGNORECASE)
             if m_vol:
                 exfil_vol = m_vol.group(1)
@@ -3145,7 +3310,7 @@ async def analyze_incident_impact(evidence_summary: str, target_scope: str = "")
         "nt authority\\system", "nt authority\\local service", "nt authority\\network service",
         "system", "local service", "network service",
         "administrators", "domain admins", "enterprise admins", "backup operators",
-        "standard", "mjones", "svc-backup", "domain\\svc-backup"
+        "standard",
     }
     for line in summary_text.splitlines():
         line_lower = line.lower()
@@ -3166,10 +3331,10 @@ async def analyze_incident_impact(evidence_summary: str, target_scope: str = "")
         if "sudo:" in line_lower and any(cmd in line_lower for cmd in ("status", "access.log", "error.log", "journalctl", "uptime", "top", "ps ")):
             for u in re.findall(r"sudo:\s+([a-zA-Z0-9_\-]+)\s+:", line):
                 benign_users.add(u.lower())
-        if "accepted publickey for" in line_lower or "session opened for user sysadmin" in line_lower:
+        if "accepted publickey for" in line_lower:
             for u in re.findall(r"for\s+(?:user\s+)?([a-zA-Z0-9_\-]+)", line):
                 benign_users.add(u.lower())
-        if "ms-onedrive" in line_lower or "corporate cloud backup" in line_lower:
+        if "corporate cloud backup" in line_lower or "sanctioned bulk transfer" in line_lower:
             for u in re.findall(r"(?:user|for)\s+['\"]?([a-zA-Z0-9_.-]+)['\"]?", line, re.IGNORECASE):
                 benign_users.add(u.lower())
 
@@ -3177,12 +3342,13 @@ async def analyze_incident_impact(evidence_summary: str, target_scope: str = "")
         u for u in identities
         if u.lower() not in benign_users
         and not any(u.lower().startswith(p) for p in ["system:node:", "system:kube-", "nt authority\\", "builtin\\"])
-        and not any(u.lower().endswith(dom) for dom in ("@overdue-invoices-center.org", "@enterprise-deals-weekly.biz", "@vendorportal.com", "@partner-advisory.com"))
         and not u.lower().endswith((".dll", ".exe", ".log", ".txt", ".pcap", ".csv", ".ps1", ".docm"))
     }
 
 
-    # Filter out loopback, benign controller IPs, admin jumpboxes, OneDrive sync, and VPN pool client lease IPs
+    # Filter out loopback, benign controller IPs, admin jumpboxes, and VPN pool client
+    # lease IPs. Traffic judged benign upstream is recognised by the "[BENIGN ...]"
+    # marker the parsers emit, not by any specific address or provider name.
     benign_internal_ips = {"127.0.0.1"}
     for line in summary_text.splitlines():
         line_lower = line.lower()
@@ -3196,9 +3362,6 @@ async def analyze_incident_impact(evidence_summary: str, target_scope: str = "")
             or "sysadmin" in line_lower
             or "endpoint" in line_lower
             or "accepted publickey for" in line_lower
-            or "ms-onedrive" in line_lower
-            or "corporate cloud backup" in line_lower
-            or "10.20.10.62" in line_lower
         )
         if is_benign_line:
             for ip in re.findall(IPV4_REGEX, line):
@@ -3214,7 +3377,7 @@ async def analyze_incident_impact(evidence_summary: str, target_scope: str = "")
     exfil_vol = ""
     for line in summary_text.splitlines():
         ll = line.lower()
-        if any(k in ll for k in ("exfiltrat", "unauthorized outbound", "data transfer", "covert dns data exfiltration", "bulk data transfer")) and not any(b in ll for b in ("benign", "cloud backup", "onedrive", "whitelisted")):
+        if any(k in ll for k in ("exfiltrat", "unauthorized outbound", "data transfer", "covert dns data exfiltration", "bulk data transfer")) and not any(b in ll for b in ("benign", "cloud backup", "sanctioned bulk transfer", "whitelisted")):
             m_vol = re.search(r'(\d+(?:\.\d+)?\s*(?:GB|MB|bytes)(?:\s*\([^)]+\))?)', line, re.IGNORECASE)
             if m_vol:
                 exfil_vol = m_vol.group(1)
@@ -3223,7 +3386,7 @@ async def analyze_incident_impact(evidence_summary: str, target_scope: str = "")
     exfil_dsts = set()
     for line in summary_text.splitlines():
         ll = line.lower()
-        if any(k in ll for k in ("exfiltrat", "unauthorized outbound", "drop server", "data transfer")) and not any(b in ll for b in ("benign", "cloud backup", "onedrive", "whitelisted")):
+        if any(k in ll for k in ("exfiltrat", "unauthorized outbound", "drop server", "data transfer")) and not any(b in ll for b in ("benign", "cloud backup", "sanctioned bulk transfer", "whitelisted")):
             for m in re.finditer(r'(?:to|server|destination|egress)\s+(?:untrusted foreign drop server\s+)?(\d+\.\d+\.\d+\.\d+(?::\d+)?)', line, re.IGNORECASE):
                 dst_cand = m.group(1)
                 raw_ip = dst_cand.split(":")[0]
@@ -3234,7 +3397,7 @@ async def analyze_incident_impact(evidence_summary: str, target_scope: str = "")
     summary_lower = summary_text.lower()
     if "nsenter" in summary_lower or "hostpath" in summary_lower or "hostpid" in summary_lower or "container escape" in summary_lower:
         trajectories.append("Container Breakout: Privileged pod / hostPath / hostPID boundary escape to worker node")
-    if any(k in summary_lower for k in ("finit_module", "sys_call_table", "diamorphine", "kernel module injection", "lkm rootkit")):
+    if any(k in summary_lower for k in ("finit_module", "sys_call_table", "kernel module injection", "lkm rootkit")):
         trajectories.append("Kernel Compromise: Loadable Kernel Module (LKM) rootkit loaded; hooked system call table")
     if "clusterrolebinding" in summary_lower or "cluster-admin" in summary_lower:
         trajectories.append("Control Plane Escalation: ServiceAccount bound to cluster-admin administrative role")
@@ -3279,7 +3442,7 @@ async def analyze_incident_impact(evidence_summary: str, target_scope: str = "")
             benign_items.append(line.strip())
 
     has_syn_flood = "syn flood" in summary_lower and not any(k in summary_lower for k in ["[benign kernel warning]", "unconfirmed noise", "isolated kernel buffer alert", "possible syn flooding"])
-    if any(k in summary_lower for k in ["finit_module", "diamorphine", "kernel module", "cluster-admin", "exfiltrat", "impossible travel", "domain controller", "lsass", "mfa fatigue", "pass-the-prt", "anomaloustoken"]) or has_syn_flood:
+    if any(k in summary_lower for k in ["finit_module", "kernel module", "cluster-admin", "exfiltrat", "impossible travel", "domain controller", "lsass", "mfa fatigue", "pass-the-prt", "anomaloustoken"]) or has_syn_flood:
         severity = "CRITICAL"
     elif any(k in summary_lower for k in ["beacon", "breakout", "tunnel", "mfa fatigue", "privilege escalation"]):
         severity = "HIGH"
@@ -3287,18 +3450,6 @@ async def analyze_incident_impact(evidence_summary: str, target_scope: str = "")
         severity = "MEDIUM"
 
     report.append(f"Incident Severity Rating   : {severity}")
-
-    # Fallback expansion for unit test single phrase sample
-    is_test_sample_case1 = ("wkstn-fin-04" in summary_lower and len(summary_text.splitlines()) <= 3 and not any(k in summary_lower for k in ["k8s", "dns", "anyconnect", "pfsense"]))
-    if is_test_sample_case1:
-        hostnames = ["WKSTN-FIN-04.corp.contoso.com (10.20.10.45)", "DC01.corp.contoso.com (10.20.10.10 - Primary Domain Controller)"]
-        identities.update(["CONTOSO\\jdoe", "CONTOSO\\da_admin", "CONTOSO\\svc_backup_admin"])
-        trajectories = [
-            "Workstation WKSTN-FIN-04 -> Domain Controller DC01 via Network SMB (Logon Type 3)",
-            "Remote Service Instantiation: PSEXESVC.exe deployed to DC01 under LocalSystem",
-            "Credential Harvesting: LSASS memory access via Mimikatz"
-        ]
-        exfil_vol = exfil_vol or "452.8 MB (474,800,128 bytes)"
 
     # Section 1: Targeted Infrastructure & Assets
     report.append("\n1. IMPACTED INFRASTRUCTURE & TARGETED ASSETS:")
@@ -3397,27 +3548,33 @@ async def analyze_incident_impact(evidence_summary: str, target_scope: str = "")
     # Section 5: Confirmed Adversary Threat Infrastructure (External IoCs)
     adv_ips: set[str] = set()
     target_vips: set[str] = set()
+    # Addresses upstream parsing already cleared as baseline. Driven by the evidence
+    # tags rather than by any specific address, so it holds for unseen incidents.
+    benign_ips: set[str] = set()
     for line in summary_text.splitlines():
         for m in re.finditer(r'(?:targeting\s+(?:gateway VIP\s+|internal web service\s+|server\s+|destination\s+)?|on\s+destination\s+|to\s+destination\s+|Targeted Gateway VIPs\s*:\s*)(\d+\.\d+\.\d+\.\d+)', line, re.IGNORECASE):
             target_vips.add(m.group(1))
+        ll_b = line.lower()
+        if "[benign" in ll_b or "do not block" in ll_b:
+            benign_ips.update(re.findall(IPV4_REGEX, line))
 
     m_adv = re.search(r'Confirmed Adversary IPs\s*:\s*([^\n\r]+)', summary_text)
     if m_adv:
         for ip in re.findall(IPV4_REGEX, m_adv.group(1)):
-            if not _is_private_ip(ip) and not _is_trusted_cloud_cdn(ip) and ip not in target_vips and ip not in ("0.0.0.0", "255.255.255.255", "198.51.100.99"):
+            if not _is_private_ip(ip) and not _is_trusted_cloud_cdn(ip) and ip not in target_vips and ip not in ("0.0.0.0", "255.255.255.255") and ip not in benign_ips:
                 adv_ips.add(ip)
 
     for line in summary_text.splitlines():
         ll = line.lower()
-        if any(kw in ll for kw in _attack_context_keywords) and not any(k in ll for k in ("benign", "cloud backup", "onedrive", "do not block")):
+        if any(kw in ll for kw in _attack_context_keywords) and not any(k in ll for k in ("benign", "do not block", "authorized", "whitelisted")):
             labeled = re.findall(r'(?:from\s+(?:adversary\s+|external\s+scanner\s+)?|adversary\s+(?:external\s+scanner\s+|external\s+ip\s+)?|scanner\s+)(\d+\.\d+\.\d+\.\d+)', line, re.IGNORECASE)
             if labeled:
                 for ip in labeled:
-                    if not _is_private_ip(ip) and not _is_trusted_cloud_cdn(ip) and ip not in target_vips and ip not in ("0.0.0.0", "255.255.255.255", "198.51.100.99"):
+                    if not _is_private_ip(ip) and not _is_trusted_cloud_cdn(ip) and ip not in target_vips and ip not in ("0.0.0.0", "255.255.255.255") and ip not in benign_ips:
                         adv_ips.add(ip)
             else:
                 for ip in re.findall(IPV4_REGEX, line):
-                    if not _is_private_ip(ip) and not _is_trusted_cloud_cdn(ip) and ip not in target_vips and ip not in ("0.0.0.0", "255.255.255.255", "198.51.100.99"):
+                    if not _is_private_ip(ip) and not _is_trusted_cloud_cdn(ip) and ip not in target_vips and ip not in ("0.0.0.0", "255.255.255.255") and ip not in benign_ips:
                         adv_ips.add(ip)
 
     adv_ips = {ip for ip in adv_ips if ip not in target_vips and ip not in ("0.0.0.0", "255.255.255.255") and not _is_private_ip(ip)}
@@ -3622,7 +3779,7 @@ async def compress_security_timeline(raw_evidence_text: str, max_timeline_events
         "exfil", "quarantine", "staging", "logon", "privilege", "169.254.169.254", "union select",
         "sqlmap", "assumerole", "createloginprofile", "createaccesskey", "attachuserpolicy", "sudo:",
         "failed password", "invalid user", "pkexec", "drop ", "reject ", "spearphishing", "docm",
-        "crontab", "cron", "insmod", "finit_module", "rootkit", "diamorphine", "nsenter", "breakout",
+        "crontab", "cron", "insmod", "finit_module", "rootkit", "nsenter", "breakout",
         "hostpath", "hostpid", "clusterrolebinding", "cluster-admin", "shadow", "openat", "syscall",
         "tunnel", "dga", "nxdomain", "impossible travel", "anomaloustoken", "mfa fatigue", "anyconnect",
         "syn flood", "connection limit", "port scan", "subnet sweep"
@@ -3636,8 +3793,6 @@ async def compress_security_timeline(raw_evidence_text: str, max_timeline_events
     def _is_benign_baseline(line_text: str) -> bool:
         ll = line_text.lower()
         if "[benign" in ll:
-            return True
-        if "corporate cloud backup" in ll or "ms-onedrive" in ll:
             return True
         if "marketing spam message quarantined" in ll:
             return True
@@ -3764,20 +3919,24 @@ async def propose_containment_response(
     justification: str,
     dry_run: bool = True
 ) -> str:
-    """Propose or execute incident containment actions across Network, Cloud, Endpoint, and Identity.
-    
-    Classified as a HIGH RISK tool in AgentHub, requiring operator review and approval.
-    
+    """Generate an incident containment plan across Network, Cloud, Endpoint, and Identity.
+
+    This tool NEVER applies anything. It generates command recipes for a human
+    operator to review and run. Classified as a HIGH RISK tool in AgentHub because
+    its output, once executed by an operator, can disrupt production systems.
+
     Args:
         target_entity: Target IP, hostname, username, or cloud role to contain.
         action_type: Containment action: 'block_ip', 'isolate_endpoint', 'revoke_tokens', 'quarantine_file'.
         justification: Forensic rationale for the response.
-        dry_run: If True, simulate containment rules without modifying infrastructure.
-        
+        dry_run: Retained for interface compatibility. This tool has no enforcement
+            path, so the generated plan is identical either way; only the urgency
+            label on the output changes.
+
     Returns:
-        Confirmation of containment plan and command recipes for operator execution.
+        A containment plan and command recipes for operator execution.
     """
-    mode = "[SIMULATION / DRY RUN]" if dry_run else "[ACTIVE ENFORCEMENT]"
+    mode = "[PROPOSED - AWAITING OPERATOR REVIEW]" if dry_run else "[PROPOSED - FLAGGED FOR IMMEDIATE OPERATOR ACTION]"
 
     # Anti-Forensic, Unsafe Firewall Disabling, and Destructive Reboot Guardrail
     destructive_keywords = [
@@ -3867,7 +4026,9 @@ async def propose_containment_response(
         f"Action Type    : {action_type.upper()}\n"
         f"Justification  : {justification}\n\n"
         f"Generated Multi-Platform Rules:\n{cmd_block}\n\n"
-        f"Status         : {'Ready for operator approval' if dry_run else 'Action successfully applied.'}"
+        f"Status         : NOT APPLIED. These commands have not been executed and no "
+        f"infrastructure has been modified. They require operator review, validation "
+        f"against the target platform, and manual execution."
     )
 
 

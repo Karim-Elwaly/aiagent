@@ -185,6 +185,18 @@ def test_input_schema_maps_required_and_types():
     assert schema["properties"]["n"] == {"type": "integer"}
 
 
+def test_input_schema_accepts_connector_json_schema():
+    spec = _spec("c", ["s"])
+    spec.parameters = {
+        "type": "object",
+        "properties": {"ip": {"type": "string"}, "days": {"type": "integer", "default": 90}},
+        "required": ["ip"],
+    }
+    schema = tool_input_schema(spec)
+    assert schema == {"type": "object", "required": ["ip"],
+                      "properties": {"ip": {"type": "string"}, "days": {"type": "integer", "default": 90}}}
+
+
 async def test_endpoint_rejects_remote_and_unauthenticated_callers(registry, store, tmp_path):
     gate, _, _ = _gate(registry, store, tmp_path)
     endpoint = MCPEndpoint(gate)
@@ -252,6 +264,26 @@ def test_toolset_change_does_not_wait_for_mcp(tmp_path):
     info = profiles.ensure("soc", ["terminal"])
     assert not info.changed
     assert any(c[2:4] == ["tools", "enable"] and "terminal" in c for c in calls)
+
+
+def test_mcp_url_change_restarts_gateway(tmp_path):
+    home = tmp_path / "hermes"
+    (home / "profiles" / "aiagent-soc").mkdir(parents=True)
+    calls = []
+    state = ProfileState(tmp_path / "profiles.json")
+    runner = lambda a: calls.append(a) or ""  # noqa: E731
+    HermesProfiles(_settings(hermes_home=str(home)), runner=runner, state=state).ensure("soc", [])
+    assert ["gateway", "restart"] not in calls
+
+    calls.clear()
+    moved = _settings(hermes_home=str(home), hermes_mcp_url="http://127.0.0.1:8001/mcp/")
+    info = HermesProfiles(moved, runner=runner, state=state).ensure("soc", [])
+    assert info.changed and ["gateway", "restart"] in calls
+    assert ["-p", "aiagent-soc", "config", "set", "mcp_servers.aiagent.url", "http://127.0.0.1:8001/mcp/"] in calls
+
+    calls.clear()
+    assert not HermesProfiles(moved, runner=runner, state=state).ensure("soc", []).changed
+    assert ["gateway", "restart"] not in calls
 
 
 # ── skills ────────────────────────────────────────────────────────
@@ -356,7 +388,8 @@ class FakeClient:
         self.created, self.approvals, self.stopped = [], [], []
 
     async def create_run(self, profile, key, input_text, instructions=None, session_id=None):
-        self.created.append({"profile": profile, "input": input_text, "instructions": instructions})
+        self.created.append({"profile": profile, "input": input_text, "instructions": instructions,
+                             "session_id": session_id})
         return "run_1"
 
     async def events(self, profile, key, run_id, last_seq=-1):
@@ -374,14 +407,19 @@ class FakeClient:
 
 
 class FakeProfiles:
-    def __init__(self, connected=True):
-        self.ensured = []
-        self.state = SimpleNamespace(mcp_connected=lambda name: connected)
+    def __init__(self, connected=True, changed=True):
+        self.ensured, self.restarts = [], 0
+        self.connected, self.changed = connected, changed
+        self.state = SimpleNamespace(mcp_connected=lambda name: self.connected)
 
     def ensure(self, agent_id, toolsets, skill_docs=None, agent=None):
         self.ensured.append((agent_id, toolsets))
         self.skill_docs = skill_docs
-        return ProfileInfo(name=f"aiagent-{agent_id or 'default'}", api_key="k", changed=True)
+        return ProfileInfo(name=f"aiagent-{agent_id or 'default'}", api_key="k", changed=self.changed)
+
+    def restart_gateway(self):
+        self.restarts += 1
+        self.connected = True
 
 
 TASK = Task(id="t1", name="Scan", description="Scan logs", required_skills=["s"], expected_output="findings")
@@ -438,10 +476,49 @@ async def test_worker_fails_without_evidence_and_on_failed_runs(tmp_path):
     worker, _, _ = _worker(tmp_path, [{"event": "run.completed", "output": "guess", "seq": 0}])
     result = await worker.execute(TASK, "p", [_spec("read_file", ["file_reading"])])
     assert result.status == TaskStatus.FAILED and result.error.startswith("No evidence collected")
+    assert len(worker.client.created) == 2  # one steering follow-up before giving up
 
     worker, _, _ = _worker(tmp_path, [{"event": "run.failed", "error": "model down", "seq": 0}])
     result = await worker.execute(TASK, "p", [])
     assert result.status == TaskStatus.FAILED and "model down" in result.error
+
+
+async def test_worker_steers_a_toolless_answer_in_the_same_session(tmp_path):
+    worker, client, _ = _worker(tmp_path, [])
+    runs = iter([[{"event": "run.completed", "output": "guess", "seq": 0}],
+                 [{"event": "tool.completed", "tool": "mcp__aiagent__read_file", "seq": 0},
+                  {"event": "run.completed", "output": "grounded", "seq": 1}]])
+
+    async def events(profile, key, run_id, last_seq=-1):
+        for event in next(runs):
+            yield event
+
+    client.events = events
+    result = await worker.execute(TASK, "p", [_spec("read_file", ["file_reading"])])
+    assert result.status == TaskStatus.COMPLETED and result.output == "grounded"
+    assert result.tool_calls_made == ["read_file"]
+    first, steer = client.created
+    assert steer["session_id"] == first["session_id"] and "mcp__aiagent__read_file" in steer["input"]
+
+
+async def test_worker_retries_inference_server_errors_with_a_fresh_run(tmp_path):
+    peg = ('Engine protocol predict stream returned an error: {"code":500,"message":"The model produced output '
+           'that does not match the expected peg-native format","type":"server_error"}')
+    worker, client, _ = _worker(tmp_path, [])
+    runs = iter([[{"event": "run.failed", "error": peg, "seq": 0}],
+                 [{"event": "run.completed", "output": "ok", "seq": 0}]])
+
+    async def events(profile, key, run_id, last_seq=-1):
+        for event in next(runs):
+            yield event
+
+    client.events = events
+    result = await worker.execute(TASK, "p", [])
+    assert result.status == TaskStatus.COMPLETED and result.output == "ok" and len(client.created) == 2
+
+    worker, client, _ = _worker(tmp_path, [{"event": "run.failed", "error": peg, "seq": 0}])
+    result = await worker.execute(TASK, "p", [])
+    assert result.status == TaskStatus.FAILED and "peg-native" in result.error and len(client.created) == 3
 
 
 async def test_worker_reads_final_status_when_stream_ends_early(tmp_path):
@@ -456,6 +533,31 @@ def test_mcp_connected_tracks_listing_after_configuration(tmp_path):
     assert not state.mcp_connected("aiagent-soc")
     state.update("aiagent-soc", {"mcp_listed_at": 150.0})
     assert state.mcp_connected("aiagent-soc")
+    state.mark_endpoint_started()  # aiagent restarted after that listing
+    assert not state.mcp_connected("aiagent-soc")
+
+
+async def test_worker_restarts_gateway_when_listing_predates_aiagent_start(tmp_path):
+    import src.workers.hermes_agent_worker as hw
+
+    hw._gateway_restarted_at = float("-inf")
+    profiles = FakeProfiles(connected=False, changed=False)
+    worker = HermesAgentWorker(_settings(), client=FakeClient([{"event": "run.completed", "output": "ok", "seq": 0}]),
+                               profiles=profiles, active=ActiveRuns(tmp_path / "active"), ask=Asker("x"))
+    result = await worker.execute(TASK, "p", [])
+    assert profiles.restarts == 1 and result.status == TaskStatus.COMPLETED
+
+
+async def test_worker_restarts_gateway_when_a_new_profile_is_not_picked_up(tmp_path, monkeypatch):
+    import src.workers.hermes_agent_worker as hw
+
+    hw._gateway_restarted_at = float("-inf")
+    monkeypatch.setattr(hw, "CONFIG_PICKUP_SECONDS", 0)
+    profiles = FakeProfiles(connected=False, changed=True)
+    worker = HermesAgentWorker(_settings(), client=FakeClient([{"event": "run.completed", "output": "ok", "seq": 0}]),
+                               profiles=profiles, active=ActiveRuns(tmp_path / "active"), ask=Asker("x"))
+    result = await worker.execute(TASK, "p", [])
+    assert profiles.restarts == 1 and result.status == TaskStatus.COMPLETED
 
 
 async def test_list_tools_marks_the_profile_connected(registry, store, tmp_path):

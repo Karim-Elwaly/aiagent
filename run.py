@@ -155,6 +155,8 @@ def main():
 
     env = os.environ.copy()
     env["PYTHONPATH"] = os.getcwd()
+    # Children must see the auto-selected port, not API_PORT from .env (Hermes MCP URL derives from it).
+    env["API_PORT"] = str(api_port)
 
     def get_max_src_mtime() -> float:
         max_m = 0.0

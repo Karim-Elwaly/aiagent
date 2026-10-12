@@ -27,6 +27,7 @@ from src.core.models import RiskLevel
 from src.core.text_utils import smart_truncate
 from src.hermes.active_runs import ActiveRuns
 from src.hermes.profiles import DEFAULT_PROFILE, HermesProfiles, ProfileState
+from src.hermes.skills import flat_parameters
 from src.hermes.toolsets import BUILTIN_TOOLSETS
 from src.registry.tool_registry import ToolRegistry, ToolSpec
 
@@ -52,7 +53,7 @@ class ToolDenied(RuntimeError):
 def tool_input_schema(spec: ToolSpec) -> dict[str, Any]:
     properties: dict[str, Any] = {}
     required: list[str] = []
-    for name, raw in spec.parameters.items():
+    for name, raw in flat_parameters(spec).items():
         prop = dict(raw) if isinstance(raw, dict) else {}
         if prop.pop("required", False):
             required.append(name)
@@ -287,6 +288,7 @@ class MCPEndpoint:
     @asynccontextmanager
     async def run(self):
         self.manager = StreamableHTTPSessionManager(app=self.server, stateless=True, json_response=True)
+        self.gate.state.mark_endpoint_started()
         async with self.manager.run():
             yield
         self.manager = None
