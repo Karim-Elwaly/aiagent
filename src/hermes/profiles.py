@@ -49,7 +49,7 @@ class ProfileInfo:
     name: str
     api_key: str
     changed: bool  # the aiagent MCP connection was (re)configured: wait for Hermes to list the tools again
-    restarted: bool = False
+    restarted_at: float = 0.0  # time.time() just before ensure() restarted the gateway
 
 
 def hermes_home(settings: Any) -> Path:
@@ -151,10 +151,10 @@ class ProfileState:
         except (OSError, ValueError, AttributeError):
             return 0.0
 
-    def mcp_connected(self, name: str) -> bool:
+    def mcp_connected(self, name: str, since: float = 0.0) -> bool:
         """Hermes has listed aiagent's tools since the profile was last (re)configured and the endpoint started."""
         entry = self.get(name)
-        since = max(float(entry.get("configured_at", 0)), self.endpoint_started_at())
+        since = max(float(entry.get("configured_at", 0)), self.endpoint_started_at(), since)
         return float(entry.get("mcp_listed_at", 0)) >= since
 
 
@@ -233,7 +233,7 @@ class HermesProfiles:
         name = profile_name(agent_id)
         pdir = self.home / "profiles" / name
         changed = False
-        restarted = False
+        restarted_at = 0.0
         created = not pdir.is_dir()
         if created:
             description = (render_description(agent) if agent else
@@ -295,8 +295,8 @@ class HermesProfiles:
             if applied.get("mcp_url"):
                 # The running gateway keeps the old URL for new runs until it restarts (no MCP reload command).
                 logger.info("aiagent's MCP URL moved %s -> %s", applied["mcp_url"], mcp_url)
+                restarted_at = time.time()
                 self.restart_gateway()
-                restarted = True
 
         self.state.update(name, {
             "agent_id": agent_id or "",
@@ -305,9 +305,9 @@ class HermesProfiles:
             "mcp_url": mcp_url,
             "config": config,
             **identity,
-            **({"configured_at": time.time()} if changed else {}),
+            **({"configured_at": restarted_at or time.time()} if changed else {}),
         })
-        return ProfileInfo(name=name, api_key=api_key, changed=changed, restarted=restarted)
+        return ProfileInfo(name=name, api_key=api_key, changed=changed, restarted_at=restarted_at)
 
     def restart_gateway(self) -> None:
         """The only way to revive a parked MCP server or drop a cached URL in a running gateway."""

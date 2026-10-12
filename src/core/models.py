@@ -216,6 +216,10 @@ class TaskResult(BaseModel):
         default=None,
         description="Wall-clock execution time in milliseconds",
     )
+    hermes_session_id: str | None = Field(
+        default=None,
+        description="Hermes session holding the run's conversation, for continuing it on a supervisor retry",
+    )
 
     def to_serializable(self) -> dict:
         """Convert to a plain dict for Temporal."""

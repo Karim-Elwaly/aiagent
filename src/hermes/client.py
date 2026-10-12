@@ -75,6 +75,13 @@ class HermesClient:
     async def get_run(self, profile: str, key: str, run_id: str) -> dict[str, Any]:
         return await self._request("GET", self._url(profile, f"/v1/runs/{run_id}"), key, "run status")
 
+    async def healthy(self) -> bool:
+        try:
+            async with httpx.AsyncClient(timeout=5.0) as client:
+                return (await client.get(f"{self.base_url}/health")).status_code == 200
+        except httpx.HTTPError:
+            return False
+
     async def respond_approval(
         self, profile: str, key: str, run_id: str, choice: str, request_id: str | None = None
     ) -> dict[str, Any]:

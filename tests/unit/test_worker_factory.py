@@ -95,17 +95,19 @@ def test_hermes_protocol_has_no_json_tool_instructions(task, tools):
     templated = AgentProfile(
         id="b", name="SOC", description="d", system_prompt_template="You are SOC.\n# Task\n{task_name}\n{tools}"
     )
-    for prompt in (
-        synth.synthesize(task, tools, protocol="hermes"),
+    prompts = (
+        synth.synthesize(task, tools, protocol="hermes", upstream_context={"t0": "prior output"}),
         synth.synthesize_from_profile(plain, task, tools, protocol="hermes"),
         synth.synthesize_from_profile(templated, task, tools, protocol="hermes"),
-    ):
+    )
+    for prompt in prompts:
         assert '{"tool":' not in prompt
         assert "FINAL_ANSWER:" not in prompt
         assert "# Tool Use" in prompt
-        assert "mcp__aiagent__list_directory" in prompt
         assert "mcp__aiagent__request_tool" in prompt
+        # Task, tool list and prior outputs go in the run input once, not in the instructions.
+        assert "Scan" not in prompt and "mcp__aiagent__list_directory" not in prompt
+        assert "prior output" not in prompt
 
-    templated_prompt = synth.synthesize_from_profile(templated, task, tools, protocol="hermes")
-    assert templated_prompt.startswith("You are SOC.\n# Task\nScan")
-    assert templated_prompt.count("## `mcp__aiagent__list_directory`") == 1
+    # Agent personas live in the profile's SOUL.md, so agent runs share one constant instruction block.
+    assert prompts[1] == prompts[2]

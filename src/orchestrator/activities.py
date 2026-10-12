@@ -353,6 +353,13 @@ async def execute_task(
 
         hb_task = asyncio.create_task(_periodic_heartbeat())
 
+        continuation: dict[str, Any] = {}
+        if engine == "hermes" and task_dict.get("_hermes_session_id"):
+            continuation = {
+                "continue_session": task_dict["_hermes_session_id"],
+                "review_feedback": task_dict.get("_supervisor_feedback", ""),
+            }
+
         try:
             result = await worker.execute(
                 task=task,
@@ -365,6 +372,7 @@ async def execute_task(
                 on_heartbeat=handle_heartbeat,
                 resume_checkpoint=resume_checkpoint,
                 workflow_id=wf_id,
+                **continuation,
             )
         finally:
             heartbeat_stop.set()

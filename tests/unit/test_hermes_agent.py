@@ -6,6 +6,7 @@ the run-event client and the Hermes Agent worker.
 from __future__ import annotations
 
 import json
+import time
 from types import SimpleNamespace
 
 import httpx
@@ -34,6 +35,10 @@ from src.registry.tool_registry import ToolRegistry, ToolSpec
 from src.workers.hermes_agent_worker import HermesAgentWorker
 
 
+async def _no_sleep(*args, **kwargs):
+    return None
+
+
 def _settings(**overrides):
     base = dict(
         hermes_api_url="http://127.0.0.1:8642",
@@ -44,6 +49,7 @@ def _settings(**overrides):
         hermes_run_timeout_seconds=30,
         hermes_approval_timeout_seconds=5,
         worker_max_output_chars=1000,
+        worker_max_context_chars=12000,
     )
     base.update(overrides)
     return SimpleNamespace(**base)
@@ -405,12 +411,16 @@ class FakeClient:
     async def stop_run(self, profile, key, run_id):
         self.stopped.append(run_id)
 
+    async def healthy(self):
+        self.health_checks = getattr(self, "health_checks", 0) + 1
+        return True
+
 
 class FakeProfiles:
     def __init__(self, connected=True, changed=True):
         self.ensured, self.restarts = [], 0
         self.connected, self.changed = connected, changed
-        self.state = SimpleNamespace(mcp_connected=lambda name: self.connected)
+        self.state = SimpleNamespace(mcp_connected=lambda name, since=0.0: self.connected)
 
     def ensure(self, agent_id, toolsets, skill_docs=None, agent=None):
         self.ensured.append((agent_id, toolsets))
@@ -501,6 +511,30 @@ async def test_worker_steers_a_toolless_answer_in_the_same_session(tmp_path):
     assert steer["session_id"] == first["session_id"] and "mcp__aiagent__read_file" in steer["input"]
 
 
+async def test_worker_input_names_task_tools_and_caps_prior_outputs(tmp_path):
+    events = [{"event": "tool.completed", "tool": "mcp__aiagent__read_file", "seq": 0},
+              {"event": "run.completed", "output": "ok", "seq": 1}]
+    worker, client, _ = _worker(tmp_path, events)
+    worker.settings.worker_max_context_chars = 500
+    await worker.execute(TASK, "p", [_spec("read_file", ["file_reading"])], upstream_context={"t0": "x" * 5000})
+    sent = client.created[0]["input"]
+    assert "# Tools for This Task\nmcp__aiagent__read_file" in sent
+    assert "Parameters:" not in sent  # Hermes already sends the full tool schemas
+    assert sent.count("x") < 1000 and "[...truncated]" in sent
+
+
+async def test_worker_continues_the_reviewed_session_on_supervisor_retry(tmp_path):
+    worker, client, _ = _worker(tmp_path, [{"event": "run.completed", "output": "full answer", "seq": 0}])
+    result = await worker.execute(TASK, "p", [_spec("read_file", ["file_reading"])],
+                                  continue_session="sess-1", review_feedback="windows_endpoint.xml not covered")
+    assert result.status == TaskStatus.COMPLETED and result.output == "full answer"
+    assert result.hermes_session_id == "sess-1"
+    assert len(client.created) == 1  # no "use a tool" follow-up: the session already holds the evidence
+    sent = client.created[0]
+    assert sent["session_id"] == "sess-1"
+    assert "windows_endpoint.xml not covered" in sent["input"] and "Scan logs" not in sent["input"]
+
+
 async def test_worker_retries_inference_server_errors_with_a_fresh_run(tmp_path):
     peg = ('Engine protocol predict stream returned an error: {"code":500,"message":"The model produced output '
            'that does not match the expected peg-native format","type":"server_error"}')
@@ -535,17 +569,60 @@ def test_mcp_connected_tracks_listing_after_configuration(tmp_path):
     assert state.mcp_connected("aiagent-soc")
     state.mark_endpoint_started()  # aiagent restarted after that listing
     assert not state.mcp_connected("aiagent-soc")
+    state.update("aiagent-soc", {"mcp_listed_at": time.time() + 1})
+    assert state.mcp_connected("aiagent-soc")
+    assert not state.mcp_connected("aiagent-soc", since=time.time() + 5)  # listed by the pre-restart gateway
 
 
-async def test_worker_restarts_gateway_when_listing_predates_aiagent_start(tmp_path):
+async def test_worker_waits_for_hermes_to_reconnect_before_restarting(tmp_path, monkeypatch):
     import src.workers.hermes_agent_worker as hw
 
     hw._gateway_restarted_at = float("-inf")
+    monkeypatch.setattr(hw, "CONFIG_PICKUP_SECONDS", 5)
     profiles = FakeProfiles(connected=False, changed=False)
+    checks = iter([False, False, True])
+    profiles.state = SimpleNamespace(mcp_connected=lambda name, since=0.0: next(checks, True))
+    monkeypatch.setattr(hw.asyncio, "sleep", _no_sleep)
+    worker = HermesAgentWorker(_settings(), client=FakeClient([{"event": "run.completed", "output": "ok", "seq": 0}]),
+                               profiles=profiles, active=ActiveRuns(tmp_path / "active"), ask=Asker("x"))
+    result = await worker.execute(TASK, "p", [])
+    assert profiles.restarts == 0 and result.status == TaskStatus.COMPLETED
+
+
+async def test_worker_accepts_the_listing_the_new_gateway_makes_while_restarting(tmp_path, monkeypatch):
+    import src.workers.hermes_agent_worker as hw
+
+    hw._gateway_restarted_at = float("-inf")
+    monkeypatch.setattr(hw, "CONFIG_PICKUP_SECONDS", 0)
+    monkeypatch.setattr(hw, "MCP_READY_TIMEOUT_SECONDS", 1)
+    state = ProfileState(tmp_path / "profiles.json")
+    state.update("aiagent-default", {"configured_at": 1.0})
+    profiles = FakeProfiles(changed=False)
+    profiles.state = state
+
+    def restart_gateway():
+        profiles.restarts += 1
+        state.update("aiagent-default", {"mcp_listed_at": time.time()})  # startup discovery, before the CLI returns
+
+    profiles.restart_gateway = restart_gateway
     worker = HermesAgentWorker(_settings(), client=FakeClient([{"event": "run.completed", "output": "ok", "seq": 0}]),
                                profiles=profiles, active=ActiveRuns(tmp_path / "active"), ask=Asker("x"))
     result = await worker.execute(TASK, "p", [])
     assert profiles.restarts == 1 and result.status == TaskStatus.COMPLETED
+
+
+async def test_worker_restarts_gateway_when_listing_predates_aiagent_start(tmp_path, monkeypatch):
+    import src.workers.hermes_agent_worker as hw
+
+    hw._gateway_restarted_at = float("-inf")
+    monkeypatch.setattr(hw, "CONFIG_PICKUP_SECONDS", 0)
+    profiles = FakeProfiles(connected=False, changed=False)
+    client = FakeClient([{"event": "run.completed", "output": "ok", "seq": 0}])
+    worker = HermesAgentWorker(_settings(), client=client,
+                               profiles=profiles, active=ActiveRuns(tmp_path / "active"), ask=Asker("x"))
+    result = await worker.execute(TASK, "p", [])
+    assert profiles.restarts == 1 and result.status == TaskStatus.COMPLETED
+    assert client.health_checks >= 1  # waited for the restarted gateway's API before creating the run
 
 
 async def test_worker_restarts_gateway_when_a_new_profile_is_not_picked_up(tmp_path, monkeypatch):

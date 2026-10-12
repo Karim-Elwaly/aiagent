@@ -575,6 +575,9 @@ class UAOSWorkflow:
                             f"{retry_task_dict.get('description', '')}\n\n"
                             f"[SUPERVISOR EVALUATION FEEDBACK - PLEASE GATHER MORE INFO]: {feedback}"
                         )
+                        if result_dict.get("hermes_session_id"):
+                            retry_task_dict["_hermes_session_id"] = result_dict["hermes_session_id"]
+                            retry_task_dict["_supervisor_feedback"] = feedback
                         # If the task originally lacked tools (only general_reasoning), equip it with execution tools on retry
                         req_skills = list(retry_task_dict.get("required_skills", []))
                         if req_skills == ["general_reasoning"] or not req_skills:

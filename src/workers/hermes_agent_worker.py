@@ -25,6 +25,7 @@ from src.hermes.active_runs import ActiveRuns
 from src.hermes.client import TERMINAL_EVENTS, HermesAPIError, HermesClient
 from src.hermes.profiles import MCP_SERVER_NAME, HermesError, HermesProfiles
 from src.hermes.skills import skill_documents
+from src.persona.synthesizer import format_upstream_context
 from src.registry.tool_registry import ToolRegistry, ToolSpec
 
 logger = logging.getLogger(__name__)
@@ -48,10 +49,16 @@ APPROVAL_LABELS = {
 _profile_locks: dict[str, asyncio.Lock] = {}
 _gateway_lock = asyncio.Lock()
 _gateway_restarted_at = float("-inf")
+_gateway_restarted_wall = 0.0  # time.time() of the last restart: older tool listings came from the previous gateway
 
 
 def display_tool_name(name: str) -> str:
     return name[len(MCP_TOOL_PREFIX):] if name.startswith(MCP_TOOL_PREFIX) else name
+
+
+def _mark_gateway_restarted(wall: float) -> None:
+    global _gateway_restarted_at, _gateway_restarted_wall
+    _gateway_restarted_at, _gateway_restarted_wall = time.monotonic(), wall
 
 
 async def _default_ask(question: str, choices: list[str], workflow_id: str, task_id: str, timeout: int) -> str | None:
@@ -95,6 +102,8 @@ class HermesAgentWorker:
         on_heartbeat: Callable[..., None] | None = None,
         resume_checkpoint: dict[str, Any] | None = None,
         workflow_id: str = "",
+        continue_session: str | None = None,
+        review_feedback: str | None = None,
     ) -> TaskResult:
         start = time.monotonic()
         agent_id = self.agent.id if self.agent else None
@@ -109,12 +118,12 @@ class HermesAgentWorker:
         except HermesError as exc:
             return self._failed(task, start, f"Could not prepare the Hermes profile: {exc}")
 
-        if info.restarted:
-            global _gateway_restarted_at
-            _gateway_restarted_at = time.monotonic()
-        if not self.profiles.state.mcp_connected(info.name):
-            # The gateway connects MCP servers at startup, so a new or reconfigured profile usually needs a restart.
-            if not (info.changed and await self._wait_for_mcp(info.name, CONFIG_PICKUP_SECONDS)):
+        if info.restarted_at:
+            _mark_gateway_restarted(info.restarted_at)
+        if not self._mcp_ready(info.name):
+            # Hermes reconnects a known server by itself (e.g. after aiagent restarts); a new or
+            # reconfigured profile is only picked up by a gateway restart.
+            if not await self._wait_for_mcp(info.name, CONFIG_PICKUP_SECONDS):
                 await self._restart_gateway(info.name)
             if not await self._wait_for_mcp(info.name, MCP_READY_TIMEOUT_SECONDS):
                 return self._failed(task, start, (
@@ -122,6 +131,8 @@ class HermesAgentWorker:
                     f"{MCP_READY_TIMEOUT_SECONDS}s. Check that the Hermes gateway is running "
                     f"(hermes gateway restart) and can reach {self.settings.hermes_mcp_url}."
                 ))
+        if time.monotonic() - _gateway_restarted_at < MCP_READY_TIMEOUT_SECONDS:
+            await self._wait_for_api(MCP_READY_TIMEOUT_SECONDS)
 
         lock = _profile_locks.setdefault(info.name, asyncio.Lock())
         async with lock:
@@ -133,7 +144,8 @@ class HermesAgentWorker:
             })
             try:
                 return await self._run(task, persona, tools, info.name, info.api_key, upstream_context, user_query,
-                                       on_token, on_event, on_heartbeat, resume_checkpoint, workflow_id, start)
+                                       on_token, on_event, on_heartbeat, resume_checkpoint, workflow_id, start,
+                                       continue_session, review_feedback)
             finally:
                 self.active.clear(info.name)
 
@@ -152,10 +164,17 @@ class HermesAgentWorker:
         resume_checkpoint: dict[str, Any] | None,
         workflow_id: str,
         start: float,
+        continue_session: str | None = None,
+        review_feedback: str | None = None,
     ) -> TaskResult:
         run_id, last_seq = self._resumable(resume_checkpoint, profile)
         session_id = self._new_session_id(workflow_id, task)
         follow_up: str | None = None
+        # A supervisor retry continues the reviewed session, which already holds the task's evidence.
+        grounded = bool(continue_session)
+        if continue_session:
+            session_id = continue_session
+            follow_up = self._review_message(review_feedback or "", tools)
         model_errors = 0
         steered = False
         tool_calls: list[str] = []
@@ -163,7 +182,7 @@ class HermesAgentWorker:
             try:
                 if not run_id:
                     run_id = await self.client.create_run(
-                        profile, key, follow_up or self._user_content(task, user_query, upstream_context),
+                        profile, key, follow_up or self._user_content(task, tools, user_query, upstream_context),
                         instructions=persona, session_id=session_id,
                     )
                     logger.info("Task '%s' started Hermes run %s on profile '%s'", task.id, run_id, profile)
@@ -197,12 +216,12 @@ class HermesAgentWorker:
                 raise TransientLLMError(f"Lost the Hermes run {run_id}: {exc}", original_error=exc) from exc
 
             status = str(outcome.get("status") or str(outcome.get("event", "")).removeprefix("run."))
+            session_id = str(outcome.get("session_id") or session_id)
             if status == "completed":
-                if tools and not tool_calls and not steered:
+                if tools and not tool_calls and not steered and not grounded:
                     # Same session: Hermes replays its history, so the model sees its own ungrounded answer.
                     logger.info("Task '%s' Hermes run %s answered without tools; steering it to use them",
                                 task.id, run_id)
-                    session_id = str(outcome.get("session_id") or session_id)
                     follow_up, steered = self._steering_message(tools), True
                     run_id, last_seq = None, -1
                     continue
@@ -215,10 +234,11 @@ class HermesAgentWorker:
                                reason)
                 run_id, last_seq = None, -1
                 session_id, follow_up, steered, tool_calls = self._new_session_id(workflow_id, task), None, False, []
+                grounded = False
                 continue
             return self._failed(task, start, f"Hermes run {run_id}: {reason}", tool_calls)
 
-        if tools and not tool_calls:
+        if tools and not tool_calls and not grounded:
             return self._failed(task, start, (
                 f"No evidence collected: Hermes finished without calling any of the {len(tools)} tools "
                 "available for this task, even after being asked to. Any findings would be unverified model recall."
@@ -233,6 +253,7 @@ class HermesAgentWorker:
             output=output,
             tool_calls_made=tool_calls,
             execution_time_ms=int((time.monotonic() - start) * 1000),
+            hermes_session_id=session_id,
         )
 
     async def _handle(
@@ -280,23 +301,35 @@ class HermesAgentWorker:
         logger.info("Task '%s' Hermes approval on run %s answered '%s'", task.id, run_id, choice)
 
     async def _restart_gateway(self, profile: str) -> None:
-        global _gateway_restarted_at
         async with _gateway_lock:
-            if self.profiles.state.mcp_connected(profile):
+            if self._mcp_ready(profile):
                 return
             if time.monotonic() - _gateway_restarted_at < MCP_READY_TIMEOUT_SECONDS:
                 return  # a concurrent task already restarted it; just wait for the listing
             logger.info("Hermes has not listed aiagent's tools on profile '%s'; restarting the gateway", profile)
+            # Marked before the call: the new gateway lists MCP tools during startup, before the CLI returns.
+            began = time.time()
             await asyncio.to_thread(self.profiles.restart_gateway)
-            _gateway_restarted_at = time.monotonic()
+            _mark_gateway_restarted(began)
+
+    def _mcp_ready(self, profile: str) -> bool:
+        return self.profiles.state.mcp_connected(profile, since=_gateway_restarted_wall)
 
     async def _wait_for_mcp(self, profile: str, timeout: float) -> bool:
         deadline = time.monotonic() + timeout
         while time.monotonic() < deadline:
-            if self.profiles.state.mcp_connected(profile):
+            if self._mcp_ready(profile):
                 return True
             await asyncio.sleep(2)
         return False
+
+    async def _wait_for_api(self, timeout: float) -> None:
+        """A restarted gateway lists MCP tools before its API server listens."""
+        deadline = time.monotonic() + timeout
+        while time.monotonic() < deadline:
+            if await self.client.healthy():
+                return
+            await asyncio.sleep(1)
 
     async def _stop(self, profile: str, key: str, run_id: str) -> None:
         try:
@@ -343,16 +376,32 @@ class HermesAgentWorker:
         )
 
     @staticmethod
-    def _user_content(task: Task, user_query: str, upstream_context: dict[str, str] | None) -> str:
+    def _review_message(feedback: str, tools: list[ToolSpec]) -> str:
+        names = ", ".join(f"{MCP_TOOL_PREFIX}{t.name}" for t in tools)
+        return (
+            f"A reviewer checked your answer and found gaps:\n{feedback.strip() or '(no details given)'}\n\n"
+            + (f"Use your tools ({names}) to gather what is missing. " if names else "Address these gaps. ")
+            + "Then reply with your COMPLETE final answer for the task: everything from your previous answer plus "
+            "the new findings, because this reply replaces it."
+        )
+
+    def _user_content(
+        self, task: Task, tools: list[ToolSpec], user_query: str, upstream_context: dict[str, str] | None
+    ) -> str:
         parts = []
         if user_query and user_query.strip():
             parts.append(f"# Overall User Request / Target Context:\n{user_query.strip()}")
         parts.append(f"# Task to Execute\n**{task.name}**\n\n{task.description}")
         if task.expected_output and task.expected_output.strip():
             parts.append(f"**Expected Output:**\n{task.expected_output}")
-        if upstream_context:
-            blocks = [f"### Output from Prior Task `{uid}`:\n{out}" for uid, out in upstream_context.items()]
-            parts.append("# Context and Data from Previous Tasks:\n" + "\n\n".join(blocks))
+        if tools:
+            names = ", ".join(f"{MCP_TOOL_PREFIX}{t.name}" for t in tools)
+            parts.append(f"# Tools for This Task\n{names}")
+        else:
+            parts.append("# Tools for This Task\nNone assigned. Answer from the context you are given.")
+        context = format_upstream_context(upstream_context or {}, self.settings.worker_max_context_chars)
+        if context:
+            parts.append(context.strip())
         return "\n\n".join(parts)
 
     @staticmethod

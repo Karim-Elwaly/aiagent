@@ -4,5 +4,6 @@
   "llm_temperature": 0.1,
   "llm_max_tokens": 4096,
   "llm_timeout_seconds": 300.0,
-  "worker_llm_model": null
+  "worker_llm_model": null,
+  "worker_engine": "hermes"
 }

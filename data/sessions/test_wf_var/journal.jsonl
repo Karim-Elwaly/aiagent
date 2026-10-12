@@ -1,0 +1,9 @@
+{"timestamp": "2026-10-12T19:08:31.814105+00:00", "code": "x = 42\ny = 'hello'", "is_error": false, "summary": "(Code executed with no output)"}
+{"timestamp": "2026-10-12T19:08:31.817133+00:00", "code": "result = x * 2; print(f'{y}_{result}')", "is_error": false, "summary": "hello_84"}
+{"timestamp": "2026-10-12T19:08:31.818144+00:00", "code": "__vars__", "is_error": true, "summary": "Error / Traceback:\nTraceback (most recent call last):\n  File \"D:\\projects\\aiagent\\src\\registry\\tools\\python_session.py\", line 161, in run_code_raw\n    result_val = eval(compiled, self.namespace)  # no"}
+{"timestamp": "2026-10-12T19:09:01.189155+00:00", "code": "x = 42\ny = 'hello'", "is_error": false, "summary": "(Code executed with no output)"}
+{"timestamp": "2026-10-12T19:09:01.192734+00:00", "code": "result = x * 2; print(f'{y}_{result}')", "is_error": false, "summary": "hello_84"}
+{"timestamp": "2026-10-12T19:09:01.192734+00:00", "code": "__vars__", "is_error": true, "summary": "Error / Traceback:\nTraceback (most recent call last):\n  File \"D:\\projects\\aiagent\\src\\registry\\tools\\python_session.py\", line 161, in run_code_raw\n    result_val = eval(compiled, self.namespace)  # no"}
+{"timestamp": "2026-10-12T19:09:20.518932+00:00", "code": "x = 42\ny = 'hello'", "is_error": false, "summary": "(Code executed with no output)"}
+{"timestamp": "2026-10-12T19:09:20.519945+00:00", "code": "result = x * 2; print(f'{y}_{result}')", "is_error": false, "summary": "hello_84"}
+{"timestamp": "2026-10-12T19:09:20.521949+00:00", "code": "__vars__", "is_error": true, "summary": "Error / Traceback:\nTraceback (most recent call last):\n  File \"D:\\projects\\aiagent\\src\\registry\\tools\\python_session.py\", line 161, in run_code_raw\n    result_val = eval(compiled, self.namespace)  # no"}

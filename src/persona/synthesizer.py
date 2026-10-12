@@ -73,10 +73,7 @@ class PersonaSynthesizer:
         """
         if protocol == "hermes":
             return self._synthesize_hermes(
-                "# Your Role\nYou are a worker agent executing ONE task on the host machine using available tools.",
-                task,
-                tools,
-                upstream_context,
+                "# Your Role\nYou are a worker agent executing ONE task on the host machine using available tools."
             )
         from src.core.config import get_settings
         mode = tool_call_mode or getattr(get_settings(), "tool_call_mode", "legacy")
@@ -163,7 +160,7 @@ You are a worker agent executing ONE task on the host machine using available to
         Otherwise, falls back to standard synthesis steered by the agent's role.
         """
         if protocol == "hermes":
-            return self._synthesize_profile_hermes(profile, task, tools, upstream_context)
+            return self._synthesize_profile_hermes(profile)
         tool_block = self._format_tools(tools)
         context_block = self._format_upstream_context(upstream_context or {})
 
@@ -270,75 +267,13 @@ CANNOT_COMPLETE: <specific explanation of what's missing>
 - Do NOT call a tool and provide a FINAL_ANSWER in the same response.
 {context_block}"""
 
-    def _synthesize_hermes(
-        self,
-        role_block: str,
-        task: Task,
-        tools: list[ToolSpec],
-        upstream_context: dict[str, str] | None,
-    ) -> str:
-        context_block = self._format_upstream_context(upstream_context or {})
-        return f"""{role_block}
+    def _synthesize_hermes(self, role_block: str) -> str:
+        # Hermes runs get the task, tool names and prior outputs once, in the run input.
+        return f"{role_block}\n\n{HERMES_PROTOCOL_BLOCK}"
 
-# Your Task
-**{task.name}**
-{task.description}
-
-# Expected Output
-{task.expected_output}
-
-# Available Tools
-{self._format_tools_plain(tools)}
-
-{HERMES_PROTOCOL_BLOCK}
-{context_block}"""
-
-    def _synthesize_profile_hermes(
-        self,
-        profile: AgentProfile,
-        task: Task,
-        tools: list[ToolSpec],
-        upstream_context: dict[str, str] | None,
-    ) -> str:
-        template = profile.system_prompt_template or ""
-        if not template.strip():
-            role_block = (
-                f"# Your Role: {profile.name}\n{profile.description}\n\n"
-                f"You are operating as the specialized agent '{profile.name}'. Your entire focus "
-                "is on completing this task accurately within your domain specialty."
-            )
-            return self._synthesize_hermes(role_block, task, tools, upstream_context)
-
-        tool_block = self._format_tools_plain(tools)
-        prompt = (
-            template.replace("{task_name}", task.name)
-            .replace("{task_description}", task.description)
-            .replace("{expected_output}", task.expected_output)
-            .replace("{tools}", tool_block)
-        )
-        if "{tools}" not in template:
-            prompt += f"\n\n# Available Tools\n{tool_block}"
-        prompt += f"\n\n{HERMES_PROTOCOL_BLOCK}\n"
-        context_block = self._format_upstream_context(upstream_context or {})
-        if context_block and context_block not in prompt:
-            prompt += f"\n{context_block}"
-        return prompt
-
-    def _format_tools_plain(self, tools: list[ToolSpec]) -> str:
-        """Tool descriptions without the JSON call examples the legacy protocol uses."""
-        if not tools:
-            return "No tools available. Answer based on your knowledge only."
-        lines = []
-        for t in tools:
-            param_parts = []
-            for pname, pinfo in t.parameters.items():
-                ptype = pinfo.get("type", "any")
-                pdesc = pinfo.get("description", "")
-                preq = "required" if pinfo.get("required") else "optional"
-                param_parts.append(f"  - **{pname}** ({ptype}, {preq}): {pdesc}")
-            params_str = "\n".join(param_parts) if param_parts else "  (no parameters)"
-            lines.append(f"## `mcp__aiagent__{t.name}`\n{t.description}\nParameters:\n{params_str}")
-        return "\n\n".join(lines)
+    def _synthesize_profile_hermes(self, profile: AgentProfile) -> str:
+        # The persona is the profile's SOUL.md, which Hermes loads as the agent's identity.
+        return HERMES_PROTOCOL_BLOCK
 
     def _format_tools(self, tools: list[ToolSpec]) -> str:
         """Format tool descriptions for the worker prompt."""
@@ -396,36 +331,35 @@ CANNOT_COMPLETE: <specific explanation of what's missing>
     def _format_upstream_context(
         self, upstream: dict[str, str]
     ) -> str:
-        """Format upstream task outputs with size capping.
+        return format_upstream_context(upstream, self.max_context_chars)
 
-        Prevents context window overflow by truncating each upstream
-        output and capping total context size.
-        """
-        if not upstream:
-            return ""
 
-        block = "\n# Context from Prior Tasks\n"
-        block += (
-            "The following information was produced by tasks that ran "
-            "before yours. Use it as input for your work.\n"
-        )
+def format_upstream_context(upstream: dict[str, str], max_chars: int) -> str:
+    """Format upstream task outputs, truncating them to ``max_chars`` in total."""
+    if not upstream:
+        return ""
 
-        remaining = self.max_context_chars
+    block = "\n# Context from Prior Tasks\n"
+    block += (
+        "The following information was produced by tasks that ran "
+        "before yours. Use it as input for your work.\n"
+    )
 
-        for task_id, output in upstream.items():
-            if remaining <= 100:
-                block += (
-                    "\n> [Additional upstream context truncated to "
-                    "fit context window]\n"
-                )
-                break
+    remaining = max_chars
 
-            # Truncate individual output if needed
-            truncated = output[:remaining]
-            if len(output) > remaining:
-                truncated += "\n[...truncated]"
+    for task_id, output in upstream.items():
+        if remaining <= 100:
+            block += (
+                "\n> [Additional upstream context truncated to "
+                "fit context window]\n"
+            )
+            break
 
-            block += f"\n## From task `{task_id}`:\n{truncated}\n"
-            remaining -= len(truncated)
+        truncated = output[:remaining]
+        if len(output) > remaining:
+            truncated += "\n[...truncated]"
 
-        return block
+        block += f"\n## From task `{task_id}`:\n{truncated}\n"
+        remaining -= len(truncated)
+
+    return block
