@@ -78,6 +78,25 @@ class ClarificationHub:
         Emits a 'clarification_required' event, enters an efficient wait
         with periodic heartbeats for Temporal, and returns the operator's answer.
         """
+        cleaned_choices = [str(c).strip() for c in (choices or []) if str(c).strip()]
+        answer = await self.ask_choice(question, cleaned_choices, workflow_id, task_id, timeout_seconds)
+        if answer is not None:
+            return f"Operator clarified: '{answer}'"
+        default_choice = cleaned_choices[0] if cleaned_choices else "proceed with standard system defaults"
+        return (
+            f"Notice: Operator clarification timed out after {timeout_seconds}s. "
+            f"Proceed autonomously using the safest/recommended default: '{default_choice}'."
+        )
+
+    async def ask_choice(
+        self,
+        question: str,
+        choices: list[str] | None = None,
+        workflow_id: str | None = None,
+        task_id: str | None = None,
+        timeout_seconds: int = 600,
+    ) -> str | None:
+        """Ask the operator and return their answer verbatim, or None when nobody answered in time."""
         wf_id = workflow_id or current_workflow_id.get() or "default"
         t_id = task_id or current_task_id.get() or "unknown_task"
         cleaned_choices = [str(c).strip() for c in (choices or []) if str(c).strip()]
@@ -159,23 +178,14 @@ class ClarificationHub:
                     req.id,
                     answer,
                 )
-                return f"Operator clarified: '{answer}'"
-            else:
-                req.status = "timed_out"
-                logger.warning(
-                    "Clarification %s timed out after %ds without operator response.",
-                    req.id,
-                    timeout_seconds,
-                )
-                default_choice = (
-                    cleaned_choices[0]
-                    if cleaned_choices
-                    else "proceed with standard system defaults"
-                )
-                return (
-                    f"Notice: Operator clarification timed out after {timeout_seconds}s. "
-                    f"Proceed autonomously using the safest/recommended default: '{default_choice}'."
-                )
+                return answer
+            req.status = "timed_out"
+            logger.warning(
+                "Clarification %s timed out after %ds without operator response.",
+                req.id,
+                timeout_seconds,
+            )
+            return None
 
         finally:
             self._pending.pop(req.id, None)

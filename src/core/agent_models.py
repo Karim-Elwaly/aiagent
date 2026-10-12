@@ -7,7 +7,18 @@ Defines data structures for reusable Agent Profiles and AI-generated Skills.
 from __future__ import annotations
 
 from datetime import datetime, timezone
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
+
+WORKER_ENGINE_CHOICES = ("universal", "hermes")
+
+
+def _check_worker_engine(value: str | None) -> str | None:
+    if value is None:
+        return None
+    value = value.strip().lower()
+    if value not in ("", *WORKER_ENGINE_CHOICES):
+        raise ValueError(f"worker_engine must be one of {', '.join(WORKER_ENGINE_CHOICES)} or empty")
+    return value
 
 
 class AgentProfile(BaseModel):
@@ -26,6 +37,14 @@ class AgentProfile(BaseModel):
         description="Allowed abstract skill names. Empty list means all available skills are accessible.",
     )
     tags: list[str] = Field(default_factory=list, description="Categorization tags")
+    worker_engine: str | None = Field(
+        default=None,
+        description="'universal' or 'hermes'; None inherits the global worker_engine setting",
+    )
+    hermes_toolsets: list[str] = Field(
+        default_factory=list,
+        description="Hermes built-in toolsets this agent may use beyond the defaults (Hermes engine only)",
+    )
     created_at: str = Field(
         default_factory=lambda: datetime.now(timezone.utc).isoformat(),
         description="Creation timestamp (ISO 8601)",
@@ -45,6 +64,13 @@ class AgentCreateRequest(BaseModel):
     system_prompt_template: str = ""
     curated_skills: list[str] = Field(default_factory=list)
     tags: list[str] = Field(default_factory=list)
+    worker_engine: str | None = None
+    hermes_toolsets: list[str] = Field(default_factory=list)
+
+    @field_validator("worker_engine")
+    @classmethod
+    def _engine(cls, v: str | None) -> str | None:
+        return _check_worker_engine(v)
 
 
 class AgentUpdateRequest(BaseModel):
@@ -56,6 +82,13 @@ class AgentUpdateRequest(BaseModel):
     system_prompt_template: str | None = None
     curated_skills: list[str] | None = None
     tags: list[str] | None = None
+    worker_engine: str | None = None
+    hermes_toolsets: list[str] | None = None
+
+    @field_validator("worker_engine")
+    @classmethod
+    def _engine(cls, v: str | None) -> str | None:
+        return _check_worker_engine(v)
 
 
 class AgentGenerateRequest(BaseModel):

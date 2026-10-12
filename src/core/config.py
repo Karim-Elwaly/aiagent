@@ -37,6 +37,17 @@ class Settings(BaseSettings):
     worker_max_iterations: int = 8  # ReAct loop iteration limit
     worker_max_output_chars: int = 8000  # cap tool output per call (increased for forensic log dumps)
     worker_max_context_chars: int = 12000  # cap upstream context in persona (increased for multi-phase correlation)
+    # "universal" (aiagent's own ReAct loop) or "hermes" (the task runs inside Hermes Agent); agents may override.
+    worker_engine: str = "universal"
+
+    # ── Hermes Agent ─────────────────────────────────────
+    hermes_api_url: str = "http://127.0.0.1:8642"
+    hermes_home: str = ""  # empty: %LOCALAPPDATA%\hermes when it exists, else ~/.hermes
+    hermes_bin: str = ""  # empty: the hermes executable under hermes_home, else PATH
+    hermes_mcp_url: str = "http://127.0.0.1:8000/mcp/"  # where Hermes reaches aiagent's tools
+    hermes_default_toolsets: list[str] = ["web"]  # Hermes built-ins every aiagent profile gets
+    hermes_run_timeout_seconds: int = 1800
+    hermes_approval_timeout_seconds: int = 600
 
     # ── Planner Configuration ────────────────────────────
     planner_max_retries: int = 3  # retries on JSON parse failure

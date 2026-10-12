@@ -2267,6 +2267,7 @@ document.addEventListener("DOMContentLoaded", () => {
   const fetchModelsBtn = document.getElementById("fetch-models-btn");
   const inputBaseUrl = document.getElementById("llm-input-base-url");
   const inputModel = document.getElementById("llm-input-model");
+  const inputWorkerEngine = document.getElementById("llm-input-worker-engine");
   const discoveredSelect = document.getElementById("discovered-models-select");
   const testStatusEl = document.getElementById("llm-test-status");
 
@@ -2278,6 +2279,7 @@ document.addEventListener("DOMContentLoaded", () => {
         const data = await res.json();
         if (inputBaseUrl) inputBaseUrl.value = data.base_url || "http://localhost:1234/v1";
         if (inputModel) inputModel.value = data.model || "hermes3";
+        if (inputWorkerEngine) inputWorkerEngine.value = data.worker_engine || "universal";
       }
     } catch (e) {
       console.warn("Could not load LLM settings:", e);
@@ -2436,7 +2438,11 @@ document.addEventListener("DOMContentLoaded", () => {
         const res = await fetch("/api/settings/llm", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ base_url: baseUrl, model: model }),
+          body: JSON.stringify({
+            base_url: baseUrl,
+            model: model,
+            worker_engine: inputWorkerEngine ? inputWorkerEngine.value : undefined,
+          }),
         });
         if (!res.ok) throw new Error("Failed to save settings");
 
@@ -3136,6 +3142,7 @@ document.addEventListener("DOMContentLoaded", () => {
     const desc = document.getElementById("agent-form-desc");
     const template = document.getElementById("agent-form-template");
     const tags = document.getElementById("agent-form-tags");
+    const workerEngine = document.getElementById("agent-form-worker-engine");
 
     if (formId) formId.value = "";
     if (name) name.value = "";
@@ -3143,6 +3150,9 @@ document.addEventListener("DOMContentLoaded", () => {
     if (desc) desc.value = "";
     if (template) template.value = "";
     if (tags) tags.value = "";
+    if (workerEngine) workerEngine.value = "";
+    const hermesToolsets = document.getElementById("agent-form-hermes-toolsets");
+    if (hermesToolsets) hermesToolsets.value = "";
 
     populateSkillsPicker([]);
   }
@@ -3189,6 +3199,10 @@ document.addEventListener("DOMContentLoaded", () => {
       document.getElementById("agent-form-tags").value = (agent.tags || []).join(
         ", "
       );
+      const workerEngineSelect = document.getElementById("agent-form-worker-engine");
+      if (workerEngineSelect) workerEngineSelect.value = agent.worker_engine || "";
+      const hermesToolsetsInput = document.getElementById("agent-form-hermes-toolsets");
+      if (hermesToolsetsInput) hermesToolsetsInput.value = (agent.hermes_toolsets || []).join(", ");
 
       await populateSkillsPicker(agent.curated_skills || []);
     } catch (e) {
@@ -3275,6 +3289,9 @@ document.addEventListener("DOMContentLoaded", () => {
         system_prompt_template: template,
         curated_skills: checkedSkills,
         tags: tags,
+        worker_engine: (document.getElementById("agent-form-worker-engine") || {}).value || "",
+        hermes_toolsets: ((document.getElementById("agent-form-hermes-toolsets") || {}).value || "")
+          .split(",").map((t) => t.trim()).filter(Boolean),
       };
 
       try {

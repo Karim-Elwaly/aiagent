@@ -22,6 +22,15 @@ from src.registry.tool_registry import ToolSpec
 
 logger = logging.getLogger(__name__)
 
+HERMES_PROTOCOL_BLOCK = """# Tool Use
+You run inside Hermes Agent. aiagent's tools appear to you as mcp__aiagent__<name>; this section overrides any earlier tool-call format instructions.
+1. Always call tools first to gather real data. The tools have direct filesystem access on the host (C:, D:); never claim lack of access.
+2. After each tool result, decide whether another tool call is needed.
+3. If you need a tool you were not given, call mcp__aiagent__request_tool with its name, arguments and a reason; the operator decides.
+4. This agent's aiagent skills are installed as Hermes skills named aiagent-<skill>; skill_view shows which tools a skill uses and how.
+5. When you have enough evidence, reply with your complete answer (findings, tables and data from the tools). That reply ends the task.
+6. If the task is impossible with the available tools, reply with: CANNOT_COMPLETE: <reason>."""
+
 
 class PersonaSynthesizer:
     """Generates focused system prompts for Universal Worker Agents.
@@ -46,6 +55,7 @@ class PersonaSynthesizer:
         task: Task,
         tools: list[ToolSpec],
         upstream_context: dict[str, str] | None = None,
+        protocol: str = "legacy",
     ) -> str:
         """Generate a complete system prompt for a worker agent.
 
@@ -53,11 +63,19 @@ class PersonaSynthesizer:
             task: The task to execute.
             tools: Resolved concrete tools from the ToolRegistry.
             upstream_context: {task_id: output} from completed dependencies.
+            protocol: "legacy" (JSON ReAct) or "hermes" (function calling).
 
         Returns:
             A system prompt string ready to be injected as the worker's
             system message.
         """
+        if protocol == "hermes":
+            return self._synthesize_hermes(
+                "# Your Role\nYou are a worker agent executing ONE task on the host machine using available tools.",
+                task,
+                tools,
+                upstream_context,
+            )
         tool_block = self._format_tools(tools)
         context_block = self._format_upstream_context(
             upstream_context or {}
@@ -94,6 +112,7 @@ Tool call format:
         task: Task,
         tools: list[ToolSpec],
         upstream_context: dict[str, str] | None = None,
+        protocol: str = "legacy",
     ) -> str:
         """Generate a custom persona prompt based on an AgentProfile configuration.
 
@@ -101,6 +120,8 @@ Tool call format:
         {task_name}, {task_description}, {expected_output}, {tools}.
         Otherwise, falls back to standard synthesis steered by the agent's role.
         """
+        if protocol == "hermes":
+            return self._synthesize_profile_hermes(profile, task, tools, upstream_context)
         tool_block = self._format_tools(tools)
         context_block = self._format_upstream_context(upstream_context or {})
 
@@ -189,6 +210,76 @@ CANNOT_COMPLETE: <specific explanation of what's missing>
 - Do NOT invent tool names. Only use tools listed above.
 - Do NOT call a tool and provide a FINAL_ANSWER in the same response.
 {context_block}"""
+
+    def _synthesize_hermes(
+        self,
+        role_block: str,
+        task: Task,
+        tools: list[ToolSpec],
+        upstream_context: dict[str, str] | None,
+    ) -> str:
+        context_block = self._format_upstream_context(upstream_context or {})
+        return f"""{role_block}
+
+# Your Task
+**{task.name}**
+{task.description}
+
+# Expected Output
+{task.expected_output}
+
+# Available Tools
+{self._format_tools_plain(tools)}
+
+{HERMES_PROTOCOL_BLOCK}
+{context_block}"""
+
+    def _synthesize_profile_hermes(
+        self,
+        profile: AgentProfile,
+        task: Task,
+        tools: list[ToolSpec],
+        upstream_context: dict[str, str] | None,
+    ) -> str:
+        template = profile.system_prompt_template or ""
+        if not template.strip():
+            role_block = (
+                f"# Your Role: {profile.name}\n{profile.description}\n\n"
+                f"You are operating as the specialized agent '{profile.name}'. Your entire focus "
+                "is on completing this task accurately within your domain specialty."
+            )
+            return self._synthesize_hermes(role_block, task, tools, upstream_context)
+
+        tool_block = self._format_tools_plain(tools)
+        prompt = (
+            template.replace("{task_name}", task.name)
+            .replace("{task_description}", task.description)
+            .replace("{expected_output}", task.expected_output)
+            .replace("{tools}", tool_block)
+        )
+        if "{tools}" not in template:
+            prompt += f"\n\n# Available Tools\n{tool_block}"
+        prompt += f"\n\n{HERMES_PROTOCOL_BLOCK}\n"
+        context_block = self._format_upstream_context(upstream_context or {})
+        if context_block and context_block not in prompt:
+            prompt += f"\n{context_block}"
+        return prompt
+
+    def _format_tools_plain(self, tools: list[ToolSpec]) -> str:
+        """Tool descriptions without the JSON call examples the legacy protocol uses."""
+        if not tools:
+            return "No tools available. Answer based on your knowledge only."
+        lines = []
+        for t in tools:
+            param_parts = []
+            for pname, pinfo in t.parameters.items():
+                ptype = pinfo.get("type", "any")
+                pdesc = pinfo.get("description", "")
+                preq = "required" if pinfo.get("required") else "optional"
+                param_parts.append(f"  - **{pname}** ({ptype}, {preq}): {pdesc}")
+            params_str = "\n".join(param_parts) if param_parts else "  (no parameters)"
+            lines.append(f"## `mcp__aiagent__{t.name}`\n{t.description}\nParameters:\n{params_str}")
+        return "\n\n".join(lines)
 
     def _format_tools(self, tools: list[ToolSpec]) -> str:
         """Format tool descriptions for the worker prompt."""

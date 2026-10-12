@@ -68,3 +68,5 @@ data/checkpoints/
 # Captured LLM decision corpora — contain task descriptions and worker output,
 # which in a SOC deployment includes log evidence. Never commit.
 data/decision_capture/
+# Hermes Agent integration state (profile token hashes, active runs)
+data/hermes/

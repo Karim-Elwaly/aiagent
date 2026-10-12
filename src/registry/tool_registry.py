@@ -218,6 +218,14 @@ class ToolRegistry:
         """Look up a tool by its ID."""
         return self._tools.get(tool_id)
 
+    def get_tool_by_name(self, name: str) -> ToolSpec | None:
+        """Look up a tool by the name the LLM calls it by."""
+        return next((spec for spec in self._tools.values() if spec.name == name), None)
+
+    def tools_providing(self, skill: str) -> list[ToolSpec]:
+        """Every tool registered for an exact skill name (no fuzzy fallback)."""
+        return [self._tools[tid] for tid in self._skill_index.get(skill, []) if tid in self._tools]
+
     def has_tool(self, tool_id_or_name: str) -> bool:
         """Check if a tool exists by its tool_id or name."""
         if tool_id_or_name in self._tools:

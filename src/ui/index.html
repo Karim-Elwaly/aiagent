@@ -517,6 +517,16 @@
         <select id="discovered-models-select" class="model-select" style="display: none;"></select>
       </div>
 
+      <!-- Worker engine -->
+      <div style="display: flex; flex-direction: column; gap: 6px;">
+        <label class="field-label" for="llm-input-worker-engine">Worker Engine</label>
+        <select id="llm-input-worker-engine" class="model-select" style="width: 100%;">
+          <option value="universal">Universal ReAct (aiagent's own loop)</option>
+          <option value="hermes">Hermes Agent (tasks run inside Hermes)</option>
+        </select>
+        <span class="field-tip">Hermes Agent runs on its API server (127.0.0.1:8642) with aiagent's tools over MCP. Agents can override this in Agent Studio.</span>
+      </div>
+
       <!-- Test connection status display -->
       <div id="llm-test-status" class="test-status-box" style="display: none;"></div>
 
@@ -998,6 +1008,21 @@
           <div>
             <label class="field-label">Tags (comma-separated)</label>
             <input type="text" id="agent-form-tags" class="prompt-box modal-input" placeholder="security, audit, python">
+          </div>
+
+          <div>
+            <label class="field-label" for="agent-form-worker-engine">Worker Engine</label>
+            <select id="agent-form-worker-engine" class="model-select" style="width: 100%;">
+              <option value="">Inherit global setting</option>
+              <option value="universal">Universal ReAct</option>
+              <option value="hermes">Hermes Agent</option>
+            </select>
+          </div>
+
+          <div>
+            <label class="field-label" for="agent-form-hermes-toolsets">Extra Hermes toolsets (comma-separated)</label>
+            <input type="text" id="agent-form-hermes-toolsets" class="prompt-box modal-input" placeholder="e.g. terminal, file (web is always on)">
+            <div class="field-tip">Hermes Agent engine only. Approving a toolset during a run adds it here.</div>
           </div>
 
           <div style="display: flex; justify-content: flex-end; gap: 8px; margin-top: 6px;">

@@ -34,7 +34,7 @@ from src.orchestrator.event_bus import get_event_bus
 from src.persona.synthesizer import PersonaSynthesizer
 from src.registry.auto_discover import register_all_tools
 from src.registry.tool_registry import ToolRegistry
-from src.workers.universal_worker import UniversalWorkerAgent
+from src.workers.factory import create_worker, resolve_engine
 
 logger = logging.getLogger(__name__)
 
@@ -263,6 +263,8 @@ async def execute_task(
             )
 
         # Component 3: Persona Synthesizer — generate system prompt
+        engine = resolve_engine(profile, settings)
+        protocol = "hermes" if engine == "hermes" else "legacy"
         synthesizer = PersonaSynthesizer(
             max_context_chars=settings.worker_max_context_chars
         )
@@ -272,32 +274,40 @@ async def execute_task(
                 task=task,
                 tools=tools,
                 upstream_context=upstream_outputs if upstream_outputs else None,
+                protocol=protocol,
             )
         else:
             persona = synthesizer.synthesize(
                 task=task,
                 tools=tools,
                 upstream_context=upstream_outputs if upstream_outputs else None,
+                protocol=protocol,
             )
 
-        # Component 4: Universal Worker Agent — execute with ReAct loop
-        worker = UniversalWorkerAgent(
-            llm=worker_llm,
-            max_iterations=settings.worker_max_iterations,
-            max_output_chars=settings.worker_max_output_chars,
-        )
+        # Component 4: Worker Agent — universal ReAct loop or Hermes function calling
+        worker = create_worker(engine, worker_llm, settings, agent=profile, registry=registry)
+        logger.info("Task '%s' runs on the %s worker engine", task.id, engine)
 
         # Temporal Native Heartbeat Checkpointing
         resume_checkpoint = None
         try:
             details = activity.info().heartbeat_details
             if details and isinstance(details[0], dict) and "messages" in details[0]:
-                resume_checkpoint = details[0]
-                logger.info(
-                    "Temporal Activity '%s' restoring state from server heartbeat details (step %s)",
-                    task.id,
-                    resume_checkpoint.get("step", 0),
-                )
+                checkpoint_engine = details[0].get("engine", "universal")
+                if checkpoint_engine == engine:
+                    resume_checkpoint = details[0]
+                    logger.info(
+                        "Temporal Activity '%s' restoring state from server heartbeat details (step %s)",
+                        task.id,
+                        resume_checkpoint.get("step", 0),
+                    )
+                else:
+                    logger.info(
+                        "Task '%s' ignoring %s checkpoint: now running on the %s engine",
+                        task.id,
+                        checkpoint_engine,
+                        engine,
+                    )
         except Exception:
             pass
 
@@ -309,6 +319,7 @@ async def execute_task(
                 wf_id = activity.info().workflow_id
             except Exception:
                 wf_id = "default"
+        bus.publish(wf_id, {"type": "worker_engine", "task_id": task.id, "engine": engine})
 
         def handle_token(token: str) -> None:
             bus.publish(wf_id, {"type": "token", "task_id": task.id, "content": token})

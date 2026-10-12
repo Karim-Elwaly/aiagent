@@ -180,6 +180,7 @@ class LLMConfigPayload(BaseModel):
     model: str
     temperature: float = 0.1
     max_tokens: int = 4096
+    worker_engine: str | None = None
 
 
 class LLMTestPayload(BaseModel):
@@ -290,7 +291,11 @@ async def lifespan(app: FastAPI):
 
     logger.info("UAOS API ready at http://%s:%d", settings.api_host, settings.api_port)
 
-    yield
+    from src.hermes.mcp_server import MCPEndpoint, ToolGate
+
+    app.state.hermes_mcp = MCPEndpoint(ToolGate(registry, settings))
+    async with app.state.hermes_mcp.run():
+        yield
 
     # Shutdown: stop scheduler and close MCP clients
     try:
@@ -329,6 +334,19 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+
+async def _hermes_mcp_asgi(scope, receive, send):
+    endpoint = getattr(app.state, "hermes_mcp", None)
+    if endpoint is None:
+        await send({"type": "http.response.start", "status": 503, "headers": []})
+        await send({"type": "http.response.body", "body": b""})
+        return
+    await endpoint(scope, receive, send)
+
+
+# aiagent's tools for Hermes Agent profiles (see src/hermes/mcp_server.py).
+app.mount("/mcp", _hermes_mcp_asgi)
 
 # ── UI Static Files Mount ─────────────────────────────────────────
 UI_DIR = Path(__file__).resolve().parent.parent / "ui"
@@ -1491,6 +1509,7 @@ async def get_llm_settings():
         "model": settings.llm_model,
         "temperature": settings.llm_temperature,
         "max_tokens": settings.llm_max_tokens,
+        "worker_engine": settings.worker_engine,
     }
 
 
@@ -1498,6 +1517,10 @@ async def get_llm_settings():
 async def update_llm_settings(payload: LLMConfigPayload):
     """Update runtime LLM settings without restarting the server."""
     from src.core.config import save_runtime_settings
+    from src.workers.factory import WORKER_ENGINES
+
+    if payload.worker_engine is not None and payload.worker_engine not in WORKER_ENGINES:
+        raise HTTPException(422, f"worker_engine must be one of {', '.join(WORKER_ENGINES)}")
 
     updates = {
         "llm_base_url": payload.base_url.rstrip("/"),
@@ -1505,6 +1528,8 @@ async def update_llm_settings(payload: LLMConfigPayload):
         "llm_temperature": payload.temperature,
         "llm_max_tokens": payload.max_tokens,
     }
+    if payload.worker_engine is not None:
+        updates["worker_engine"] = payload.worker_engine
     settings = save_runtime_settings(updates)
 
     # Update app state LLM client
@@ -1568,6 +1593,8 @@ async def create_agent(payload: AgentCreateRequest):
         system_prompt_template=payload.system_prompt_template,
         curated_skills=payload.curated_skills,
         tags=payload.tags,
+        worker_engine=payload.worker_engine or None,
+        hermes_toolsets=payload.hermes_toolsets,
     )
     store.save(profile)
     return profile
@@ -1603,6 +1630,10 @@ async def update_agent(agent_id: str, payload: AgentUpdateRequest):
         profile.curated_skills = payload.curated_skills
     if payload.tags is not None:
         profile.tags = payload.tags
+    if payload.worker_engine is not None:
+        profile.worker_engine = payload.worker_engine or None
+    if payload.hermes_toolsets is not None:
+        profile.hermes_toolsets = payload.hermes_toolsets
 
     store.save(profile)
     return profile
