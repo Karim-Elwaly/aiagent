@@ -203,7 +203,14 @@ class LocalLLMClient:
                 f"{self.base_url}/chat/completions",
                 json=payload,
             )
-            resp.raise_for_status()
+            if resp.is_error:
+                # The server's body carries the real reason (context overflow, model not loaded, bad template).
+                raise httpx.HTTPStatusError(
+                    f"{resp.status_code} from {resp.request.url} (model={self.model}, messages={len(messages)}, "
+                    f"prompt_chars={sum(len(str(m.get('content') or '')) for m in messages)}): {resp.text[:1000]}",
+                    request=resp.request,
+                    response=resp,
+                )
             data = resp.json()
 
         choices = data.get("choices", [])
@@ -228,6 +235,11 @@ class LocalLLMClient:
             len(tool_calls),
             finish_reason,
         )
+        if finish_reason == "length":
+            logger.warning(
+                "LLM reply cut off at max_tokens=%d (model=%s, content %d chars, reasoning %d chars)",
+                effective_max_tokens, self.model, len(cleaned_content), len(reasoning),
+            )
 
         return LLMResponse(
             content=cleaned_content,

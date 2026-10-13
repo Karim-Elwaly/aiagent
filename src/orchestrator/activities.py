@@ -67,16 +67,18 @@ def _get_registry() -> ToolRegistry:
 def _get_planner_llm() -> LocalLLMClient:
     global _planner_llm
     settings = get_settings()
+    max_tokens = max(settings.llm_max_tokens, settings.planner_max_tokens)
     if (
         _planner_llm is None
         or _planner_llm.base_url != settings.llm_base_url
         or _planner_llm.model != settings.llm_model
+        or _planner_llm.max_tokens != max_tokens
     ):
         _planner_llm = LocalLLMClient(
             base_url=settings.llm_base_url,
             model=settings.llm_model,
             temperature=settings.llm_temperature,
-            max_tokens=settings.llm_max_tokens,
+            max_tokens=max_tokens,
             timeout=settings.llm_timeout_seconds,
         )
         logger.info("Planner LLM initialized: %s", _planner_llm)

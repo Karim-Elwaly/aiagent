@@ -53,6 +53,8 @@ class Settings(BaseSettings):
     # ── Planner Configuration ────────────────────────────
     planner_max_retries: int = 3  # retries on JSON parse failure
     planner_max_tasks: int = 12  # maximum tasks in a single DAG
+    # Reasoning models spend part of the budget thinking before the JSON; 4096 truncates multi-phase plans.
+    planner_max_tokens: int = 16384
 
     # ── Durability / Resilience ──────────────────────────
     # Default outage tolerance when a request doesn't specify one.

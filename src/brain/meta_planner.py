@@ -145,6 +145,18 @@ class MetaPlanner:
                 )
                 return dag
 
+            except JSONParseError as e:
+                last_error = (
+                    "Your reply contained no complete JSON object (it was empty or cut off). "
+                    "Return only the JSON plan, with short descriptions."
+                )
+                logger.warning(
+                    "Plan attempt %d: no JSON in reply (%d chars): %s",
+                    attempt + 1,
+                    len(response or ""),
+                    e.raw_output[-200:] if getattr(e, "raw_output", "") else "empty reply",
+                )
+
             except json.JSONDecodeError as e:
                 last_error = f"Invalid JSON: {e}"
                 logger.warning(
