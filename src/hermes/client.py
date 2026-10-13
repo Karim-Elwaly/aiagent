@@ -8,6 +8,7 @@ Named profiles are served under ``/p/<profile>/`` by a multiplexed gateway and e
 from __future__ import annotations
 
 import json
+import re
 import urllib.parse
 from collections.abc import AsyncIterator
 from typing import Any
@@ -16,6 +17,11 @@ import httpx
 
 TERMINAL_STATUSES = frozenset({"completed", "failed", "cancelled", "interrupted"})
 TERMINAL_EVENTS = frozenset(f"run.{s}" for s in TERMINAL_STATUSES)
+# Sampling-dependent model-server faults, e.g. LM Studio rejecting a gpt-oss harmony message it can't parse.
+MODEL_ERROR = re.compile(
+    r"server_error|\"code\"\s*:\s*5\d\d|error code:?\s*5\d\d|does not match the expected|predict stream", re.I
+)
+MODEL_ERROR_RETRIES = 2
 
 
 class HermesAPIError(RuntimeError):

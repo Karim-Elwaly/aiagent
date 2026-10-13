@@ -199,6 +199,20 @@ class MemoryFactPayload(BaseModel):
 # ── Application Lifecycle ────────────────────────────────────────
 
 
+def _provision_hermes_in_background() -> None:
+    """Create the Hermes profiles aiagent needs (tool groups, orchestrator) without delaying startup."""
+
+    def run() -> None:
+        from src.hermes.provision import provision_profiles
+
+        try:
+            provision_profiles(get_settings())
+        except Exception as exc:
+            logger.warning("Hermes profile provisioning failed: %s", exc)
+
+    asyncio.get_running_loop().run_in_executor(None, run)
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """Startup and shutdown logic."""
@@ -312,6 +326,7 @@ async def lifespan(app: FastAPI):
 
     app.state.hermes_mcp = MCPEndpoint(ToolGate(registry, settings))
     async with app.state.hermes_mcp.run():
+        _provision_hermes_in_background()
         yield
 
     # Shutdown: stop scheduler and close MCP clients
@@ -690,7 +705,7 @@ async def run_direct_workflow(
                 # Supervisor ReAct evaluation
                 try:
                     supervisor_eval = await evaluate_task_output(
-                        task_dict, task_output, user_query, completed
+                        task_dict, task_output, user_query, completed, task_agent
                     )
                     if supervisor_eval:
                         decision = supervisor_eval.get("decision", "pass")
@@ -720,6 +735,7 @@ async def run_direct_workflow(
                                 task_dict["required_skills"] = ["system_command", "code_execution", "general_reasoning"]
                             if result_dict.get("hermes_session_id"):
                                 task_dict["_hermes_session_id"] = result_dict["hermes_session_id"]
+                                task_dict["_hermes_profile"] = result_dict.get("hermes_profile")
                                 task_dict["_supervisor_feedback"] = feedback
 
                             retry_result = await _execute_task_with_retries(task_dict, completed, task_agent, profile)
@@ -730,7 +746,7 @@ async def run_direct_workflow(
                                 # wrote a fabricated "pass" with an invented 0.98
                                 # confidence, claiming a review that never happened.
                                 retry_eval = await evaluate_task_output(
-                                    task_dict, task_output, user_query, completed
+                                    task_dict, task_output, user_query, completed, task_agent
                                 ) or {}
                                 state["supervisor_evaluations"] = [
                                     e for e in state["supervisor_evaluations"]
@@ -809,7 +825,7 @@ async def run_direct_workflow(
             return workflow_result
 
         # Phase 3: Assembly
-        raw_solution = await assemble_response(user_query, dag_dict, completed)
+        raw_solution = await assemble_response(user_query, dag_dict, completed, agent_id)
         final_solution = clean_assembled_solution(raw_solution)
         workflow_result = {
             "response": final_solution,
@@ -1300,6 +1316,9 @@ async def set_task_agent(workflow_id: str, task_id: str, request: TaskAgentReque
 
     _status_cache.pop(workflow_id, None)
     return {"workflow_id": workflow_id, "task_id": task_id, "agent_id": request.agent_id or None}
+
+
+@app.post("/clarify/{workflow_id}")
 async def clarify_workflow(workflow_id: str, request: ClarifyRequest):
     """Submit operator clarification for an ambiguous task.
 
@@ -1616,6 +1635,9 @@ async def update_llm_settings(payload: LLMConfigPayload):
     from src.orchestrator.activities import reset_llm_clients
 
     reset_llm_clients()
+
+    if payload.worker_engine == "hermes":
+        _provision_hermes_in_background()
 
     return {"status": "updated", "config": payload.model_dump()}
 
@@ -2002,6 +2024,18 @@ async def _hermes_call(fn, *args):
         raise HTTPException(503, f"Hermes Agent: {e}")
 
 
+@app.post("/api/hermes/provision")
+async def hermes_provision():
+    """Create the missing aiagent profiles in Hermes (tool groups, orchestrator); restarts its gateway once if needed."""
+    from src.hermes.provision import hermes_in_use, provision_profiles
+
+    settings = get_settings()
+    if not hermes_in_use(settings):
+        raise HTTPException(409, "The Hermes worker engine is not in use")
+    restarted = await asyncio.to_thread(provision_profiles, settings)
+    return {"gateway_restarted": restarted}
+
+
 @app.get("/api/hermes/toolsets")
 async def hermes_toolsets(agent_id: str = ""):
     """Hermes built-in toolsets for an agent's profile (or tasks without an agent) and their state."""
@@ -2038,9 +2072,11 @@ async def set_hermes_toolsets(payload: HermesToolsetsPayload):
 async def hermes_skills(agent_id: str = ""):
     """Skills an agent's Hermes profile can load: aiagent's, Hermes built-ins, hub installs and local ones."""
     from src.hermes.profiles import profile_name
+    from src.hermes.skills import skill_documents
 
-    _hermes_agent(agent_id)
-    return await asyncio.to_thread(_hermes_catalog().skills, profile_name(agent_id))
+    agent = _hermes_agent(agent_id)
+    docs = skill_documents(agent, app.state.registry)
+    return await asyncio.to_thread(_hermes_catalog().skills, profile_name(agent_id), docs)
 
 
 @app.get("/api/hermes/skills/search")

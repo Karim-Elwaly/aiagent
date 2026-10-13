@@ -145,14 +145,26 @@ def mark_hermes_origin(name: str) -> None:
     HERMES_ORIGIN_FILE.write_text(json.dumps(sorted(names)), encoding="utf-8")
 
 
-def skill_documents(agent: Any, registry: ToolRegistry | None, imported_dir: Path | None = None) -> dict[str, str]:
-    """``{folder name: SKILL.md content}`` for an agent (``None`` = tasks without an agent)."""
+def skill_documents(
+    agent: Any,
+    registry: ToolRegistry | None,
+    imported_dir: Path | None = None,
+    focus_tools: set[str] | None = None,
+    focus_skills: set[str] | None = None,
+) -> dict[str, str]:
+    """``{folder name: SKILL.md content}`` for an agent (``None`` = tasks without an agent).
+
+    ``focus_tools``/``focus_skills`` (one task's tools and required skills) keep only the documents that task can use;
+    leaving both ``None`` returns everything the agent is curated for.
+    """
     curated = set(getattr(agent, "curated_skills", None) or [])
     docs: dict[str, str] = {}
 
     if registry is not None:
         for spec in sorted(registry.get_all_tools(), key=lambda t: t.name):
             if spec.source_type in NON_MCP_SOURCES:
+                continue
+            if focus_tools is not None and spec.name not in focus_tools:
                 continue
             provided = [s for s in spec.skills_provided if not curated or s in curated]
             if provided:
@@ -170,6 +182,8 @@ def skill_documents(agent: Any, registry: ToolRegistry | None, imported_dir: Pat
             logger.warning("Skipping skill document '%s': %s", path.name, exc)
             continue
         if curated and spec.name not in curated and not curated & set(spec.skills_provided):
+            continue
+        if focus_skills is not None and spec.name not in focus_skills and not focus_skills & set(spec.skills_provided):
             continue
         docs.setdefault(slug(path.stem), imported_skill(content, path.stem, spec.description))
     return docs

@@ -422,10 +422,13 @@ class FakeProfiles:
         self.connected, self.changed = connected, changed
         self.state = SimpleNamespace(mcp_connected=lambda name, since=0.0: self.connected)
 
-    def ensure(self, agent_id, toolsets, skill_docs=None, agent=None):
+    def ensure(self, agent_id, toolsets, skill_docs=None, agent=None, bundle=None):
         self.ensured.append((agent_id, toolsets))
         self.skill_docs = skill_docs
         return ProfileInfo(name=f"aiagent-{agent_id or 'default'}", api_key="k", changed=self.changed)
+
+    def write_profile_skills(self, name, docs):
+        self.written = (name, docs)
 
     def restart_gateway(self):
         self.restarts += 1
@@ -555,6 +558,15 @@ async def test_worker_stops_the_hermes_run_when_cancelled(tmp_path):
     with pytest.raises(asyncio.CancelledError):
         await running
     assert client.stopped == ["run_1"]
+
+
+async def test_worker_runs_fresh_when_the_reviewed_session_belongs_to_another_profile(tmp_path):
+    worker, client, _ = _worker(tmp_path, [{"event": "tool.completed", "tool": "mcp__aiagent__read_file", "seq": 0},
+                                           {"event": "run.completed", "output": "ok", "seq": 1}])
+    await worker.execute(TASK, "p", [_spec("read_file", ["file_reading"])], continue_session="sess-1",
+                         review_feedback="gaps", continue_profile="aiagent-bundle-files")
+    sent = client.created[0]
+    assert sent["session_id"] != "sess-1" and "Scan logs" in sent["input"]  # the default profile has no such session
 
 
 async def test_worker_retries_inference_server_errors_with_a_fresh_run(tmp_path):

@@ -113,9 +113,12 @@ class ToolGate:
         return [t for t in self.registry.get_all_tools() if t.source_type not in HIDDEN_SOURCES]
 
     def exposed_tools(self, entry: dict[str, Any]) -> list[ToolSpec]:
-        """The tools Hermes is shown for this profile: the agent's curated tools, or every tool without curation."""
+        """The tools Hermes is shown for this profile: a tool group's tools, the agent's curated tools, or every tool."""
         agent = self._agent(entry)
         candidates = self._candidates()
+        if entry.get("bundle") is not None:
+            names = set(entry["bundle"])
+            return [t for t in candidates if t.name in names]
         if agent and agent.curated_skills:
             skills = set(agent.curated_skills)
             return [t for t in candidates if skills & set(t.skills_provided)]
@@ -127,6 +130,9 @@ class ToolGate:
             base = {t.name for t in self.exposed_tools(entry)}
         else:
             base = set(active.get("task_tools") or [])
+            if entry.get("bundle") is not None:
+                # The group was picked for this task: its low-risk tools need no approval.
+                base |= {t.name for t in self.exposed_tools(entry) if t.risk_level.value == "low"}
         return base | self.grants.get(active.get("workflow_id", ""), set())
 
     async def call(self, entry: dict[str, Any], name: str, arguments: dict[str, Any]) -> str:

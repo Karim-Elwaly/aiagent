@@ -396,7 +396,7 @@ class UAOSWorkflow:
 
         final_response = await workflow.execute_activity(
             assemble_response,
-            args=[user_query, dag_dict, completed],
+            args=[user_query, dag_dict, completed, agent_id],
             start_to_close_timeout=timedelta(seconds=120),
             retry_policy=llm_retry_policy,
         )
@@ -561,7 +561,7 @@ class UAOSWorkflow:
             try:
                 supervisor_eval = await workflow.execute_activity(
                     evaluate_task_output,
-                    args=[task_dict, task_output, user_query, dict(completed)],
+                    args=[task_dict, task_output, user_query, dict(completed), agent_id],
                     start_to_close_timeout=timedelta(seconds=120),
                     retry_policy=RetryPolicy(maximum_attempts=2),
                 )
@@ -594,6 +594,7 @@ class UAOSWorkflow:
                         )
                         if result_dict.get("hermes_session_id"):
                             retry_task_dict["_hermes_session_id"] = result_dict["hermes_session_id"]
+                            retry_task_dict["_hermes_profile"] = result_dict.get("hermes_profile")
                             retry_task_dict["_supervisor_feedback"] = feedback
                         # If the task originally lacked tools (only general_reasoning), equip it with execution tools on retry
                         req_skills = list(retry_task_dict.get("required_skills", []))
@@ -615,7 +616,7 @@ class UAOSWorkflow:
                             # confidence, claiming a review that never happened.
                             retry_eval = await workflow.execute_activity(
                                 evaluate_task_output,
-                                args=[retry_task_dict, task_output, user_query, dict(completed)],
+                                args=[retry_task_dict, task_output, user_query, dict(completed), agent_id],
                                 start_to_close_timeout=timedelta(seconds=120),
                                 retry_policy=RetryPolicy(maximum_attempts=2),
                             ) or {}

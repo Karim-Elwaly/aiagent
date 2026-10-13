@@ -49,6 +49,11 @@ class Settings(BaseSettings):
     hermes_default_toolsets: list[str] = []  # Hermes built-ins every aiagent profile gets; agents add their own
     hermes_run_timeout_seconds: int = 1800
     hermes_approval_timeout_seconds: int = 600
+    # Tasks without an agent run on small tool-group profiles (aiagent-bundle-*) instead of aiagent-default.
+    hermes_tool_bundles: bool = True
+    # With the Hermes engine, the planner, supervisor and final report calls also run through Hermes.
+    hermes_orchestration: bool = True
+    hermes_orchestration_timeout_seconds: int = 170
 
     # ── Planner Configuration ────────────────────────────
     planner_max_retries: int = 3  # retries on JSON parse failure

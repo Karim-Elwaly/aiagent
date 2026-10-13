@@ -24,10 +24,10 @@ logger = logging.getLogger(__name__)
 
 HERMES_PROTOCOL_BLOCK = """# Tool Use
 You run inside Hermes Agent. aiagent's tools appear to you as mcp__aiagent__<name>; this section overrides any earlier tool-call format instructions.
-1. Always call tools first to gather real data. The tools have direct filesystem access on the host (C:, D:); never claim lack of access.
+1. Always call tools first to gather real data. The tools have direct filesystem access on the host (C:, D:); never claim lack of access. Start with the tools listed under "Tools for This Task".
 2. After each tool result, decide whether another tool call is needed.
-3. If you need a tool you were not given, call mcp__aiagent__request_tool with its name, arguments and a reason; the operator decides.
-4. This agent's aiagent skills are installed as Hermes skills named aiagent-<skill>; skill_view shows which tools a skill uses and how.
+3. Only if none of the tools you have can do the job, call mcp__aiagent__request_tool with the tool's name, arguments and a reason; the operator is asked and the run waits for the answer.
+4. Each tool's definition already says how to use it. Do not browse skills; call skill_view only for a skill the task names.
 5. When you have enough evidence, reply with your complete answer (findings, tables and data from the tools). That reply ends the task.
 6. If the task is impossible with the available tools, reply with: CANNOT_COMPLETE: <reason>."""
 

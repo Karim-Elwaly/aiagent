@@ -11,7 +11,6 @@ from __future__ import annotations
 import asyncio
 import json
 import logging
-import re
 import time
 import uuid
 from collections.abc import Callable
@@ -23,7 +22,14 @@ from src.core.agent_models import AgentProfile
 from src.core.exceptions import TransientLLMError
 from src.core.models import Task, TaskResult, TaskStatus
 from src.hermes.active_runs import ActiveRuns
-from src.hermes.client import TERMINAL_EVENTS, HermesAPIError, HermesClient
+from src.hermes.bundles import select_bundle
+from src.hermes.client import (
+    MODEL_ERROR,
+    MODEL_ERROR_RETRIES,
+    TERMINAL_EVENTS,
+    HermesAPIError,
+    HermesClient,
+)
 from src.hermes.profiles import MCP_SERVER_NAME, HermesError, HermesProfiles
 from src.hermes.skills import skill_documents
 from src.persona.synthesizer import format_upstream_context
@@ -36,11 +42,6 @@ ENGINE = "hermes"
 MCP_TOOL_PREFIX = f"mcp__{MCP_SERVER_NAME}__"
 MCP_READY_TIMEOUT_SECONDS = 180
 CONFIG_PICKUP_SECONDS = 20
-# Sampling-dependent model-server faults, e.g. LM Studio rejecting a gpt-oss harmony message it can't parse.
-MODEL_ERROR = re.compile(
-    r"server_error|\"code\"\s*:\s*5\d\d|error code:?\s*5\d\d|does not match the expected|predict stream", re.I
-)
-MODEL_ERROR_RETRIES = 2
 PARAMETERS_LIMIT = 2000
 APPROVAL_LABELS = {
     "once": "Allow once",
@@ -107,14 +108,19 @@ class HermesAgentWorker:
         continue_session: str | None = None,
         review_feedback: str | None = None,
         approval_tools: list[ToolSpec] | None = None,
+        continue_profile: str | None = None,
     ) -> TaskResult:
         start = time.monotonic()
         agent_id = self.agent.id if self.agent else None
         toolsets = list(self.agent.hermes_toolsets) if self.agent else []
+        approval = approval_tools or []
+        bundle = self._ready_bundle(tools, approval)
 
         def prepare() -> Any:
-            return self.profiles.ensure(agent_id, toolsets, skill_documents(self.agent, self.registry),
-                                        agent=self.agent)
+            # Skills are written later, under the profile lock, so a parallel task can't swap them mid-run.
+            if bundle:
+                return self.profiles.ensure(None, [], None, bundle=bundle)
+            return self.profiles.ensure(agent_id, toolsets, None, agent=self.agent)
 
         try:
             info = await asyncio.to_thread(prepare)
@@ -134,8 +140,14 @@ class HermesAgentWorker:
                     f"{MCP_READY_TIMEOUT_SECONDS}s. Check that the Hermes gateway is running "
                     f"(hermes gateway restart) and can reach {self.settings.hermes_mcp_url}."
                 ))
-        if time.monotonic() - _gateway_restarted_at < MCP_READY_TIMEOUT_SECONDS:
+        if self._restart_recent():
             await self._wait_for_api(MCP_READY_TIMEOUT_SECONDS)
+
+        if continue_session and continue_profile and continue_profile != info.name:
+            # Hermes sessions are per profile; the task description already carries the reviewer's feedback.
+            logger.info("Task '%s' moved from profile '%s' to '%s'; running it fresh instead of continuing",
+                        task.id, continue_profile, info.name)
+            continue_session, review_feedback = None, None
 
         lock = _profile_locks.setdefault(info.name, asyncio.Lock())
         async with lock:
@@ -146,6 +158,11 @@ class HermesAgentWorker:
                 "task_tools": [t.name for t in tools],
             })
             try:
+                docs = await asyncio.to_thread(
+                    skill_documents, self.agent, self.registry, None,
+                    {t.name for t in [*tools, *approval]}, set(task.required_skills),
+                )
+                await asyncio.to_thread(self.profiles.write_profile_skills, info.name, docs)
                 return await self._run(task, persona, tools, info.name, info.api_key, upstream_context, user_query,
                                        on_token, on_event, on_heartbeat, resume_checkpoint, workflow_id, start,
                                        continue_session, review_feedback, approval_tools or [])
@@ -263,6 +280,7 @@ class HermesAgentWorker:
             tool_calls_made=tool_calls,
             execution_time_ms=int((time.monotonic() - start) * 1000),
             hermes_session_id=session_id,
+            hermes_profile=profile,
         )
 
     async def _handle(
@@ -323,6 +341,24 @@ class HermesAgentWorker:
 
     def _mcp_ready(self, profile: str) -> bool:
         return self.profiles.state.mcp_connected(profile, since=_gateway_restarted_wall)
+
+    def _restart_recent(self) -> bool:
+        if time.monotonic() - _gateway_restarted_at < MCP_READY_TIMEOUT_SECONDS:
+            return True
+        marker = getattr(self.profiles.state, "gateway_restarted_at", None)
+        return bool(marker) and time.time() - marker() < MCP_READY_TIMEOUT_SECONDS
+
+    def _ready_bundle(self, tools: list[ToolSpec], approval: list[ToolSpec]) -> str | None:
+        """The tool group whose profile this no-agent task runs on; None runs it on aiagent-default."""
+        if self.agent or not getattr(self.settings, "hermes_tool_bundles", False):
+            return None
+        bundle = select_bundle(t.name for t in [*tools, *approval])
+        ready = getattr(self.profiles, "bundle_ready", None)
+        if bundle is None or ready is None or not ready(bundle):
+            logger.info("No ready tool group for tools %s; using the default Hermes profile",
+                        sorted(t.name for t in [*tools, *approval]))
+            return None
+        return bundle
 
     async def _wait_for_mcp(self, profile: str, timeout: float) -> bool:
         deadline = time.monotonic() + timeout

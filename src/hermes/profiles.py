@@ -24,6 +24,7 @@ from pathlib import Path
 from typing import Any, Callable
 
 from src.core.config import ROOT_DIR
+from src.hermes.bundles import bundle_profile, bundle_tools
 from src.hermes.skills import write_skills
 from src.hermes.toolsets import BUILTIN_TOOLSETS
 
@@ -31,6 +32,12 @@ logger = logging.getLogger(__name__)
 
 PROFILE_PREFIX = "aiagent-"
 DEFAULT_PROFILE = "aiagent-default"
+# Runs aiagent's planner, supervisor and report model calls when the Hermes engine is on; has no aiagent tools.
+ORCHESTRATOR_PROFILE = "aiagent-orchestrator"
+ORCHESTRATOR_SOUL = (
+    "You are a precise reasoning model inside an orchestration system. You have no tools. Follow the instructions you "
+    "are given exactly and reply only in the format they ask for.\n"
+)
 MCP_SERVER_NAME = "aiagent"
 TOKEN_ENV = "AIAGENT_MCP_TOKEN"
 STATE_DIR = ROOT_DIR / "data" / "hermes"
@@ -154,8 +161,22 @@ class ProfileState:
     def mcp_connected(self, name: str, since: float = 0.0) -> bool:
         """Hermes has listed aiagent's tools since the profile was last (re)configured and the endpoint started."""
         entry = self.get(name)
-        since = max(float(entry.get("configured_at", 0)), self.endpoint_started_at(), since)
+        since = max(float(entry.get("configured_at", 0)), self.endpoint_started_at(), self.gateway_restarted_at(), since)
         return float(entry.get("mcp_listed_at", 0)) >= since
+
+    @property
+    def _restart_path(self) -> Path:
+        return self.path.with_name("gateway_restart.json")
+
+    def mark_gateway_restarted(self, at: float | None = None) -> None:
+        self._restart_path.parent.mkdir(parents=True, exist_ok=True)
+        self._restart_path.write_text(json.dumps({"at": at or time.time()}), encoding="utf-8")
+
+    def gateway_restarted_at(self) -> float:
+        try:
+            return float(json.loads(self._restart_path.read_text(encoding="utf-8")).get("at", 0))
+        except (OSError, ValueError, AttributeError):
+            return 0.0
 
 
 _SOUL_PLACEHOLDERS = {
@@ -219,24 +240,33 @@ class HermesProfiles:
         wanted = set(self.settings.hermes_default_toolsets) | set(REQUIRED_TOOLSETS) | set(extra or [])
         return sorted(t for t in wanted if t in BUILTIN_TOOLSETS)
 
-    def profile_config(self, name: str) -> dict[str, str]:
-        return {
+    def profile_config(self, name: str, tools: list[str] | None = None) -> dict[str, str]:
+        config = {
             "tools.tool_search.enabled": "off",
             "skills.external_dirs": json.dumps([(self.skills_root / name).resolve().as_posix()]),
         }
+        if tools is not None:
+            # Hermes registers only these tools of the aiagent server for this profile.
+            config[f"mcp_servers.{MCP_SERVER_NAME}.tools.include"] = json.dumps(tools)
+        return config
 
     def ensure(
         self, agent_id: str | None, agent_toolsets: list[str] | None = None,
-        skill_docs: dict[str, str] | None = None, agent: Any = None,
+        skill_docs: dict[str, str] | None = None, agent: Any = None, bundle: str | None = None,
     ) -> ProfileInfo:
-        """Create or update the agent's profile so it matches what aiagent allows. Idempotent."""
-        name = profile_name(agent_id)
+        """Create or update the profile so it matches what aiagent allows. Idempotent.
+
+        ``bundle`` selects a tool-group profile (tasks without an agent) instead of the agent's own profile.
+        """
+        name = bundle_profile(bundle) if bundle else profile_name(agent_id)
+        tools = bundle_tools(bundle) if bundle else None
         pdir = self.home / "profiles" / name
         changed = False
         restarted_at = 0.0
         created = not pdir.is_dir()
         if created:
             description = (render_description(agent) if agent else
+                           f"aiagent tool group '{bundle}'" if bundle else
                            f"aiagent agent '{agent_id}'" if agent_id else "aiagent tasks run without a selected agent")
             self._run(["profile", "create", name, "--clone-from", "default", "--no-alias", "--description", description])
             changed = True
@@ -277,11 +307,13 @@ class HermesProfiles:
         if skill_docs is not None and write_skills(self.skills_root / name, skill_docs):
             logger.info("Synced %d aiagent skills to Hermes profile '%s'", len(skill_docs), name)
         (self.skills_root / name).mkdir(parents=True, exist_ok=True)
-        config = self.profile_config(name)
+        config = self.profile_config(name, tools)
         applied_config = applied.get("config", {})
         for key, value in config.items():
             if applied_config.get(key) != value:
                 self._run(["-p", name, "config", "set", key, value])
+                if key.endswith(".tools.include") and applied.get("mcp_url"):
+                    changed = True  # Hermes lists the tools again only after a gateway restart
 
         mcp_url = self.settings.hermes_mcp_url
         if applied.get("mcp_url") != mcp_url:
@@ -305,13 +337,58 @@ class HermesProfiles:
             "toolsets": wanted,
             "mcp_url": mcp_url,
             "config": config,
+            **({"bundle": tools} if tools is not None else {}),
             **identity,
             **({"configured_at": restarted_at or time.time()} if changed else {}),
         })
         return ProfileInfo(name=name, api_key=api_key, changed=changed, restarted_at=restarted_at)
 
+    def ensure_orchestrator(self) -> ProfileInfo:
+        """The profile that answers aiagent's planner, supervisor and report calls: no aiagent tools, no skills."""
+        name = ORCHESTRATOR_PROFILE
+        pdir = self.home / "profiles" / name
+        created = not pdir.is_dir()
+        if created:
+            self._run(["profile", "create", name, "--clone-from", "default", "--no-alias", "--description",
+                       "aiagent planner, supervisor and report model calls"])
+            logger.info("Created Hermes profile '%s'", name)
+        env = pdir / ".env"
+        api_key = read_env_value(env, "API_SERVER_KEY")
+        if not api_key:
+            api_key = secrets.token_urlsafe(32)
+            append_env_value(env, "API_SERVER_KEY", api_key)
+            created = True
+        applied = self.state.get(name)
+        soul_hash = _digest(ORCHESTRATOR_SOUL)
+        if applied.get("soul_sha256") != soul_hash:
+            (pdir / "SOUL.md").write_text(ORCHESTRATOR_SOUL, encoding="utf-8")
+        if applied.get("toolsets") is None:
+            try:
+                self.apply_toolsets(name, [])
+            except HermesError:
+                self.apply_toolsets(name, list(REQUIRED_TOOLSETS))  # Hermes refused an empty toolset list
+        self.state.update(name, {
+            "role": "orchestrator",
+            "soul_sha256": soul_hash,
+            **({"configured_at": time.time()} if created else {}),
+        })
+        return ProfileInfo(name=name, api_key=api_key, changed=created)
+
+    def write_profile_skills(self, name: str, docs: dict[str, str]) -> None:
+        if write_skills(self.skills_root / name, docs):
+            logger.info("Synced %d aiagent skills to Hermes profile '%s'", len(docs), name)
+
+    def bundle_ready(self, bundle: str) -> bool:
+        """The group's profile exists with the group's tool filter, and Hermes has connected its tools."""
+        name = bundle_profile(bundle)
+        if not (self.home / "profiles" / name).is_dir():
+            return False
+        return self.state.get(name).get("bundle") == bundle_tools(bundle) and self.state.mcp_connected(name)
+
     def restart_gateway(self) -> None:
         """The only way to revive a parked MCP server or drop a cached URL in a running gateway."""
+        # Marked before the call: the new gateway lists MCP tools during startup, before the CLI returns.
+        self.state.mark_gateway_restarted()
         try:
             self._run(["gateway", "restart"])
             logger.info("Restarted the Hermes gateway")
@@ -324,7 +401,8 @@ class HermesProfiles:
     def apply_toolsets(self, name: str, wanted: list[str]) -> None:
         off = [t for t in BUILTIN_TOOLSETS if t not in wanted]
         self._run(["-p", name, "tools", "disable", "--platform", "api_server", *off])
-        self._run(["-p", name, "tools", "enable", "--platform", "api_server", *wanted])
+        if wanted:
+            self._run(["-p", name, "tools", "enable", "--platform", "api_server", *wanted])
         self.state.update(name, {"toolsets": wanted})
 
     def wanted_disabled_skills(self, name: str, agent: Any = None) -> list[str]:

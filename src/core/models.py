@@ -224,6 +224,10 @@ class TaskResult(BaseModel):
         default=None,
         description="Hermes session holding the run's conversation, for continuing it on a supervisor retry",
     )
+    hermes_profile: str | None = Field(
+        default=None,
+        description="Hermes profile that session belongs to (sessions are per profile)",
+    )
 
     def to_serializable(self) -> dict:
         """Convert to a plain dict for Temporal."""

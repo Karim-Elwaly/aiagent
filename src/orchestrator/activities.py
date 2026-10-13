@@ -106,6 +106,27 @@ def _get_worker_llm() -> LocalLLMClient:
     return _worker_llm
 
 
+def get_orchestration_llm(agent_id: str = "") -> Any:
+    """The client for planner, supervisor and report calls: Hermes when the run's engine is Hermes."""
+    direct = _get_planner_llm()
+    settings = get_settings()
+    if not getattr(settings, "hermes_orchestration", False):
+        return direct
+    profile = None
+    if agent_id:
+        try:
+            from src.core.agent_store import AgentStore
+
+            profile = AgentStore().load(agent_id)
+        except Exception as e:
+            logger.warning("Failed to load AgentProfile '%s' to choose the model client: %s", agent_id, e)
+    if resolve_engine(profile, settings) != "hermes":
+        return direct
+    from src.hermes.llm import HermesLLMClient
+
+    return HermesLLMClient(settings, fallback=direct)
+
+
 # ── Activities ───────────────────────────────────────────────────
 
 
@@ -157,7 +178,7 @@ async def plan_tasks(user_query: str, agent_id: str = "") -> dict:
     )
 
     registry = _get_registry()
-    llm = _get_planner_llm()
+    llm = get_orchestration_llm(agent_id)
     settings = get_settings()
 
     available_skills, roster = _planner_scope(registry, agent_id)
@@ -391,6 +412,7 @@ async def execute_task(
             continuation = {
                 "continue_session": task_dict["_hermes_session_id"],
                 "review_feedback": task_dict.get("_supervisor_feedback", ""),
+                "continue_profile": task_dict.get("_hermes_profile"),
             }
         if engine == "hermes" and approval_tools:
             continuation["approval_tools"] = approval_tools
@@ -466,7 +488,7 @@ async def replan_tasks(
     )
 
     registry = _get_registry()
-    llm = _get_planner_llm()
+    llm = get_orchestration_llm(agent_id)
     available_skills, roster = _planner_scope(registry, agent_id)
 
     planner = MetaPlanner(
@@ -495,6 +517,7 @@ async def assemble_response(
     user_query: str,
     dag_dict: dict,
     completed: dict[str, str],
+    agent_id: str = "",
 ) -> str:
     """Response Assembler activity: synthesize final output.
 
@@ -513,7 +536,7 @@ async def assemble_response(
         "Assembling response from %d task outputs", len(completed)
     )
 
-    llm = _get_planner_llm()
+    llm = get_orchestration_llm(agent_id)
     dag = TaskDAG.from_serializable(dag_dict)
 
     # Build a structured summary of all task outputs
@@ -753,6 +776,7 @@ async def evaluate_task_output(
     worker_output: str,
     user_query: str,
     prior_completed: dict[str, str],
+    agent_id: str = "",
 ) -> dict:
     """Supervisor ReAct activity: evaluates whether a completed task output is accurate or needs retry."""
     task_id = task_dict.get("id", "t")
@@ -767,7 +791,7 @@ async def evaluate_task_output(
         except Exception:
             wf_id = "default"
 
-    llm = _get_planner_llm()
+    llm = get_orchestration_llm(agent_id)
 
     prior_summary = "\n".join(
         f"- Task {tid}: {out[:150]}..."

@@ -89,7 +89,8 @@ class HermesCatalog:
         platform = (skills.get("platform_disabled") or {}).get("api_server") or []
         return {str(s) for s in (skills.get("disabled") or [])} | {str(s) for s in platform}
 
-    def skills(self, profile: str) -> list[dict[str, Any]]:
+    def skills(self, profile: str, aiagent_docs: dict[str, str] | None = None) -> list[dict[str, Any]]:
+        """A profile's skills. Its aiagent folder holds only the last task's skills, so callers pass the full set."""
         root = self.profiles.profile_dir(profile) / "skills"
         bundled: set[str] = set()
         try:
@@ -105,8 +106,20 @@ class HermesCatalog:
         disabled = self._disabled(profile)
 
         found: dict[str, dict[str, Any]] = {}
+        for name, text in sorted((aiagent_docs or {}).items()):
+            meta = _frontmatter(text[:4000])
+            skill = str(meta.get("name") or name)
+            found[skill] = {
+                "name": skill,
+                "description": str(meta.get("description") or "")[:500],
+                "category": None,
+                "source": "aiagent",
+                "trust_level": None,
+                "scan_verdict": None,
+                "enabled": skill not in disabled,
+            }
         for base, origin in self._skill_dirs(profile):
-            if not base.is_dir():
+            if not base.is_dir() or (origin == "aiagent" and aiagent_docs is not None):
                 continue
             for path in sorted(base.rglob(SKILL_FILE)):
                 rel = path.relative_to(base)
