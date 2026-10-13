@@ -45,6 +45,10 @@ class AgentProfile(BaseModel):
         default_factory=list,
         description="Hermes built-in toolsets this agent may use beyond the defaults (Hermes engine only)",
     )
+    hermes_disabled_skills: list[str] = Field(
+        default_factory=list,
+        description="Hermes skills this agent's profile does not load in API runs (Hermes engine only)",
+    )
     created_at: str = Field(
         default_factory=lambda: datetime.now(timezone.utc).isoformat(),
         description="Creation timestamp (ISO 8601)",
@@ -66,6 +70,7 @@ class AgentCreateRequest(BaseModel):
     tags: list[str] = Field(default_factory=list)
     worker_engine: str | None = None
     hermes_toolsets: list[str] = Field(default_factory=list)
+    hermes_disabled_skills: list[str] = Field(default_factory=list)
 
     @field_validator("worker_engine")
     @classmethod
@@ -84,6 +89,7 @@ class AgentUpdateRequest(BaseModel):
     tags: list[str] | None = None
     worker_engine: str | None = None
     hermes_toolsets: list[str] | None = None
+    hermes_disabled_skills: list[str] | None = None
 
     @field_validator("worker_engine")
     @classmethod

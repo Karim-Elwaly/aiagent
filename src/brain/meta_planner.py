@@ -28,6 +28,8 @@ from src.core.models import Task, TaskDAG
 
 logger = logging.getLogger(__name__)
 
+MAX_ROSTER_AGENTS = 15
+
 
 class MetaPlanner:
     """Decomposes any user query into a TaskDAG.
@@ -43,10 +45,39 @@ class MetaPlanner:
         llm: LocalLLMClient,
         available_skills: list[str],
         max_retries: int = 3,
+        agents: list[dict] | None = None,
+        default_agent_id: str = "",
     ):
         self.llm = llm
         self.available_skills = available_skills
         self.max_retries = max_retries
+        self.agents = (agents or [])[:MAX_ROSTER_AGENTS]
+        self.default_agent_id = default_agent_id
+
+    def _agents_section(self) -> str:
+        if not self.agents:
+            return ""
+        default = f" ('{self.default_agent_id}')" if self.default_agent_id else ""
+        lines = [
+            "\n\n## Available Agents",
+            'Each task may set "agent_id" to the agent that should run it. Pick the agent whose skills cover the '
+            f'task\'s required_skills; omit "agent_id" to use the default agent{default}. Never invent agent ids.',
+        ]
+        for a in self.agents:
+            skills = ", ".join(a.get("skills", [])[:25]) or "all skills"
+            lines.append(f"- {a['id']} ({a.get('name', a['id'])}): {a.get('description', '')[:160]} Skills: {skills}")
+        return "\n".join(lines)
+
+    def _check_agents(self, dag: TaskDAG) -> TaskDAG:
+        known = {a["id"] for a in self.agents}
+        for task in dag.tasks:
+            if task.agent_id and task.agent_id not in known:
+                logger.warning("Planner assigned unknown agent '%s' to task '%s'; using the default",
+                               task.agent_id, task.id)
+                task.agent_id = None
+            elif task.agent_id == self.default_agent_id:
+                task.agent_id = None
+        return dag
 
     async def plan(self, user_query: str) -> TaskDAG:
         """Generate a TaskDAG from a user query.
@@ -76,7 +107,7 @@ class MetaPlanner:
                 available_skills=json.dumps(
                     self.available_skills, indent=2
                 )
-            )
+            ) + self._agents_section()
             settings = get_settings()
             if getattr(settings, "enable_memory", False):
                 try:
@@ -124,6 +155,7 @@ class MetaPlanner:
                 json_str = self._extract_json(response)
                 dag = TaskDAG.model_validate(json.loads(json_str))
                 dag.validate_integrity()
+                self._check_agents(dag)
 
                 # Multi-phase enforcement for operational/benchmark queries
                 if len(dag.tasks) < 2 and any(k in user_query.lower() for k in ["benchmark", "investigate", "audit", "and report", "and verify", "and benchmark", "inspect and"]):
@@ -226,7 +258,7 @@ class MetaPlanner:
             completed_summary=completed_summary,
             failed_summary=failed_summary,
             available_skills=json.dumps(self.available_skills),
-        )
+        ) + self._agents_section()
         settings = get_settings()
         if getattr(settings, "enable_memory", False):
             try:
@@ -266,6 +298,7 @@ class MetaPlanner:
             json_str = self._extract_json(response)
             dag = TaskDAG.model_validate(json.loads(json_str))
             dag.validate_integrity()
+            self._check_agents(dag)
 
             logger.info(
                 "Re-plan succeeded: %d new tasks", len(dag.tasks)

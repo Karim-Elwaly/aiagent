@@ -269,9 +269,10 @@ class HermesProfiles:
 
         wanted = self.wanted_toolsets(name, agent_toolsets or [])
         if applied.get("toolsets") != wanted:
-            off = [t for t in BUILTIN_TOOLSETS if t not in wanted]
-            self._run(["-p", name, "tools", "disable", "--platform", "api_server", *off])
-            self._run(["-p", name, "tools", "enable", "--platform", "api_server", *wanted])
+            self.apply_toolsets(name, wanted)
+        disabled = self.wanted_disabled_skills(name, agent)
+        if applied.get("disabled_skills", []) != disabled:
+            self.apply_disabled_skills(name, disabled)
 
         if skill_docs is not None and write_skills(self.skills_root / name, skill_docs):
             logger.info("Synced %d aiagent skills to Hermes profile '%s'", len(skill_docs), name)
@@ -316,6 +317,31 @@ class HermesProfiles:
             logger.info("Restarted the Hermes gateway")
         except HermesError as exc:
             logger.warning("Could not restart the Hermes gateway: %s", exc)
+
+    def profile_dir(self, name: str) -> Path:
+        return self.home / "profiles" / name
+
+    def apply_toolsets(self, name: str, wanted: list[str]) -> None:
+        off = [t for t in BUILTIN_TOOLSETS if t not in wanted]
+        self._run(["-p", name, "tools", "disable", "--platform", "api_server", *off])
+        self._run(["-p", name, "tools", "enable", "--platform", "api_server", *wanted])
+        self.state.update(name, {"toolsets": wanted})
+
+    def wanted_disabled_skills(self, name: str, agent: Any = None) -> list[str]:
+        if agent is not None:
+            return sorted(set(getattr(agent, "hermes_disabled_skills", None) or []))
+        return sorted(set(self.state.get(name).get("default_disabled_skills", [])))
+
+    def apply_disabled_skills(self, name: str, disabled: list[str]) -> None:
+        """Hermes skills the profile's API runs must not load (``skills.platform_disabled.api_server``)."""
+        self._run(["-p", name, "config", "set", "skills.platform_disabled.api_server", json.dumps(disabled)])
+        self.state.update(name, {"disabled_skills": disabled})
+
+    def set_default_toolsets(self, toolsets: list[str]) -> None:
+        self.state.update(DEFAULT_PROFILE, {"extra_toolsets": sorted(set(toolsets))})
+
+    def set_default_disabled_skills(self, names: list[str]) -> None:
+        self.state.update(DEFAULT_PROFILE, {"default_disabled_skills": sorted(set(names))})
 
     def add_default_toolset(self, toolset: str) -> None:
         extra = set(self.state.get(DEFAULT_PROFILE).get("extra_toolsets", []))

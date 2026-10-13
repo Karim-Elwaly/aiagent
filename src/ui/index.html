@@ -390,6 +390,15 @@
           <div style="font-size: 11px; color: var(--text-dim); line-height: 1.4;">High or Critical risk will suspend the workflow and trigger an interactive approval gate before this task runs.</div>
         </div>
 
+        <!-- Agent -->
+        <div style="display: flex; flex-direction: column; gap: 6px;">
+          <label style="font-size: 12px; font-weight: 600; color: var(--text-main);" for="edit-task-agent">Agent</label>
+          <select id="edit-task-agent" class="agent-dropdown modal-select" style="width: 100%; height: 38px;">
+            <option value="">Workflow default (Active Agent)</option>
+          </select>
+          <div style="font-size: 11px; color: var(--text-dim); line-height: 1.4;">The agent whose persona, skills and Hermes profile run this task. Can be changed until the task starts.</div>
+        </div>
+
         <!-- Operator Guidance Injection -->
         <div style="display: flex; flex-direction: column; gap: 6px;">
           <label style="font-size: 12px; font-weight: 600; color: var(--text-main); display: flex; align-items: center; justify-content: space-between;">
@@ -591,6 +600,50 @@
         <button type="button" id="tab-btn-openapi" class="tab-btn">
           🌐 OpenAPI / Swagger
         </button>
+        <button type="button" id="tab-btn-hermes-agent" class="tab-btn">
+          🪽 Hermes Agent
+        </button>
+      </div>
+
+      <!-- Tab: Hermes Agent toolsets & skills (two-way sync) -->
+      <div id="tab-content-hermes-agent" class="tab-content" style="display: none; flex-direction: column; gap: 12px;">
+        <div style="display: flex; gap: 8px; align-items: center; flex-wrap: wrap;">
+          <label class="field-label" for="hermes-profile-select" style="margin: 0;">Hermes profile</label>
+          <select id="hermes-profile-select" class="model-select" style="min-width: 240px;">
+            <option value="">Tasks without an agent (aiagent-default)</option>
+          </select>
+          <button type="button" id="hermes-refresh-btn" class="header-btn" style="padding: 4px 10px; font-size: 11px;">🔄 Refresh</button>
+        </div>
+
+        <div>
+          <div style="font-weight: 600; font-size: 13px; color: #fff;">Built-in toolsets</div>
+          <div class="field-tip">What Hermes itself may use in this profile's runs, besides aiagent's tools. "skills" is always on.</div>
+          <div id="hermes-toolsets-list" class="skills-picker-grid" style="margin-top: 6px;"></div>
+          <div style="display: flex; justify-content: flex-end; margin-top: 6px;">
+            <button type="button" id="hermes-toolsets-save-btn" class="btn-approve">💾 Save toolsets</button>
+          </div>
+        </div>
+
+        <div>
+          <div style="display: flex; justify-content: space-between; align-items: center; gap: 8px;">
+            <div>
+              <div style="font-weight: 600; font-size: 13px; color: #fff;">Skills in this profile</div>
+              <div class="field-tip">Untick to stop this profile's runs loading a skill. Import copies a Hermes skill into AgentHub so agents can curate it.</div>
+            </div>
+            <input type="text" id="hermes-skills-filter" class="prompt-box modal-input" style="height: 30px; font-size: 12px; max-width: 220px;" placeholder="🔍 Filter skills...">
+          </div>
+          <div id="hermes-skills-list" class="tool-list" style="margin-top: 6px; max-height: 320px; overflow-y: auto;"></div>
+        </div>
+
+        <div>
+          <div style="font-weight: 600; font-size: 13px; color: #fff;">Install from the Hermes skills hub</div>
+          <div class="field-tip">Hermes scans every skill before installing it; skills its scan blocks are not installed.</div>
+          <div style="display: flex; gap: 8px; margin-top: 6px;">
+            <input type="text" id="hermes-hub-query" class="prompt-box modal-input" style="height: 34px; font-size: 12px;" placeholder="Search the hub, or paste an identifier (e.g. official/security/godmode)">
+            <button type="button" id="hermes-hub-search-btn" class="header-btn" style="padding: 4px 12px;">Search</button>
+          </div>
+          <div id="hermes-hub-results" class="tool-list" style="margin-top: 6px; max-height: 260px; overflow-y: auto;"></div>
+        </div>
       </div>
 
       <!-- Tab: Agent Skills Hub (97,986 Skills across 12 Registries) -->
@@ -1065,9 +1118,9 @@
           </div>
 
           <div>
-            <label class="field-label" for="agent-form-hermes-toolsets">Extra Hermes toolsets (comma-separated)</label>
-            <input type="text" id="agent-form-hermes-toolsets" class="prompt-box modal-input" placeholder="e.g. terminal, file (web is always on)">
-            <div class="field-tip">Hermes Agent engine only. Approving a toolset during a run adds it here.</div>
+            <label class="field-label">Hermes toolsets</label>
+            <div id="agent-form-hermes-toolsets" class="skills-picker-grid"></div>
+            <div class="field-tip">Hermes Agent engine only: the Hermes built-ins this agent may use besides aiagent's tools. Approving a toolset during a run adds it here.</div>
           </div>
 
           <div style="display: flex; justify-content: flex-end; gap: 8px; margin-top: 6px;">

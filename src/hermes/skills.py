@@ -20,6 +20,7 @@ from typing import Any
 
 import yaml
 
+from src.core.config import ROOT_DIR
 from src.registry.hermes.hermes_adapter import hermes_skill_to_tool_spec
 from src.registry.hermes.hermes_loader import HERMES_SKILLS_DIR
 from src.registry.tool_registry import ToolRegistry, ToolSpec
@@ -28,6 +29,8 @@ logger = logging.getLogger(__name__)
 
 SKILL_FILE = "SKILL.md"
 MCP_PREFIX = "mcp__aiagent__"
+# Skill documents imported from Hermes: Hermes already has them, so they are not exported back.
+HERMES_ORIGIN_FILE = ROOT_DIR / "data" / "hermes" / "hermes_origin_skills.json"
 # Tool sources that are not real aiagent tools over MCP (skill-document echoes, simulated hermes_* tools).
 NON_MCP_SOURCES = frozenset({"skill", "hermes"})
 _DESCRIPTION_LIMIT = 900
@@ -129,6 +132,19 @@ def imported_skill(content: str, name: str, description: str) -> str:
     return f"{frontmatter}\n\n{body}\n"
 
 
+def hermes_origin_skills() -> set[str]:
+    try:
+        return set(json.loads(HERMES_ORIGIN_FILE.read_text(encoding="utf-8")))
+    except (OSError, ValueError, TypeError):
+        return set()
+
+
+def mark_hermes_origin(name: str) -> None:
+    names = hermes_origin_skills() | {name}
+    HERMES_ORIGIN_FILE.parent.mkdir(parents=True, exist_ok=True)
+    HERMES_ORIGIN_FILE.write_text(json.dumps(sorted(names)), encoding="utf-8")
+
+
 def skill_documents(agent: Any, registry: ToolRegistry | None, imported_dir: Path | None = None) -> dict[str, str]:
     """``{folder name: SKILL.md content}`` for an agent (``None`` = tasks without an agent)."""
     curated = set(getattr(agent, "curated_skills", None) or [])
@@ -143,7 +159,10 @@ def skill_documents(agent: Any, registry: ToolRegistry | None, imported_dir: Pat
                 docs[f"aiagent-{slug(spec.name)}"] = capability_skill(spec, provided)
 
     source = imported_dir or HERMES_SKILLS_DIR
+    from_hermes = hermes_origin_skills()
     for path in sorted(source.glob("*.md")) if source.is_dir() else []:
+        if path.stem in from_hermes:
+            continue
         try:
             content = path.read_text(encoding="utf-8")
             spec = hermes_skill_to_tool_spec(content, name_override=path.stem)

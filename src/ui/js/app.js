@@ -164,9 +164,17 @@ document.addEventListener("DOMContentLoaded", () => {
   const editTaskGuidance = document.getElementById("edit-task-guidance");
   const editTaskParams = document.getElementById("edit-task-params");
   const editTaskParamsError = document.getElementById("edit-task-params-error");
+  const editTaskAgent = document.getElementById("edit-task-agent");
   const loadTemplateDagBtn = document.getElementById("load-template-dag-btn");
   const dagInteractiveHint = document.getElementById("dag-interactive-hint");
   let currentlyEditingTask = null;
+  let knownAgents = [];
+
+  function agentOptionsHtml(selected) {
+    return `<option value="">Workflow default (Active Agent)</option>` + knownAgents
+      .map((a) => `<option value="${escapeHtml(a.id)}" ${a.id === selected ? "selected" : ""}>${escapeHtml(a.icon || "🤖")} ${escapeHtml(a.name || a.id)}</option>`)
+      .join("");
+  }
 
   function onNodeClicked(task, status) {
     const isPending = !status || status === "pending";
@@ -205,6 +213,7 @@ document.addEventListener("DOMContentLoaded", () => {
     if (editTaskDesc) editTaskDesc.value = desc;
     if (editTaskRisk) editTaskRisk.value = (task.risk_level || "low").toLowerCase();
     if (editTaskGuidance) editTaskGuidance.value = guidance;
+    if (editTaskAgent) editTaskAgent.innerHTML = agentOptionsHtml(task.agent_id || "");
 
     if (editTaskParams) {
       const params = task.parameters && Object.keys(task.parameters).length > 0
@@ -249,6 +258,18 @@ document.addEventListener("DOMContentLoaded", () => {
     let newDesc = editTaskDesc ? editTaskDesc.value.trim() : (currentlyEditingTask.description || "");
     const newRisk = editTaskRisk ? editTaskRisk.value : (currentlyEditingTask.risk_level || "low");
     const newGuidance = editTaskGuidance ? editTaskGuidance.value.trim() : "";
+    const newAgent = editTaskAgent ? editTaskAgent.value || null : (currentlyEditingTask.agent_id || null);
+    if (currentWorkflowId && newAgent !== (currentlyEditingTask.agent_id || null)) {
+      // A running workflow takes the change only for tasks that have not started.
+      const taskId = currentlyEditingTask.id;
+      fetch(`/api/workflows/${encodeURIComponent(currentWorkflowId)}/tasks/${encodeURIComponent(taskId)}/agent`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ agent_id: newAgent || "" }),
+      }).then((res) => {
+        if (res.ok) showToast(`Task ${taskId.toUpperCase()} will run on ${dagRenderer.agentLabel(newAgent) || "the default agent"}`);
+      }).catch(() => { });
+    }
 
     if (newGuidance) {
       newDesc = `${newDesc}\n\n[OPERATOR GUIDANCE]: ${newGuidance}`;
@@ -278,6 +299,7 @@ document.addEventListener("DOMContentLoaded", () => {
         t.parameters = parsedParams;
         t.is_customized = true;
         t.operator_guidance = newGuidance;
+        t.agent_id = newAgent;
         found = true;
       }
     });
@@ -291,6 +313,7 @@ document.addEventListener("DOMContentLoaded", () => {
         parameters: parsedParams,
         is_customized: true,
         operator_guidance: newGuidance,
+        agent_id: newAgent,
       });
     }
 
@@ -722,6 +745,28 @@ document.addEventListener("DOMContentLoaded", () => {
         const skillName = ev.skill_name || "distilled_skill";
         showToast(`✨ New Distilled Skill Candidate: ${skillName}! Review in Learned Skills.`, "info");
         if (typeof loadDistilledSkillsStats === "function") loadDistilledSkillsStats();
+        break;
+      }
+
+      case "skills_not_curated": {
+        const taskId = ev.task_id;
+        const who = ev.agent_name || ev.agent_id || "this agent";
+        const skills = (ev.skills || []).map(escapeHtml).join(", ");
+        const tools = (ev.approval_tools || []).map(escapeHtml).join(", ");
+        let stepEl = document.getElementById(`step-${taskId}`);
+        if (!stepEl) {
+          addTimelineStep(taskId, `Task ${taskId}`, "", "running");
+          stepEl = document.getElementById(`step-${taskId}`);
+        }
+        const contentDiv = stepEl && stepEl.querySelector(".step-content");
+        if (contentDiv) {
+          const warn = document.createElement("div");
+          warn.style.cssText = "background: rgba(245, 158, 11, 0.12); border: 1px solid rgba(245, 158, 11, 0.4); border-radius: 4px; padding: 4px 8px; margin: 4px 0; font-size: 11px; color: #fbbf24;";
+          warn.innerHTML = `⚠️ ${escapeHtml(who)} is not curated for <strong>${skills}</strong>.` +
+            (tools ? ` Using ${tools} will ask for your approval.` : " No tools provide them.");
+          contentDiv.appendChild(warn);
+        }
+        if (activeDag && dagRenderer.markWarning) dagRenderer.markWarning(taskId, `Not curated: ${(ev.skills || []).join(", ")}`);
         break;
       }
 
@@ -1985,6 +2030,7 @@ document.addEventListener("DOMContentLoaded", () => {
               <option value="high" ${task.risk_level === "high" ? "selected" : ""}>🔴 High Risk (HITL Gate)</option>
               <option value="critical" ${task.risk_level === "critical" ? "selected" : ""}>⛔ Critical (HITL Gate)</option>
             </select>
+            <select class="phase-select-agent" title="Agent that runs this phase">${agentOptionsHtml(task.agent_id || "")}</select>
             <button type="button" class="delete-phase-btn" title="Delete phase">✕</button>
           </div>
         </div>
@@ -2058,6 +2104,7 @@ document.addEventListener("DOMContentLoaded", () => {
       const nameInput = card.querySelector(".phase-input-name");
       const descInput = card.querySelector(".phase-input-desc");
       const riskSelect = card.querySelector(".phase-select-risk");
+      const agentSelect = card.querySelector(".phase-select-agent");
 
       const skillPills = card.querySelectorAll(".phase-skills-pills .dropdown-pill");
       const skills = Array.from(skillPills).map((p) => p.dataset.value).filter(Boolean);
@@ -2072,6 +2119,7 @@ document.addEventListener("DOMContentLoaded", () => {
         required_skills: skills,
         dependencies: deps,
         risk_level: riskSelect ? riskSelect.value : "low",
+        agent_id: agentSelect && agentSelect.value ? agentSelect.value : null,
       });
     });
     return updated;
@@ -2663,6 +2711,8 @@ document.addEventListener("DOMContentLoaded", () => {
   const tabContentMcp = document.getElementById("tab-content-mcp");
   const tabContentOpenapi = document.getElementById("tab-content-openapi");
   const tabContentHermes = document.getElementById("tab-content-hermes");
+  const tabBtnHermesAgent = document.getElementById("tab-btn-hermes-agent");
+  const tabContentHermesAgent = document.getElementById("tab-content-hermes-agent");
 
   function switchIntegrationsTab(activeTab) {
     const tabs = [
@@ -2670,7 +2720,8 @@ document.addEventListener("DOMContentLoaded", () => {
       { btn: tabBtnConnectors, content: tabContentConnectors },
       { btn: tabBtnMcp, content: tabContentMcp },
       { btn: tabBtnOpenapi, content: tabContentOpenapi },
-      { btn: tabBtnHermes, content: tabContentHermes }
+      { btn: tabBtnHermes, content: tabContentHermes },
+      { btn: tabBtnHermesAgent, content: tabContentHermesAgent }
     ];
 
     tabs.forEach(tab => {
@@ -2686,6 +2737,8 @@ document.addEventListener("DOMContentLoaded", () => {
 
     if (activeTab === tabBtnConnectors) {
       loadSecurityConnectors();
+    } else if (activeTab === tabBtnHermesAgent) {
+      loadHermesAgentTab();
     } else if (activeTab === tabBtnHermes) {
       fetchHermesStats();
       fetchHermesCapabilities();
@@ -2698,6 +2751,196 @@ document.addEventListener("DOMContentLoaded", () => {
   if (tabBtnMcp) tabBtnMcp.addEventListener("click", () => switchIntegrationsTab(tabBtnMcp));
   if (tabBtnOpenapi) tabBtnOpenapi.addEventListener("click", () => switchIntegrationsTab(tabBtnOpenapi));
   if (tabBtnHermes) tabBtnHermes.addEventListener("click", () => switchIntegrationsTab(tabBtnHermes));
+  if (tabBtnHermesAgent) tabBtnHermesAgent.addEventListener("click", () => switchIntegrationsTab(tabBtnHermesAgent));
+
+  // Hermes Agent tab: toolsets & skills of one Hermes profile
+  const hermesProfileSelect = document.getElementById("hermes-profile-select");
+  const hermesToolsetsList = document.getElementById("hermes-toolsets-list");
+  const hermesSkillsList = document.getElementById("hermes-skills-list");
+  const hermesSkillsFilter = document.getElementById("hermes-skills-filter");
+  const hermesHubQuery = document.getElementById("hermes-hub-query");
+  const hermesHubResults = document.getElementById("hermes-hub-results");
+  const HERMES_SOURCE_COLORS = { aiagent: "#a78bfa", builtin: "#38bdf8", hub: "#34d399", local: "#fbbf24" };
+
+  function hermesAgentId() {
+    return hermesProfileSelect ? hermesProfileSelect.value : "";
+  }
+
+  async function hermesApi(url, options = {}) {
+    const res = await fetch(url, options);
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) throw new Error(data.detail || `HTTP ${res.status}`);
+    return data;
+  }
+
+  async function loadHermesAgentTab() {
+    if (hermesProfileSelect) {
+      const current = hermesProfileSelect.value;
+      hermesProfileSelect.innerHTML = `<option value="">Tasks without an agent (aiagent-default)</option>` +
+        knownAgents.map((a) => `<option value="${escapeHtml(a.id)}">${escapeHtml(a.icon || "🤖")} ${escapeHtml(a.name || a.id)}</option>`).join("");
+      hermesProfileSelect.value = current;
+    }
+    await Promise.all([loadHermesToolsets(), loadHermesSkills()]);
+  }
+
+  async function loadHermesToolsets() {
+    if (!hermesToolsetsList) return;
+    hermesToolsetsList.innerHTML = `<span class="field-tip">Loading...</span>`;
+    try {
+      const toolsets = await hermesApi(`/api/hermes/toolsets?agent_id=${encodeURIComponent(hermesAgentId())}`);
+      hermesToolsetsList.innerHTML = toolsets.map((t) => hermesToolsetItemHtml(t, t.enabled)).join("");
+    } catch (e) {
+      hermesToolsetsList.innerHTML = `<span class="field-tip">Could not load toolsets: ${escapeHtml(e.message)}</span>`;
+    }
+  }
+
+  async function loadHermesSkills() {
+    if (!hermesSkillsList) return;
+    hermesSkillsList.innerHTML = `<span class="field-tip">Loading...</span>`;
+    try {
+      const skills = await hermesApi(`/api/hermes/skills?agent_id=${encodeURIComponent(hermesAgentId())}`);
+      hermesSkillsList.innerHTML = skills.map((s) => {
+        const color = HERMES_SOURCE_COLORS[s.source] || "#94a3b8";
+        const verdict = s.scan_verdict ? ` <span class="skill-tag" title="Hermes security scan">${escapeHtml(s.scan_verdict)}</span>` : "";
+        const actions = [
+          s.source !== "aiagent" ? `<button type="button" class="link-btn hermes-skill-import" data-name="${escapeHtml(s.name)}">Import to AgentHub</button>` : "",
+          s.source === "hub" ? `<button type="button" class="link-btn hermes-skill-uninstall" data-name="${escapeHtml(s.name)}" style="color: #ef4444;">Uninstall</button>` : "",
+        ].join(" ");
+        return `
+          <div class="tool-card hermes-skill-card">
+            <div class="tool-name-row" style="display: flex; align-items: center; justify-content: space-between; gap: 8px;">
+              <label style="display: flex; align-items: center; gap: 6px; cursor: pointer;">
+                <input type="checkbox" class="hermes-skill-toggle" data-name="${escapeHtml(s.name)}" ${s.enabled ? "checked" : ""}>
+                <span class="tool-name">${escapeHtml(s.name)}</span>
+              </label>
+              <span style="font-size: 10px; font-weight: 700; color: ${color};">${escapeHtml(s.source.toUpperCase())}${s.category ? " · " + escapeHtml(s.category) : ""}</span>
+            </div>
+            <div class="tool-desc">${escapeHtml(s.description || "")}${verdict}</div>
+            <div style="display: flex; gap: 10px;">${actions}</div>
+          </div>`;
+      }).join("") || `<span class="field-tip">No skills found for this profile yet (it is created on the agent's first Hermes run).</span>`;
+      if (hermesSkillsFilter && hermesSkillsFilter.value) hermesSkillsFilter.dispatchEvent(new Event("input"));
+    } catch (e) {
+      hermesSkillsList.innerHTML = `<span class="field-tip">Could not load skills: ${escapeHtml(e.message)}</span>`;
+    }
+  }
+
+  if (hermesProfileSelect) hermesProfileSelect.addEventListener("change", () => { loadHermesToolsets(); loadHermesSkills(); });
+  const hermesRefreshBtn = document.getElementById("hermes-refresh-btn");
+  if (hermesRefreshBtn) hermesRefreshBtn.addEventListener("click", loadHermesAgentTab);
+
+  const hermesToolsetsSaveBtn = document.getElementById("hermes-toolsets-save-btn");
+  if (hermesToolsetsSaveBtn) {
+    hermesToolsetsSaveBtn.addEventListener("click", async () => {
+      const toolsets = Array.from(hermesToolsetsList.querySelectorAll('input[name="hermes_toolset"]:checked:not(:disabled)')).map((cb) => cb.value);
+      try {
+        await hermesApi("/api/hermes/toolsets", {
+          method: "PUT",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ agent_id: hermesAgentId(), toolsets }),
+        });
+        showToast("Hermes toolsets saved", "success");
+        loadHermesToolsets();
+        fetchAgents();
+      } catch (e) {
+        showToast(`Could not save toolsets: ${e.message}`, "error");
+      }
+    });
+  }
+
+  if (hermesSkillsList) {
+    hermesSkillsList.addEventListener("change", async (e) => {
+      const cb = e.target.closest(".hermes-skill-toggle");
+      if (!cb) return;
+      try {
+        await hermesApi(`/api/hermes/skills/${encodeURIComponent(cb.dataset.name)}/toggle`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ enabled: cb.checked, agent_id: hermesAgentId() }),
+        });
+        showToast(`${cb.dataset.name} ${cb.checked ? "enabled" : "disabled"}`);
+      } catch (err) {
+        cb.checked = !cb.checked;
+        showToast(`Could not update ${cb.dataset.name}: ${err.message}`, "error");
+      }
+    });
+    hermesSkillsList.addEventListener("click", async (e) => {
+      const importBtn = e.target.closest(".hermes-skill-import");
+      const uninstallBtn = e.target.closest(".hermes-skill-uninstall");
+      const agentQs = `agent_id=${encodeURIComponent(hermesAgentId())}`;
+      try {
+        if (importBtn) {
+          const data = await hermesApi(`/api/hermes/skills/${encodeURIComponent(importBtn.dataset.name)}/import?${agentQs}`, { method: "POST" });
+          showToast(`Imported ${data.name} into AgentHub`, "success");
+          loadTools();
+        } else if (uninstallBtn) {
+          if (!confirm(`Uninstall Hermes skill '${uninstallBtn.dataset.name}' from this profile?`)) return;
+          await hermesApi(`/api/hermes/skills/${encodeURIComponent(uninstallBtn.dataset.name)}?${agentQs}`, { method: "DELETE" });
+          showToast(`Uninstalled ${uninstallBtn.dataset.name}`);
+          loadHermesSkills();
+        }
+      } catch (err) {
+        showToast(err.message, "error");
+      }
+    });
+  }
+
+  if (hermesSkillsFilter) {
+    hermesSkillsFilter.addEventListener("input", () => {
+      const q = hermesSkillsFilter.value.toLowerCase().trim();
+      hermesSkillsList.querySelectorAll(".hermes-skill-card").forEach((card) => {
+        card.style.display = !q || card.textContent.toLowerCase().includes(q) ? "flex" : "none";
+      });
+    });
+  }
+
+  async function installHermesSkill(identifier) {
+    showToast(`Installing ${identifier}... Hermes scans it first.`);
+    try {
+      await hermesApi("/api/hermes/skills/install", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ identifier, agent_id: hermesAgentId() }),
+      });
+      showToast(`Installed ${identifier}`, "success");
+      loadHermesSkills();
+    } catch (e) {
+      showToast(`Install failed: ${e.message}`, "error");
+    }
+  }
+
+  const hermesHubSearchBtn = document.getElementById("hermes-hub-search-btn");
+  async function searchHermesHub() {
+    const q = hermesHubQuery ? hermesHubQuery.value.trim() : "";
+    if (!q || !hermesHubResults) return;
+    hermesHubResults.innerHTML = `<span class="field-tip">Searching...</span>`;
+    try {
+      const rows = await hermesApi(`/api/hermes/skills/search?q=${encodeURIComponent(q)}`);
+      hermesHubResults.innerHTML = rows.map((r) => {
+        const id = r.identifier || r.id || r.name || "";
+        return `
+          <div class="tool-card">
+            <div class="tool-name-row" style="display: flex; align-items: center; justify-content: space-between; gap: 8px;">
+              <span class="tool-name">${escapeHtml(r.name || id)}</span>
+              <span style="font-size: 10px; color: var(--text-dim);">${escapeHtml(r.source || "")} ${escapeHtml(r.trust_level || "")}</span>
+            </div>
+            <div class="tool-desc">${escapeHtml(r.description || "")}</div>
+            <div><button type="button" class="link-btn hermes-hub-install" data-id="${escapeHtml(id)}">Install into this profile</button></div>
+          </div>`;
+      }).join("") || `<div class="tool-card"><div class="tool-desc">No results. To install by identifier, use the button below.</div>
+        <div><button type="button" class="link-btn hermes-hub-install" data-id="${escapeHtml(q)}">Install "${escapeHtml(q)}"</button></div></div>`;
+    } catch (e) {
+      hermesHubResults.innerHTML = `<span class="field-tip">Search failed: ${escapeHtml(e.message)}</span>`;
+    }
+  }
+  if (hermesHubSearchBtn) hermesHubSearchBtn.addEventListener("click", searchHermesHub);
+  if (hermesHubQuery) hermesHubQuery.addEventListener("keydown", (e) => { if (e.key === "Enter") searchHermesHub(); });
+  if (hermesHubResults) {
+    hermesHubResults.addEventListener("click", (e) => {
+      const btn = e.target.closest(".hermes-hub-install");
+      if (btn && btn.dataset.id) installHermesSkill(btn.dataset.id);
+    });
+  }
 
   // Security Connectors Logic
   let activeConnectorCategory = "all";
@@ -3178,6 +3421,30 @@ document.addEventListener("DOMContentLoaded", () => {
   }
 
   // Populate Skills Checklist
+  function hermesToolsetItemHtml(t, checked) {
+    const tip = [t.description, (t.tools || []).length ? `Tools: ${t.tools.join(", ")}` : ""].filter(Boolean).join("\n");
+    const notConfigured = t.configured === false ? ` <span class="skill-tag" title="Needs credentials or setup in Hermes">setup needed</span>` : "";
+    return `
+      <label class="skill-picker-item" title="${escapeHtml(tip)}">
+        <input type="checkbox" name="hermes_toolset" value="${escapeHtml(t.name)}" ${checked || t.required ? "checked" : ""} ${t.required ? "disabled" : ""}>
+        <span>${escapeHtml(t.label || t.name)}${notConfigured}</span>
+      </label>`;
+  }
+
+  async function populateHermesToolsetsPicker(agentId, selected) {
+    const box = document.getElementById("agent-form-hermes-toolsets");
+    if (!box) return;
+    box.innerHTML = `<span class="field-tip">Loading Hermes toolsets...</span>`;
+    try {
+      const res = await fetch(`/api/hermes/toolsets?agent_id=${encodeURIComponent(agentId || "")}`);
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      const toolsets = await res.json();
+      box.innerHTML = toolsets.map((t) => hermesToolsetItemHtml(t, (selected || []).includes(t.name))).join("");
+    } catch (e) {
+      box.innerHTML = `<span class="field-tip">Could not load Hermes toolsets: ${escapeHtml(e.message)}</span>`;
+    }
+  }
+
   async function populateSkillsPicker(selectedSkills = []) {
     const picker = document.getElementById("agent-skills-picker");
     if (!picker) return;
@@ -3313,6 +3580,9 @@ document.addEventListener("DOMContentLoaded", () => {
     }
 
     if (agentsCountEl) agentsCountEl.textContent = agents.length;
+    knownAgents = agents;
+    dagRenderer.setAgents(agents);
+    if (dagRenderer.dag) dagRenderer.render(dagRenderer.dag);
 
     // Update dropdown selector
     if (agentSelector) {
@@ -3439,8 +3709,7 @@ document.addEventListener("DOMContentLoaded", () => {
     if (template) template.value = "";
     if (tags) tags.value = "";
     if (workerEngine) workerEngine.value = "";
-    const hermesToolsets = document.getElementById("agent-form-hermes-toolsets");
-    if (hermesToolsets) hermesToolsets.value = "";
+    populateHermesToolsetsPicker("", []);
 
     populateSkillsPicker([]);
   }
@@ -3489,8 +3758,7 @@ document.addEventListener("DOMContentLoaded", () => {
       );
       const workerEngineSelect = document.getElementById("agent-form-worker-engine");
       if (workerEngineSelect) workerEngineSelect.value = agent.worker_engine || "";
-      const hermesToolsetsInput = document.getElementById("agent-form-hermes-toolsets");
-      if (hermesToolsetsInput) hermesToolsetsInput.value = (agent.hermes_toolsets || []).join(", ");
+      populateHermesToolsetsPicker(agent.id, agent.hermes_toolsets || []);
 
       await populateSkillsPicker(agent.curated_skills || []);
     } catch (e) {
@@ -3578,8 +3846,9 @@ document.addEventListener("DOMContentLoaded", () => {
         curated_skills: checkedSkills,
         tags: tags,
         worker_engine: (document.getElementById("agent-form-worker-engine") || {}).value || "",
-        hermes_toolsets: ((document.getElementById("agent-form-hermes-toolsets") || {}).value || "")
-          .split(",").map((t) => t.trim()).filter(Boolean),
+        hermes_toolsets: Array.from(
+          document.querySelectorAll('#agent-form-hermes-toolsets input[name="hermes_toolset"]:checked:not(:disabled)')
+        ).map((cb) => cb.value),
       };
 
       try {

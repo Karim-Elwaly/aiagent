@@ -535,6 +535,28 @@ async def test_worker_continues_the_reviewed_session_on_supervisor_retry(tmp_pat
     assert "windows_endpoint.xml not covered" in sent["input"] and "Scan logs" not in sent["input"]
 
 
+async def test_worker_stops_the_hermes_run_when_cancelled(tmp_path):
+    import asyncio
+
+    worker, client, _ = _worker(tmp_path, [])
+
+    async def hang(profile, key, run_id, last_seq=-1):
+        await asyncio.Event().wait()
+        yield {}
+
+    client.events = hang
+    running = asyncio.create_task(worker.execute(TASK, "p", []))
+    for _ in range(200):
+        if client.created:
+            break
+        await asyncio.sleep(0.01)
+    await asyncio.sleep(0.05)
+    running.cancel()
+    with pytest.raises(asyncio.CancelledError):
+        await running
+    assert client.stopped == ["run_1"]
+
+
 async def test_worker_retries_inference_server_errors_with_a_fresh_run(tmp_path):
     peg = ('Engine protocol predict stream returned an error: {"code":500,"message":"The model produced output '
            'that does not match the expected peg-native format","type":"server_error"}')

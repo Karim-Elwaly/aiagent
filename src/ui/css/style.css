@@ -2037,7 +2037,8 @@ body::before {
   gap: 8px;
 }
 
-.phase-select-risk {
+.phase-select-risk,
+.phase-select-agent {
   background: var(--bg-input);
   border: 1px solid var(--border-subtle);
   border-radius: var(--radius-sm);
@@ -2051,12 +2052,14 @@ body::before {
   transition: var(--transition-smooth);
 }
 
-.phase-select-risk:focus {
+.phase-select-risk:focus,
+.phase-select-agent:focus {
   outline: none;
   border-color: var(--border-highlight);
 }
 
-.phase-select-risk option {
+.phase-select-risk option,
+.phase-select-agent option {
   background-color: #09090b;
   color: #f4f4f5;
 }

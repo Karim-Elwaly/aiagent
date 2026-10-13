@@ -109,6 +109,33 @@ def _get_worker_llm() -> LocalLLMClient:
 # ── Activities ───────────────────────────────────────────────────
 
 
+def _planner_scope(registry: Any, agent_id: str) -> tuple[list[str], list[dict]]:
+    """Skills the planner may use and the agents it may assign tasks to.
+
+    With a default agent, the skills are its curated ones plus those of the other agents; any agent
+    without curation (or no agents) opens every skill.
+    """
+    all_skills = registry.list_skills()
+    try:
+        from src.core.agent_store import AgentStore
+
+        agents = AgentStore().list_all()
+    except Exception as e:
+        logger.warning("Could not load agents for planning: %s", e)
+        agents = []
+    roster = [
+        {"id": a.id, "name": a.name, "description": a.description, "skills": list(a.curated_skills)}
+        for a in agents
+    ]
+    if not agent_id or not agents:
+        return all_skills, roster
+    default = next((a for a in agents if a.id == agent_id), None)
+    if default is None or not default.curated_skills or any(not a.curated_skills for a in agents):
+        return all_skills, roster
+    allowed = {s for a in agents for s in a.curated_skills}
+    return [s for s in all_skills if s in allowed], roster
+
+
 @activity.defn
 async def plan_tasks(user_query: str, agent_id: str = "") -> dict:
     """Meta-Planner activity: decompose user query into TaskDAG.
@@ -133,31 +160,14 @@ async def plan_tasks(user_query: str, agent_id: str = "") -> dict:
     llm = _get_planner_llm()
     settings = get_settings()
 
-    available_skills = registry.list_skills()
-    if agent_id:
-        try:
-            from src.core.agent_store import AgentStore
-
-            store = AgentStore()
-            profile = store.load(agent_id)
-            if profile and profile.curated_skills:
-                available_skills = [
-                    s for s in available_skills if s in profile.curated_skills
-                ]
-                logger.info(
-                    "Restricted planner skills for agent '%s': %s",
-                    agent_id,
-                    available_skills,
-                )
-        except Exception as e:
-            logger.warning(
-                "Could not filter planner skills for agent '%s': %s", agent_id, e
-            )
+    available_skills, roster = _planner_scope(registry, agent_id)
 
     planner = MetaPlanner(
         llm=llm,
         available_skills=available_skills,
         max_retries=settings.planner_max_retries,
+        agents=roster,
+        default_agent_id=agent_id,
     )
 
     dag = await planner.plan(user_query)
@@ -249,13 +259,25 @@ async def execute_task(
                 logger.warning("Failed to load AgentProfile '%s': %s", agent_id, e)
 
         # Component 2: Skill/Tool Injector — resolve abstract skills to tools
+        uncurated: list[str] = []
         if profile and profile.curated_skills:
             effective_skills = [
                 s for s in task.required_skills if s in profile.curated_skills
             ]
+            uncurated = [s for s in task.required_skills if s not in profile.curated_skills]
             tools = registry.resolve(effective_skills)
         else:
             tools = registry.resolve(task.required_skills)
+        assigned = {t.name for t in tools}
+        approval_tools = [t for t in registry.resolve(uncurated) if t.name not in assigned]
+        if uncurated:
+            logger.warning(
+                "Task '%s' needs skills %s that agent '%s' is not curated for; their tools %s need operator approval",
+                task.id,
+                uncurated,
+                agent_id,
+                [t.name for t in approval_tools],
+            )
 
         if not tools and task.required_skills != ["general_reasoning"]:
             logger.warning(
@@ -322,6 +344,15 @@ async def execute_task(
             except Exception:
                 wf_id = "default"
         bus.publish(wf_id, {"type": "worker_engine", "task_id": task.id, "engine": engine})
+        if uncurated:
+            bus.publish(wf_id, {
+                "type": "skills_not_curated",
+                "task_id": task.id,
+                "agent_id": agent_id,
+                "agent_name": profile.name if profile else "",
+                "skills": uncurated,
+                "approval_tools": [t.name for t in approval_tools],
+            })
 
         def handle_token(token: str) -> None:
             bus.publish(wf_id, {"type": "token", "task_id": task.id, "content": token})
@@ -361,6 +392,8 @@ async def execute_task(
                 "continue_session": task_dict["_hermes_session_id"],
                 "review_feedback": task_dict.get("_supervisor_feedback", ""),
             }
+        if engine == "hermes" and approval_tools:
+            continuation["approval_tools"] = approval_tools
 
         try:
             result = await worker.execute(
@@ -412,6 +445,7 @@ async def replan_tasks(
     user_query: str,
     completed: dict[str, str],
     failed: dict[str, str],
+    agent_id: str = "",
 ) -> dict:
     """Re-plan activity: create a new plan after partial failure.
 
@@ -433,11 +467,14 @@ async def replan_tasks(
 
     registry = _get_registry()
     llm = _get_planner_llm()
+    available_skills, roster = _planner_scope(registry, agent_id)
 
     planner = MetaPlanner(
         llm=llm,
-        available_skills=registry.list_skills(),
+        available_skills=available_skills,
         max_retries=2,  # fewer retries on replan
+        agents=roster,
+        default_agent_id=agent_id,
     )
 
     dag = await planner.replan(

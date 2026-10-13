@@ -9,6 +9,7 @@ the agent is allowed). Hermes's tool and approval events are relayed to aiagent'
 from __future__ import annotations
 
 import asyncio
+import json
 import logging
 import re
 import time
@@ -40,6 +41,7 @@ MODEL_ERROR = re.compile(
     r"server_error|\"code\"\s*:\s*5\d\d|error code:?\s*5\d\d|does not match the expected|predict stream", re.I
 )
 MODEL_ERROR_RETRIES = 2
+PARAMETERS_LIMIT = 2000
 APPROVAL_LABELS = {
     "once": "Allow once",
     "session": "Allow for this run",
@@ -104,6 +106,7 @@ class HermesAgentWorker:
         workflow_id: str = "",
         continue_session: str | None = None,
         review_feedback: str | None = None,
+        approval_tools: list[ToolSpec] | None = None,
     ) -> TaskResult:
         start = time.monotonic()
         agent_id = self.agent.id if self.agent else None
@@ -145,7 +148,7 @@ class HermesAgentWorker:
             try:
                 return await self._run(task, persona, tools, info.name, info.api_key, upstream_context, user_query,
                                        on_token, on_event, on_heartbeat, resume_checkpoint, workflow_id, start,
-                                       continue_session, review_feedback)
+                                       continue_session, review_feedback, approval_tools or [])
             finally:
                 self.active.clear(info.name)
 
@@ -166,6 +169,7 @@ class HermesAgentWorker:
         start: float,
         continue_session: str | None = None,
         review_feedback: str | None = None,
+        approval_tools: list[ToolSpec] | None = None,
     ) -> TaskResult:
         run_id, last_seq = self._resumable(resume_checkpoint, profile)
         session_id = self._new_session_id(workflow_id, task)
@@ -182,7 +186,8 @@ class HermesAgentWorker:
             try:
                 if not run_id:
                     run_id = await self.client.create_run(
-                        profile, key, follow_up or self._user_content(task, tools, user_query, upstream_context),
+                        profile, key,
+                        follow_up or self._user_content(task, tools, user_query, upstream_context, approval_tools),
                         instructions=persona, session_id=session_id,
                     )
                     logger.info("Task '%s' started Hermes run %s on profile '%s'", task.id, run_id, profile)
@@ -210,6 +215,10 @@ class HermesAgentWorker:
                 await self._stop(profile, key, run_id)
                 return self._failed(task, start, f"Hermes run {run_id} timed out after "
                                                  f"{self.settings.hermes_run_timeout_seconds}s", tool_calls)
+            except asyncio.CancelledError:
+                # Workflow cancelled/terminated: otherwise the run keeps going and holds the profile for the next task.
+                await asyncio.shield(self._stop(profile, key, run_id))
+                raise
             except HermesAPIError as exc:
                 return self._failed(task, start, str(exc), tool_calls)
             except httpx.HTTPError as exc:
@@ -386,7 +395,12 @@ class HermesAgentWorker:
         )
 
     def _user_content(
-        self, task: Task, tools: list[ToolSpec], user_query: str, upstream_context: dict[str, str] | None
+        self,
+        task: Task,
+        tools: list[ToolSpec],
+        user_query: str,
+        upstream_context: dict[str, str] | None,
+        approval_tools: list[ToolSpec] | None = None,
     ) -> str:
         parts = []
         if user_query and user_query.strip():
@@ -394,11 +408,23 @@ class HermesAgentWorker:
         parts.append(f"# Task to Execute\n**{task.name}**\n\n{task.description}")
         if task.expected_output and task.expected_output.strip():
             parts.append(f"**Expected Output:**\n{task.expected_output}")
+        if task.parameters:
+            params = json.dumps(task.parameters, ensure_ascii=False, default=str)
+            if len(params) > PARAMETERS_LIMIT:
+                params = params[:PARAMETERS_LIMIT] + " [...truncated]"
+            parts.append(f"# Task Parameters\n{params}")
         if tools:
             names = ", ".join(f"{MCP_TOOL_PREFIX}{t.name}" for t in tools)
             parts.append(f"# Tools for This Task\n{names}")
-        else:
+        elif not approval_tools:
             parts.append("# Tools for This Task\nNone assigned. Answer from the context you are given.")
+        if approval_tools:
+            names = ", ".join(f"{MCP_TOOL_PREFIX}{t.name}" for t in approval_tools)
+            parts.append(
+                "# Tools That Need Operator Approval\n"
+                f"{names}\nThis task needs them but this agent is not approved for them. Call one when you need it; "
+                "the operator is asked to allow it."
+            )
         context = format_upstream_context(upstream_context or {}, self.settings.worker_max_context_chars)
         if context:
             parts.append(context.strip())

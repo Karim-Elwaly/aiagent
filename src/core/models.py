@@ -85,6 +85,10 @@ class Task(BaseModel):
         default_factory=dict,
         description="Optional execution parameters or context, e.g. target_path",
     )
+    agent_id: str | None = Field(
+        default=None,
+        description="Agent that runs this task; None uses the workflow's default agent",
+    )
 
 
 class TaskDAG(BaseModel):

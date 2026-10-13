@@ -668,17 +668,19 @@ async def run_direct_workflow(
                     state["pending_task_params"] = {}
 
             state["task_statuses"][task_id] = "running"
+            overrides = state.get("agent_overrides", {})
+            task_agent = (overrides[task_id] if task_id in overrides else task.agent_id) or agent_id
             bus.publish(
                 workflow_id,
                 {
                     "type": "task_started",
                     "task_id": task_id,
                     "task_name": task.name,
-                    "agent_id": agent_id or "default",
+                    "agent_id": task_agent or "default",
                 },
             )
 
-            result_dict = await _execute_task_with_retries(task_dict, completed, agent_id, profile)
+            result_dict = await _execute_task_with_retries(task_dict, completed, task_agent, profile)
 
             if result_dict.get("status") == "completed":
                 task_output = result_dict.get("output", "")
@@ -716,8 +718,11 @@ async def run_direct_workflow(
                             req_skills = list(task_dict.get("required_skills", []))
                             if req_skills == ["general_reasoning"] or not req_skills:
                                 task_dict["required_skills"] = ["system_command", "code_execution", "general_reasoning"]
+                            if result_dict.get("hermes_session_id"):
+                                task_dict["_hermes_session_id"] = result_dict["hermes_session_id"]
+                                task_dict["_supervisor_feedback"] = feedback
 
-                            retry_result = await _execute_task_with_retries(task_dict, completed, agent_id, profile)
+                            retry_result = await _execute_task_with_retries(task_dict, completed, task_agent, profile)
                             if retry_result.get("status") == "completed":
                                 task_output = retry_result.get("output", "")
                                 result_dict = retry_result
@@ -1264,7 +1269,37 @@ async def approve_task(workflow_id: str, request: ApproveRequest):
         raise HTTPException(404, f"Workflow not found: {e}")
 
 
-@app.post("/clarify/{workflow_id}")
+class TaskAgentRequest(BaseModel):
+    agent_id: str = ""
+
+
+@app.post("/api/workflows/{workflow_id}/tasks/{task_id}/agent")
+async def set_task_agent(workflow_id: str, task_id: str, request: TaskAgentRequest):
+    """Reassign a task that has not started yet to another agent (empty agent_id = workflow default)."""
+    if request.agent_id and AgentStore().load(request.agent_id) is None:
+        raise HTTPException(404, f"Agent '{request.agent_id}' not found")
+
+    if workflow_id in app.state.direct_workflows:
+        dw = app.state.direct_workflows[workflow_id]
+        if dw.get("task_statuses", {}).get(task_id) != "pending":
+            raise HTTPException(409, f"Task '{task_id}' has already started")
+        dw.setdefault("agent_overrides", {})[task_id] = request.agent_id or None
+        for t in (dw.get("dag") or {}).get("tasks", []):
+            if t.get("id") == task_id:
+                t["agent_id"] = request.agent_id or None
+    elif app.state.temporal:
+        try:
+            handle = app.state.temporal.get_workflow_handle(workflow_id)
+            await handle.signal(
+                UAOSWorkflow.set_task_agent, {"task_id": task_id, "agent_id": request.agent_id}
+            )
+        except Exception as e:
+            raise HTTPException(404, f"Workflow not found: {e}")
+    else:
+        raise HTTPException(404, f"Workflow '{workflow_id}' not found")
+
+    _status_cache.pop(workflow_id, None)
+    return {"workflow_id": workflow_id, "task_id": task_id, "agent_id": request.agent_id or None}
 async def clarify_workflow(workflow_id: str, request: ClarifyRequest):
     """Submit operator clarification for an ambiguous task.
 
@@ -1632,6 +1667,7 @@ async def create_agent(payload: AgentCreateRequest):
         tags=payload.tags,
         worker_engine=payload.worker_engine or None,
         hermes_toolsets=payload.hermes_toolsets,
+        hermes_disabled_skills=payload.hermes_disabled_skills,
     )
     store.save(profile)
     return profile
@@ -1671,6 +1707,8 @@ async def update_agent(agent_id: str, payload: AgentUpdateRequest):
         profile.worker_engine = payload.worker_engine or None
     if payload.hermes_toolsets is not None:
         profile.hermes_toolsets = payload.hermes_toolsets
+    if payload.hermes_disabled_skills is not None:
+        profile.hermes_disabled_skills = payload.hermes_disabled_skills
 
     store.save(profile)
     return profile
@@ -1914,6 +1952,154 @@ async def list_hermes_catalog_endpoint():
     from src.registry.hermes.hermes_loader import list_hermes_skills_catalog
 
     return list_hermes_skills_catalog()
+
+
+# ── Hermes Agent toolsets & skills (two-way sync with AgentHub) ──
+
+
+class HermesToolsetsPayload(BaseModel):
+    agent_id: str = ""
+    toolsets: list[str]
+
+
+class HermesSkillInstallPayload(BaseModel):
+    identifier: str
+    agent_id: str = ""
+
+
+class HermesSkillTogglePayload(BaseModel):
+    enabled: bool
+    agent_id: str = ""
+
+
+def _hermes_catalog():
+    from src.hermes.catalog import HermesCatalog
+    from src.hermes.client import HermesClient
+    from src.hermes.profiles import HermesProfiles
+
+    settings = get_settings()
+    return HermesCatalog(HermesProfiles(settings), HermesClient(settings.hermes_api_url))
+
+
+def _hermes_agent(agent_id: str):
+    if not agent_id:
+        return None
+    agent = AgentStore().load(agent_id)
+    if agent is None:
+        raise HTTPException(404, f"Agent '{agent_id}' not found")
+    return agent
+
+
+async def _hermes_call(fn, *args):
+    from src.hermes.catalog import CatalogError
+    from src.hermes.profiles import HermesError
+
+    try:
+        return await asyncio.to_thread(fn, *args)
+    except CatalogError as e:
+        raise HTTPException(400, str(e))
+    except HermesError as e:
+        raise HTTPException(503, f"Hermes Agent: {e}")
+
+
+@app.get("/api/hermes/toolsets")
+async def hermes_toolsets(agent_id: str = ""):
+    """Hermes built-in toolsets for an agent's profile (or tasks without an agent) and their state."""
+    from src.hermes.profiles import profile_name
+
+    _hermes_agent(agent_id)
+    return await _hermes_catalog().toolsets(profile_name(agent_id))
+
+
+@app.put("/api/hermes/toolsets")
+async def set_hermes_toolsets(payload: HermesToolsetsPayload):
+    """Choose the Hermes toolsets an agent (or tasks without an agent) may use; applied to Hermes now."""
+    from src.hermes.profiles import profile_name
+    from src.hermes.toolsets import BUILTIN_TOOLSETS
+
+    unknown = [t for t in payload.toolsets if t not in BUILTIN_TOOLSETS]
+    if unknown:
+        raise HTTPException(422, f"Unknown Hermes toolsets: {', '.join(unknown)}")
+    agent = _hermes_agent(payload.agent_id)
+    catalog = _hermes_catalog()
+    name = profile_name(payload.agent_id)
+    if agent:
+        agent.hermes_toolsets = sorted(set(payload.toolsets))
+        AgentStore().save(agent)
+    else:
+        catalog.profiles.set_default_toolsets(payload.toolsets)
+    wanted = catalog.profiles.wanted_toolsets(name, payload.toolsets)
+    if catalog.profiles.profile_dir(name).is_dir():
+        await _hermes_call(catalog.profiles.apply_toolsets, name, wanted)
+    return {"profile": name, "toolsets": wanted}
+
+
+@app.get("/api/hermes/skills")
+async def hermes_skills(agent_id: str = ""):
+    """Skills an agent's Hermes profile can load: aiagent's, Hermes built-ins, hub installs and local ones."""
+    from src.hermes.profiles import profile_name
+
+    _hermes_agent(agent_id)
+    return await asyncio.to_thread(_hermes_catalog().skills, profile_name(agent_id))
+
+
+@app.get("/api/hermes/skills/search")
+async def hermes_skills_search(q: str, limit: int = 25):
+    """Search the Hermes skills hub."""
+    if not q.strip():
+        return []
+    return await _hermes_call(_hermes_catalog().search, q.strip(), limit)
+
+
+@app.post("/api/hermes/skills/install")
+async def hermes_skill_install(payload: HermesSkillInstallPayload):
+    """Install a hub skill into an agent's Hermes profile (Hermes scans it; blocked skills stay blocked)."""
+    from src.hermes.profiles import profile_name
+
+    _hermes_agent(payload.agent_id)
+    output = await _hermes_call(_hermes_catalog().install, profile_name(payload.agent_id), payload.identifier.strip())
+    return {"status": "installed", "output": output}
+
+
+@app.delete("/api/hermes/skills/{name}")
+async def hermes_skill_uninstall(name: str, agent_id: str = ""):
+    """Remove a hub-installed skill from an agent's Hermes profile."""
+    from src.hermes.profiles import profile_name
+
+    _hermes_agent(agent_id)
+    output = await _hermes_call(_hermes_catalog().uninstall, profile_name(agent_id), name)
+    return {"status": "uninstalled", "output": output}
+
+
+@app.post("/api/hermes/skills/{name}/toggle")
+async def hermes_skill_toggle(name: str, payload: HermesSkillTogglePayload):
+    """Let or stop an agent's Hermes profile load a skill in API runs."""
+    from src.hermes.profiles import profile_name
+
+    agent = _hermes_agent(payload.agent_id)
+    catalog = _hermes_catalog()
+    profile = profile_name(payload.agent_id)
+    current = set(catalog.profiles.wanted_disabled_skills(profile, agent))
+    disabled = sorted(current - {name} if payload.enabled else current | {name})
+    if agent:
+        agent.hermes_disabled_skills = disabled
+        AgentStore().save(agent)
+    else:
+        catalog.profiles.set_default_disabled_skills(disabled)
+    if catalog.profiles.profile_dir(profile).is_dir():
+        await _hermes_call(catalog.profiles.apply_disabled_skills, profile, disabled)
+    return {"profile": profile, "disabled": disabled}
+
+
+@app.post("/api/hermes/skills/{name}/import")
+async def hermes_skill_import(name: str, agent_id: str = ""):
+    """Copy a Hermes skill into AgentHub's catalog so agents can curate it."""
+    from src.hermes.profiles import profile_name
+
+    _hermes_agent(agent_id)
+    registry: ToolRegistry = app.state.registry
+    spec = await _hermes_call(_hermes_catalog().import_skill, profile_name(agent_id), name, registry)
+    return {"status": "imported", "name": spec.name, "skills": spec.skills_provided}
 
 
 @app.get("/api/skills/ecosystem/stats")

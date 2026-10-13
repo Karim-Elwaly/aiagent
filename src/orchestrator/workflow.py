@@ -186,6 +186,18 @@ class UAOSWorkflow:
         except Exception:
             logger.info("Received clarification signal for %s", cid)
 
+    @workflow.signal
+    async def set_task_agent(self, payload: dict[str, Any]) -> None:
+        """Operator reassigns a task that has not started yet to another agent (empty = workflow default)."""
+        task_id = payload.get("task_id", "")
+        if self._task_statuses.get(task_id) not in ("pending", "awaiting_approval"):
+            workflow.logger.warning("Ignoring agent change for task '%s': it is no longer pending", task_id)
+            return
+        for task in self._dag_dict.get("tasks", []):
+            if task.get("id") == task_id:
+                task["agent_id"] = payload.get("agent_id") or None
+                workflow.logger.info("Task '%s' reassigned to agent '%s'", task_id, task["agent_id"] or "default")
+
     @workflow.query
     def get_status(self) -> dict[str, Any]:
         """Query current workflow status (available via Temporal API)."""
@@ -314,12 +326,15 @@ class UAOSWorkflow:
                     )
                     dag_dict = await workflow.execute_activity(
                         replan_tasks,
-                        args=[user_query, completed, failed],
+                        args=[user_query, completed, failed, agent_id],
                         start_to_close_timeout=timedelta(seconds=180),
                         retry_policy=llm_retry_policy,
                     )
                     # Keep completed results, clear failures for the new plan
                     failed.clear()
+                    self._dag_dict = dag_dict
+                    for t in dag_dict.get("tasks", []):
+                        self._task_statuses.setdefault(t["id"], "pending")
                     replan_count += 1
                     continue
                 else:
@@ -513,6 +528,8 @@ class UAOSWorkflow:
             task_dict["_workflow_id"] = f"workflow-{task_id}"
 
         self._task_statuses[task_id] = "running"
+        # A task's own agent (planner- or operator-assigned) overrides the workflow's default agent.
+        agent_id = task_dict.get("agent_id") or agent_id
         workflow.logger.info(
             "Executing task '%s' (%s), risk: %s",
             task_name,

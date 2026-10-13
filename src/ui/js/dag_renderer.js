@@ -15,6 +15,24 @@ class DAGRenderer {
     this.nodeHeight = 92;
     this.colSpacing = 90;
     this.rowSpacing = 28;
+    this.agents = new Map(); // agent id -> { name, icon }
+  }
+
+  setAgents(agents) {
+    this.agents = new Map((agents || []).map((a) => [a.id, { name: a.name || a.id, icon: a.icon || "🤖" }]));
+  }
+
+  agentLabel(agentId) {
+    if (!agentId) return "";
+    const a = this.agents.get(agentId);
+    return a ? `${a.icon} ${a.name}` : agentId;
+  }
+
+  markWarning(taskId, message) {
+    const box = document.getElementById(`node-box-${taskId}`);
+    if (box) box.setAttribute("stroke", "#f59e0b");
+    const title = box && box.parentNode ? box.parentNode.querySelector("title") : null;
+    if (title && !title.textContent.includes(message)) title.textContent += `\n⚠️ ${message}`;
   }
 
   render(dag) {
@@ -191,11 +209,13 @@ class DAGRenderer {
     // Rich Native Tooltip for complete task details
     const titleEl = document.createElementNS("http://www.w3.org/2000/svg", "title");
     const skillList = (node.task.required_skills || []).join(", ") || "General";
+    const agentLabel = this.agentLabel(node.task.agent_id);
     titleEl.textContent = `${node.task.name || node.task.id} (${node.task.id.toUpperCase()})\n` +
       `Risk: ${(node.task.risk_level || 'low').toUpperCase()} | Status: ${node.status.toUpperCase()}\n` +
+      `Agent: ${agentLabel || "workflow default"}\n` +
       `Skills: ${skillList}\n` +
       `Description: ${node.task.description || 'No description provided'}` +
-      (isEditable ? "\n\n👉 Click to edit parameters, risk level, or guidance before execution" : "");
+      (isEditable ? "\n\n👉 Click to edit agent, parameters, risk level, or guidance before execution" : "");
     g.appendChild(titleEl);
 
     // Box background
@@ -346,8 +366,8 @@ class DAGRenderer {
     textSkill.setAttribute("fill", "#64748b");
     textSkill.setAttribute("font-family", "JetBrains Mono");
     textSkill.setAttribute("font-size", "9");
-    const skillStr = skillList.length > 24 ? skillList.substring(0, 22) + "…" : skillList;
-    textSkill.textContent = `⚙ ${skillStr}`;
+    const subtitle = agentLabel ? `${agentLabel} · ${skillList}` : `⚙ ${skillList}`;
+    textSkill.textContent = subtitle.length > 26 ? subtitle.substring(0, 24) + "…" : subtitle;
     g.appendChild(textSkill);
 
     // Status Badge Pill (Bottom right)
