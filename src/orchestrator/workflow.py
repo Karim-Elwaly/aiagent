@@ -37,6 +37,7 @@ with workflow.unsafe.imports_passed_through():
         execute_task,
         notify_approval_required,
         plan_tasks,
+        prepare_dag_profiles,
         replan_tasks,
     )
 
@@ -288,8 +289,24 @@ class UAOSWorkflow:
                 if "[Investigation Target Path]" not in t.get("description", ""):
                     t["description"] = f"{t.get('description', '')}\n\n[Investigation Target Path]: {target_path}"
 
+        # Expose DAG and initial pending task statuses immediately so the Web UI streams the plan instantly
         self._dag_dict = dag_dict
         self._task_statuses = {t["id"]: "pending" for t in dag_dict.get("tasks", [])}
+
+        # ── Phase 1.5: Prepare Dynamic Hermes Profiles (Single Gateway Restart) ──
+        settings = get_settings()
+        if getattr(settings, "hermes_dynamic_profiles", True) and getattr(settings, "worker_engine", "") == "hermes":
+            try:
+                dag_dict = await workflow.execute_activity(
+                    prepare_dag_profiles,
+                    args=[dag_dict],
+                    start_to_close_timeout=timedelta(seconds=180),
+                    heartbeat_timeout=timedelta(seconds=30),
+                    retry_policy=RetryPolicy(maximum_attempts=2),
+                )
+                self._dag_dict = dag_dict
+            except Exception as prep_err:
+                workflow.logger.warning("Dynamic Hermes profile preparation error: %s; proceeding", prep_err)
 
         completed: dict[str, str] = {}  # task_id → output
         failed: dict[str, str] = {}  # task_id → error

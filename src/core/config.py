@@ -45,12 +45,17 @@ class Settings(BaseSettings):
     hermes_api_url: str = "http://127.0.0.1:8642"
     hermes_home: str = ""  # empty: %LOCALAPPDATA%\hermes when it exists, else ~/.hermes
     hermes_bin: str = ""  # empty: the hermes executable under hermes_home, else PATH
-    hermes_mcp_url: str = ""  # where Hermes reaches aiagent's tools; empty: derived from api_port
+    hermes_mcp_url: str = ""  # where Hermes reaches aiagent's tools; empty: derived from api_port (8001)
     hermes_default_toolsets: list[str] = []  # Hermes built-ins every aiagent profile gets; agents add their own
     hermes_run_timeout_seconds: int = 1800
     hermes_approval_timeout_seconds: int = 600
     # Tasks without an agent run on small tool-group profiles (aiagent-bundle-*) instead of aiagent-default.
     hermes_tool_bundles: bool = True
+    # Dynamic bespoke profiles provisioned post-planning with exact tools per task.
+    hermes_dynamic_profiles: bool = True
+    hermes_max_dynamic_profiles: int = 15
+    hermes_gateway_restart_timeout_seconds: int = 25
+    hermes_profile_prefix_dynamic: str = "aiagent-dyn-"
     # With the Hermes engine, the planner, supervisor and final report calls also run through Hermes.
     hermes_orchestration: bool = True
     hermes_orchestration_timeout_seconds: int = 170

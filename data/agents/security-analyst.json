@@ -15,6 +15,11 @@
     "audit",
     "cve"
   ],
+  "worker_engine": null,
+  "hermes_toolsets": [
+    "terminal"
+  ],
+  "hermes_disabled_skills": [],
   "created_at": "2026-09-17T00:00:00Z",
-  "updated_at": "2026-09-17T00:00:00Z"
+  "updated_at": "2026-10-14T22:38:05.403608+00:00"
 }

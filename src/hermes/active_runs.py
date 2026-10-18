@@ -18,7 +18,7 @@ from src.hermes.profiles import STATE_DIR
 
 
 class ActiveRuns:
-    def __init__(self, directory: Path | None = None, max_age_seconds: float = 4 * 3600):
+    def __init__(self, directory: Path | None = None, max_age_seconds: float = 300.0):
         self.directory = directory or STATE_DIR / "active"
         self.max_age_seconds = max_age_seconds
 
@@ -50,9 +50,51 @@ class ActiveRuns:
             return None
         return entry
 
+    def purge_stale(self, max_age: float | None = None) -> int:
+        """Remove JSON records of runs older than max_age."""
+        limit = self.max_age_seconds if max_age is None else max_age
+        count = 0
+        now = time.time()
+        try:
+            for p in self.directory.glob("*.json"):
+                try:
+                    entry = json.loads(p.read_text(encoding="utf-8"))
+                    if now - float(entry.get("started_at", 0)) > limit:
+                        p.unlink(missing_ok=True)
+                        count += 1
+                except Exception:
+                    p.unlink(missing_ok=True)
+                    count += 1
+        except OSError:
+            pass
+        return count
+
+    def clear_all(self) -> int:
+        """Remove all active run trackers (e.g. on clean worker boot)."""
+        count = 0
+        try:
+            for p in self.directory.glob("*.json"):
+                try:
+                    p.unlink(missing_ok=True)
+                    count += 1
+                except OSError:
+                    pass
+        except OSError:
+            pass
+        self.touch()
+        return count
+
+    def active_profiles(self) -> set[str]:
+        """Set of profile names with an ongoing run."""
+        self.purge_stale()
+        try:
+            return {p.stem for p in self.directory.glob("*.json") if self.get(p.stem)}
+        except OSError:
+            return set()
+
     def any_active(self, quiet_seconds: float = 0.0) -> bool:
-        """A Hermes run of any profile is in progress, or ended less than ``quiet_seconds`` ago: a workflow is
-        usually between two runs then (supervisor check, next task), and a gateway restart would break it."""
+        """A Hermes run of any profile is in progress, or ended less than ``quiet_seconds`` ago."""
+        self.purge_stale()
         try:
             profiles = [p.stem for p in self.directory.glob("*.json")]
         except OSError:
@@ -71,3 +113,4 @@ class ActiveRuns:
         except FileNotFoundError:
             pass
         self.touch()
+

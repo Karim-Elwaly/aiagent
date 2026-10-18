@@ -7,6 +7,7 @@ Provides system-level querying capabilities (e.g. fsutil, Get-ChildItem, dir, ip
 
 from __future__ import annotations
 
+import asyncio
 import logging
 import platform
 import subprocess
@@ -41,7 +42,8 @@ async def execute_command(
         cmd_args = ["bash", "-c", clean_cmd]
 
     try:
-        result = subprocess.run(
+        result = await asyncio.to_thread(
+            subprocess.run,
             cmd_args,
             capture_output=True,
             text=True,

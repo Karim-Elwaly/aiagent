@@ -1052,6 +1052,85 @@ async def test_case6_ddos_recon_and_firewall_correlation_pipeline(tmp_path):
     assert "11:18:40" in timeline_milestones[0] or "Log4j" in timeline_milestones[0]
 
 
+@pytest.mark.asyncio
+async def test_soc_tools_flexible_kwargs_and_aliases(tmp_path):
+    """Verify that all SOC tools accept alternative keyword arguments and unknown kwargs without TypeError."""
+    test_file = tmp_path / "test.log"
+    test_file.write_text("Sep 17 12:00:01 host sshd: Failed password for root from 198.51.100.44\n", encoding="utf-8")
+
+    # 1. triage_security_alert called with target_path and unknown kwargs
+    res1 = await triage_security_alert(
+        target_path=str(test_file),
+        extra_unknown_arg="ignored_safely",
+        some_flag=True,
+    )
+    assert "=== [SOC TRIAGE REPORT] ===" in res1
+    assert "198.51.100.44" in res1
+
+    # 1b. triage_security_alert called with empty kwargs
+    res1_empty = await triage_security_alert()
+    assert "=== [SOC TRIAGE REPORT] ===" in res1_empty
+
+    # 2. gather_log_evidence called with path and unknown kwargs
+    res2 = await gather_log_evidence(
+        path=str(tmp_path),
+        extra_unknown_param=123,
+    )
+    assert "=== [EVIDENCE COLLECTION:" in res2
+
+    # 3. lookup_threat_indicators called with ip and unknown kwargs
+    res3 = await lookup_threat_indicators(
+        ip="198.51.100.44",
+        arbitrary_kwarg="safe",
+    )
+    assert "=== [THREAT DISCOVERY: 198.51.100.44] ===" in res3
+
+    # 4. analyze_incident_impact called with summary and unknown kwargs
+    res4 = await analyze_incident_impact(
+        summary="Compromised host WKSTN-01 by adversary 198.51.100.44",
+        extra_field="safe",
+    )
+    assert "=== [ENTERPRISE BLAST RADIUS & IMPACT ASSESSMENT REPORT] ===" in res4
+
+    # 5. compress_security_timeline called with logs and unknown kwargs
+    res5 = await compress_security_timeline(
+        logs="2026-09-17T12:00:01 host sshd: Failed password for root from 198.51.100.44",
+        another_kwarg=True,
+    )
+    assert "=== [COMPRESSED INCIDENT TIMELINE]" in res5
+
+    # 6. propose_containment_response called with entity and unknown kwargs
+    res6 = await propose_containment_response(
+        entity="198.51.100.44",
+        action="block_ip",
+        extra_flag="safe",
+    )
+    assert "Target Entity  : 198.51.100.44" in res6
+
+
+@pytest.mark.asyncio
+async def test_toolspec_invoke_filters_unexpected_kwargs_on_strict_func():
+    """Verify ToolSpec.invoke filters unexpected kwargs if the function signature lacks **kwargs."""
+    from src.registry.tool_registry import ToolSpec
+
+    def strict_sync_func(x: str, y: int = 1) -> str:
+        return f"{x}:{y}"
+
+    spec = ToolSpec(
+        tool_id="strict_test",
+        name="strict_test",
+        description="Strict test",
+        skills_provided=["test"],
+        parameters={"x": {"type": "string"}},
+        function=strict_sync_func,
+    )
+
+    # Calling with unexpected kwargs should be filtered and succeed rather than raising TypeError
+    result = await spec.invoke(x="hello", unexpected_kwarg="bad", extra=42)
+    assert result == "hello:1"
+
+
+
 
 
 

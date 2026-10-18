@@ -318,7 +318,13 @@ def _materialize_evidence(raw_text: str) -> str:
 
 # ─── 1. UNIVERSAL TRIAGE SKILL ────────────────────────────────────────────────
 
-async def triage_security_alert(alert_text: str) -> str:
+async def triage_security_alert(
+    alert_text: str = "",
+    target_path: str | None = None,
+    path: str | None = None,
+    file_path: str | None = None,
+    **kwargs: Any,
+) -> str:
     """Analyze raw alert text, JSON payloads, or multi-source logs, extract all IoCs, and assess severity.
     
     Universally categorizes threats across:
@@ -329,12 +335,39 @@ async def triage_security_alert(alert_text: str) -> str:
       - Linux / Unix System Attacks (Sudo Abuse, SUID Binaries, Auth Failures)
     
     Args:
-        alert_text: Raw alert message, JSON payload, or event description.
+        alert_text: Raw alert message, JSON payload, event description, or file/dir path.
+        target_path: Alternative path to directory or file containing security logs.
+        path: Alternative path alias.
+        file_path: Alternative file path alias.
         
     Returns:
         Structured triage assessment with extracted IoCs, MITRE mapping, and severity classification.
     """
-    alert_text = _materialize_evidence(alert_text)
+    raw_input = (
+        alert_text
+        or target_path
+        or path
+        or file_path
+        or kwargs.get("log_text")
+        or kwargs.get("logs")
+        or kwargs.get("payload")
+        or kwargs.get("text")
+        or kwargs.get("query")
+        or kwargs.get("log_path")
+        or kwargs.get("filepath")
+        or ""
+    )
+    if isinstance(raw_input, (list, tuple)):
+        raw_input = raw_input[0] if raw_input else ""
+    if not str(raw_input).strip():
+        return (
+            "=== [UNIVERSAL SOC TRIAGE REPORT] ===\n"
+            "=== [SOC TRIAGE REPORT] ===\n"
+            "Assigned Severity : LOW (Threat Score: 0/100)\n"
+            "Threat Class      : General Security Audit\n"
+            "Assessment: No alert text, log excerpt, or file path provided to triage."
+        )
+    alert_text = _materialize_evidence(raw_input)
 
     def _is_trusted_cloud_or_cdn(ip_str: str) -> bool:
         if ip_str.startswith(("13.107.", "40.107.", "52.96.", "52.97.", "52.98.", "52.99.")):
@@ -598,8 +631,18 @@ TRIAGE_ALERT_SPEC = ToolSpec(
         "alert_text": {
             "type": "string",
             "description": "The alert payload, log excerpt, or event description to triage. A file or directory path may be passed instead; its log content is loaded automatically.",
-            "required": True,
-        }
+            "required": False,
+        },
+        "target_path": {
+            "type": "string",
+            "description": "Path to directory or file containing security logs or alerts to triage.",
+            "required": False,
+        },
+        "path": {
+            "type": "string",
+            "description": "Alternative alias for target_path.",
+            "required": False,
+        },
     },
     function=triage_security_alert,
     risk_level=RiskLevel.LOW,
@@ -2478,10 +2521,13 @@ def _parse_email_gateway_records(
 
 
 async def gather_log_evidence(
-    target_path: str,
+    target_path: str = "",
     max_files: int = 50,
     pattern: str = "*",
     recursive: bool = True,
+    path: str | None = None,
+    file_path: str | None = None,
+    **kwargs: Any,
 ) -> str:
     """Universally scan and parse security logs across Cloud, Linux, Windows, Web, and Network sources.
     
@@ -2499,11 +2545,43 @@ async def gather_log_evidence(
         max_files: Maximum number of log files to inspect.
         pattern: File glob pattern (e.g. '*.log', '*.json', '*.evtx', '*').
         recursive: Whether to search subdirectories recursively.
+        path: Alternative path alias.
+        file_path: Alternative file path alias.
         
     Returns:
         Structured, comprehensive forensic collection report with prioritized threat findings and IoCs.
     """
-    p = resolve_target_path(target_path)
+    raw_path = (
+        target_path
+        or path
+        or file_path
+        or kwargs.get("log_dir")
+        or kwargs.get("directory")
+        or kwargs.get("dir_path")
+        or kwargs.get("logs")
+        or kwargs.get("alert_text")
+        or kwargs.get("log_path")
+        or kwargs.get("filepath")
+        or ""
+    )
+    if isinstance(raw_path, (list, tuple)):
+        raw_path = raw_path[0] if raw_path else ""
+    if not str(raw_path).strip():
+        return "Error: No target path provided to gather log evidence."
+
+    try:
+        max_files = int(kwargs.get("max_files", max_files) or 50)
+    except (ValueError, TypeError):
+        max_files = 50
+    if "recursive" in kwargs:
+        r_val = kwargs["recursive"]
+        if isinstance(r_val, str):
+            recursive = r_val.lower() in ("true", "1", "yes", "on")
+        else:
+            recursive = bool(r_val)
+    pattern = str(kwargs.get("pattern", pattern) or "*")
+
+    p = resolve_target_path(raw_path)
     clean_path = str(p)
     if not p.exists():
         return f"Error: Path '{clean_path}' does not exist on disk."
@@ -3045,7 +3123,12 @@ GATHER_EVIDENCE_SPEC = ToolSpec(
         "target_path": {
             "type": "string",
             "description": "Path to directory or file containing security logs",
-            "required": True,
+            "required": False,
+        },
+        "path": {
+            "type": "string",
+            "description": "Alternative alias for target_path",
+            "required": False,
         },
         "max_files": {
             "type": "integer",
@@ -3071,7 +3154,11 @@ GATHER_EVIDENCE_SPEC = ToolSpec(
 
 # ─── 3. THREAT DISCOVERY & INTELLIGENCE SKILL ─────────────────────────────────
 
-async def lookup_threat_indicators(indicator: str, indicator_type: str = "auto") -> str:
+async def lookup_threat_indicators(
+    indicator: str = "",
+    indicator_type: str = "auto",
+    **kwargs: Any,
+) -> str:
     """Analyze and cross-reference indicators of compromise (IP, domain, hash, or CVE).
     
     Distinguishes legitimate enterprise cloud infrastructure (e.g. Microsoft Azure OneDrive)
@@ -3084,7 +3171,19 @@ async def lookup_threat_indicators(indicator: str, indicator_type: str = "auto")
     Returns:
         Threat intelligence categorization, risk rating, known affiliations, and containment advice.
     """
-    clean_raw = str(indicator).strip().strip('"').strip("'")
+    clean_raw = str(
+        indicator
+        or kwargs.get("target")
+        or kwargs.get("ip")
+        or kwargs.get("domain")
+        or kwargs.get("hash")
+        or kwargs.get("cve")
+        or kwargs.get("indicators")
+        or kwargs.get("query")
+        or kwargs.get("target_entity")
+        or ""
+    ).strip().strip('"').strip("'")
+    indicator_type = str(kwargs.get("type", kwargs.get("indicator_type", indicator_type)) or "auto")
     items = [i.strip().strip("'\",") for i in re.split(r"[\s,;]+", clean_raw) if i.strip().strip("'\",")]
     if not items:
         return "No indicator provided."
@@ -3174,7 +3273,7 @@ LOOKUP_THREAT_SPEC = ToolSpec(
         "indicator": {
             "type": "string",
             "description": "The IP, domain, hash, CVE, or multi-indicator string to evaluate",
-            "required": True,
+            "required": False,
         },
         "indicator_type": {
             "type": "string",
@@ -3188,11 +3287,25 @@ LOOKUP_THREAT_SPEC = ToolSpec(
 )
 
 
-# ─── 4. IMPACT ANALYSIS & BLAST RADIUS MAPPING SKILL ──────────────────────────
-
-async def analyze_incident_impact(evidence_summary: str, target_scope: str = "") -> str:
+async def analyze_incident_impact(
+    evidence_summary: str = "",
+    target_scope: str = "",
+    **kwargs: Any,
+) -> str:
     """Analyze and map enterprise blast radius: compromised hosts, domain accounts, lateral movement paths, and data loss."""
-    summary_text = _materialize_evidence(evidence_summary)
+    raw_summary = (
+        evidence_summary
+        or kwargs.get("summary")
+        or kwargs.get("evidence")
+        or kwargs.get("target_path")
+        or kwargs.get("path")
+        or kwargs.get("logs")
+        or kwargs.get("text")
+        or kwargs.get("alert_text")
+        or ""
+    )
+    target_scope = str(target_scope or kwargs.get("scope") or kwargs.get("target") or "")
+    summary_text = _materialize_evidence(raw_summary)
     scope = str(target_scope or "Enterprise Infrastructure & Identity Boundary")
 
     report = ["=== [ENTERPRISE BLAST RADIUS & IMPACT ASSESSMENT REPORT] ==="]
@@ -3668,7 +3781,7 @@ ANALYZE_IMPACT_SPEC = ToolSpec(
         "evidence_summary": {
             "type": "string",
             "description": "Forensic evidence summary, log findings, or triage output to evaluate",
-            "required": True,
+            "required": False,
         },
         "target_scope": {
             "type": "string",
@@ -3766,9 +3879,27 @@ def _parse_event_timestamp(text: str) -> datetime | None:
     return None
 
 
-async def compress_security_timeline(raw_evidence_text: str, max_timeline_events: int = 20) -> str:
+async def compress_security_timeline(
+    raw_evidence_text: str = "",
+    max_timeline_events: int = 20,
+    **kwargs: Any,
+) -> str:
     """Filter log noise and build a clean, chronological incident timeline across any log format."""
-    raw_evidence_text = _materialize_evidence(raw_evidence_text)
+    raw_text = (
+        raw_evidence_text
+        or kwargs.get("evidence")
+        or kwargs.get("logs")
+        or kwargs.get("raw_logs")
+        or kwargs.get("text")
+        or kwargs.get("target_path")
+        or kwargs.get("path")
+        or ""
+    )
+    try:
+        max_timeline_events = int(kwargs.get("max_timeline_events", kwargs.get("max_events", max_timeline_events)) or 20)
+    except (ValueError, TypeError):
+        max_timeline_events = 20
+    raw_evidence_text = _materialize_evidence(raw_text)
     lines = [l.strip() for l in raw_evidence_text.splitlines() if l.strip()]
 
     timeline_keywords = [
@@ -3897,7 +4028,7 @@ COMPRESS_TIMELINE_SPEC = ToolSpec(
         "raw_evidence_text": {
             "type": "string",
             "description": "Raw evidence or verbose log content to compress. A file or directory path may be passed instead; its log content is loaded automatically.",
-            "required": True,
+            "required": False,
         },
         "max_timeline_events": {
             "type": "integer",
@@ -3914,10 +4045,11 @@ COMPRESS_TIMELINE_SPEC = ToolSpec(
 # ─── 6. UNIVERSAL CONTAINMENT & REMEDIATION PLAYBOOK SKILL ────────────────────
 
 async def propose_containment_response(
-    target_entity: str,
-    action_type: str,
-    justification: str,
-    dry_run: bool = True
+    target_entity: str = "",
+    action_type: str = "block_ip",
+    justification: str = "Identified threat indicator",
+    dry_run: bool = True,
+    **kwargs: Any,
 ) -> str:
     """Generate an incident containment plan across Network, Cloud, Endpoint, and Identity.
 
@@ -3936,6 +4068,24 @@ async def propose_containment_response(
     Returns:
         A containment plan and command recipes for operator execution.
     """
+    target_entity = str(
+        target_entity
+        or kwargs.get("entity")
+        or kwargs.get("target")
+        or kwargs.get("ip")
+        or kwargs.get("host")
+        or kwargs.get("indicator")
+        or ""
+    )
+    action_type = str(action_type or kwargs.get("action") or kwargs.get("type") or "block_ip")
+    justification = str(justification or kwargs.get("reason") or kwargs.get("rationale") or "Identified threat indicator")
+    if "dry_run" in kwargs:
+        dr = kwargs["dry_run"]
+        if isinstance(dr, str):
+            dry_run = dr.lower() in ("true", "1", "yes", "on")
+        else:
+            dry_run = bool(dr)
+
     mode = "[PROPOSED - AWAITING OPERATOR REVIEW]" if dry_run else "[PROPOSED - FLAGGED FOR IMMEDIATE OPERATOR ACTION]"
 
     # Anti-Forensic, Unsafe Firewall Disabling, and Destructive Reboot Guardrail
@@ -3956,7 +4106,7 @@ async def propose_containment_response(
 
     entities = [e.strip().strip("'\",") for e in re.split(r"[\s,;]+", str(target_entity).strip()) if e.strip().strip("'\",")]
     if not entities:
-        entities = [target_entity]
+        entities = [target_entity] if target_entity else ["None"]
 
     generated_commands = []
     for ent in entities:
@@ -4049,17 +4199,17 @@ PROPOSE_CONTAINMENT_SPEC = ToolSpec(
         "target_entity": {
             "type": "string",
             "description": "The IP address, hostname, username, or cloud role to contain",
-            "required": True,
+            "required": False,
         },
         "action_type": {
             "type": "string",
             "description": "Action type: 'block_ip', 'isolate_endpoint', 'revoke_tokens', or 'quarantine_file'",
-            "required": True,
+            "required": False,
         },
         "justification": {
             "type": "string",
             "description": "Forensic justification for the response",
-            "required": True,
+            "required": False,
         },
         "dry_run": {
             "type": "boolean",

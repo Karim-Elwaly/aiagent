@@ -109,7 +109,7 @@ class HermesClient:
     async def events(self, profile: str, key: str, run_id: str, last_seq: int = -1) -> AsyncIterator[dict[str, Any]]:
         """The run's events, oldest first, until Hermes closes the stream. Each carries its ``seq``."""
         params = {"last_seq": str(last_seq)} if last_seq >= 0 else None
-        timeout = httpx.Timeout(self.timeout, read=None)
+        timeout = httpx.Timeout(self.timeout, read=90.0)
         async with httpx.AsyncClient(timeout=timeout) as client:
             async with client.stream(
                 "GET", self._url(profile, f"/v1/runs/{run_id}/events"), headers=self._headers(key), params=params

@@ -16,5 +16,5 @@ IF EXIST ".venv\Scripts\python.exe" (
     python run.py
 )
 echo [!] AgentHub stopped. Restarting in 2 seconds... (Press Ctrl+C to stop)
-timeout /t 2
+timeout /t 2 /nobreak >nul 2>&1
 goto loop

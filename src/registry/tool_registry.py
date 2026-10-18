@@ -52,13 +52,35 @@ class ToolSpec:
         If the function is a coroutine (async def), it is awaited directly.
         If it is a synchronous function (def), it is dispatched to a worker
         thread via asyncio.to_thread to avoid blocking the event loop.
+        Falls back to filtering kwargs by function signature on TypeError.
         """
         func = self.function
-        if inspect.iscoroutinefunction(func):
-            return await func(**kwargs)
-        if hasattr(func, "__call__") and inspect.iscoroutinefunction(getattr(func, "__call__", None)):
-            return await func(**kwargs)
-        return await asyncio.to_thread(func, **kwargs)
+        is_coro = inspect.iscoroutinefunction(func) or (
+            hasattr(func, "__call__") and inspect.iscoroutinefunction(getattr(func, "__call__", None))
+        )
+        try:
+            if is_coro:
+                return await func(**kwargs)
+            return await asyncio.to_thread(func, **kwargs)
+        except TypeError as exc:
+            try:
+                sig = inspect.signature(func)
+                has_var_keyword = any(
+                    p.kind == inspect.Parameter.VAR_KEYWORD for p in sig.parameters.values()
+                )
+                if not has_var_keyword:
+                    filtered = {k: v for k, v in kwargs.items() if k in sig.parameters}
+                    if filtered != kwargs:
+                        logger.warning(
+                            "Tool '%s' retrying invocation with filtered kwargs %s (was %s): %s",
+                            self.name, list(filtered.keys()), list(kwargs.keys()), exc,
+                        )
+                        if is_coro:
+                            return await func(**filtered)
+                        return await asyncio.to_thread(func, **filtered)
+            except Exception:
+                pass
+            raise
 
 
 class ToolRegistry:

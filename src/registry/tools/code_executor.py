@@ -7,11 +7,13 @@ Used for data analysis, calculations, and any programmatic task.
 
 from __future__ import annotations
 
+import asyncio
 import logging
 import subprocess
 import sys
 import tempfile
 from pathlib import Path
+from typing import Any
 
 from src.core.models import RiskLevel
 from src.core.text_utils import smart_truncate
@@ -24,7 +26,7 @@ MAX_EXECUTION_SECONDS = 30
 MAX_OUTPUT_CHARS = 4000
 
 
-async def execute_python(code: str) -> str:
+async def execute_python(code: str = "", **kwargs: Any) -> str:
     """Execute Python code in a sandboxed subprocess.
 
     The code runs in a separate process with:
@@ -34,15 +36,20 @@ async def execute_python(code: str) -> str:
 
     Returns stdout and stderr combined.
     """
+    clean_code = str(code or kwargs.get("script") or kwargs.get("python_code") or kwargs.get("command") or "")
+    if not clean_code.strip():
+        return "Error: No Python code provided to execute."
+
     # Write code to a temporary file
     with tempfile.NamedTemporaryFile(
         mode="w", suffix=".py", delete=False, encoding="utf-8"
     ) as f:
-        f.write(code)
+        f.write(clean_code)
         temp_path = f.name
 
     try:
-        result = subprocess.run(
+        result = await asyncio.to_thread(
+            subprocess.run,
             [sys.executable, temp_path],
             capture_output=True,
             text=True,
@@ -98,7 +105,12 @@ CODE_EXECUTOR_SPEC = ToolSpec(
         "code": {
             "type": "string",
             "description": "Python code to execute",
-            "required": True,
+            "required": False,
+        },
+        "script": {
+            "type": "string",
+            "description": "Alternative alias for code",
+            "required": False,
         },
     },
     function=execute_python,

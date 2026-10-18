@@ -1,3 +1,25 @@
+consolidated_logs.csv (51 bytes, suffix=.csv):
+timestamp,source_ip,event_type,severity
+,,,
+,,,
+
+=== FILE BREAK ===
+consolidated_logs.json (211 bytes, suffix=.json):
+[
+  {
+    "timestamp": null,
+    "source_ip": null,
+    "event_type": "",
+    "severity": null
+  },
+  {
+    "timestamp": null,
+    "source_ip": null,
+    "event_type": "",
+    "severity": null
+  }
+]
+=== FILE BREAK ===
 email_gateway.log (7077 bytes, suffix=.log):
 # Cisco Secure Email Gateway (IronPort AsyncOS 14.2) Syslog
 # Facility: mail, Severity: info

@@ -25,6 +25,7 @@ from src.orchestrator.activities import (
     execute_task,
     notify_approval_required,
     plan_tasks,
+    prepare_dag_profiles,
     replan_tasks,
 )
 from src.orchestrator.workflow import UAOSWorkflow
@@ -41,6 +42,21 @@ logger = logging.getLogger(__name__)
 async def main() -> None:
     """Start the Temporal worker."""
     settings = get_settings()
+
+    try:
+        from src.hermes.active_runs import ActiveRuns
+
+        ActiveRuns().purge_stale(max_age=60.0)
+    except Exception:
+        pass
+
+    if getattr(settings, "hermes_dynamic_profiles", True):
+        try:
+            from src.hermes.provision import provision_profiles
+
+            await asyncio.wait_for(asyncio.to_thread(provision_profiles, settings), timeout=30.0)
+        except Exception as p_err:
+            logger.warning("Startup Hermes profile reconciliation: %s", p_err)
 
     logger.info(
         "Connecting to Temporal at %s (namespace: %s)",
@@ -73,6 +89,7 @@ async def main() -> None:
         workflows=[UAOSWorkflow],
         activities=[
             plan_tasks,
+            prepare_dag_profiles,
             execute_task,
             replan_tasks,
             assemble_response,

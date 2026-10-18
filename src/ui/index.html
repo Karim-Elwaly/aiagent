@@ -155,8 +155,8 @@
         <div class="prompt-footer">
           <div class="presets-container">
             <span class="presets-label">Quick Starters:</span>
-            <button type="button" class="preset-chip" data-prompt="Investigate critical security logs in D:\projects\sxsecurityinvestigator\data\logs\CAM-LDS-team-messy: Triage alert false-positive likelihood, gather evidence on threat indicators, discover impact, compress timeline, and propose containment firewall rules.">
-              🚨 SOC Incident Investigation
+            <button type="button" id="soc-case1-btn" class="preset-chip" data-prompt="Investigate critical security logs in D:\Security-logs-test\attack-cases-benchmark\case-1-apt-enterprise-intrusion\raw-logs: Triage alert false-positive likelihood, gather evidence on threat indicators, discover impact, compress timeline, and propose containment firewall rules.">
+              🚨 Case 1 APT Enterprise Intrusion Benchmark
             </button>
             <button type="button" class="preset-chip" data-prompt="Analyze recent OpenSSL vulnerabilities, search CVE mitigations, and summarize security actions.">
               🛡️ Security Audit
@@ -177,6 +177,10 @@
             <input type="checkbox" id="mode-async" checked style="display: none;">
 
             <span class="keyboard-hint">Press <strong>Enter ↵</strong> to run</span>
+
+            <button id="run-case1-now" type="button" class="btn-primary" style="background: linear-gradient(135deg, #059669, #10b981); margin-right: 8px; font-weight: 700;">
+              <span>⚡ Start Case 1 Benchmark</span>
+            </button>
 
             <button id="solve-btn" class="btn-primary">
               <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">

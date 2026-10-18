@@ -89,6 +89,10 @@ class Task(BaseModel):
         default=None,
         description="Agent that runs this task; None uses the workflow's default agent",
     )
+    hermes_profile: str | None = Field(
+        default=None,
+        description="Bespoke dynamic Hermes profile assigned to this task",
+    )
 
 
 class TaskDAG(BaseModel):

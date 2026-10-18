@@ -58,6 +58,7 @@ from src.core.agent_store import AgentStore
 from src.orchestrator.workflow import UAOSWorkflow
 from src.orchestrator.activities import (
     plan_tasks,
+    prepare_dag_profiles,
     execute_task,
     evaluate_task_output,
     assemble_response,
@@ -79,6 +80,12 @@ logging.basicConfig(
     format="%(asctime)s | %(levelname)-8s | %(name)s | %(message)s",
     datefmt="%Y-%m-%d %H:%M:%S",
 )
+try:
+    _fh = logging.FileHandler(r"d:\projects\aiagent\data\uvicorn_debug.log", encoding="utf-8")
+    _fh.setFormatter(logging.Formatter("%(asctime)s | %(levelname)-8s | %(name)s | %(message)s"))
+    logging.root.addHandler(_fh)
+except Exception:
+    pass
 
 
 # ── Request/Response Models ──────────────────────────────────────
@@ -244,6 +251,7 @@ async def lifespan(app: FastAPI):
             namespace=settings.temporal_namespace,
         )
         logger.info("Connected to Temporal at %s", settings.temporal_host)
+        logger.info("Connected to Temporal at %s (activities handled by worker_runner)", settings.temporal_host)
     except Exception as e:
         logger.warning(
             "Temporal offline on %s (%s). Standalone Direct Execution Engine active.",
@@ -326,7 +334,8 @@ async def lifespan(app: FastAPI):
 
     app.state.hermes_mcp = MCPEndpoint(ToolGate(registry, settings))
     async with app.state.hermes_mcp.run():
-        _provision_hermes_in_background()
+        # Do not provision profiles on every API start/reload to avoid restart loops
+        # _provision_hermes_in_background()
         yield
 
     # Shutdown: stop scheduler and close MCP clients
@@ -403,20 +412,18 @@ async def serve_ui():
 
 # Dump Case 1 ground truth and log sample into data/ for forensic analysis
 try:
+    _gt_dst = Path(__file__).resolve().parent.parent.parent / "data" / "case1_ground_truth.txt"
     _gt_file = Path(r"D:\Security-logs-test\attack-cases-benchmark\case-1-apt-enterprise-intrusion\CASE_REPORT.md")
-    if _gt_file.exists():
-        (Path(__file__).resolve().parent.parent.parent / "data" / "case1_ground_truth.txt").write_text(
-            _gt_file.read_text(encoding="utf-8", errors="replace"), encoding="utf-8"
-        )
+    if _gt_file.exists() and not _gt_dst.exists():
+        _gt_dst.write_text(_gt_file.read_text(encoding="utf-8", errors="replace"), encoding="utf-8")
+    _raw_dst = Path(__file__).resolve().parent.parent.parent / "data" / "case1_raw_logs_sample.txt"
     _raw_dir = Path(r"D:\Security-logs-test\attack-cases-benchmark\case-1-apt-enterprise-intrusion\raw-logs")
-    if _raw_dir.exists():
+    if _raw_dir.exists() and not _raw_dst.exists():
         _log_info = []
         for _f in sorted(_raw_dir.glob("**/*")):
             if _f.is_file():
                 _log_info.append(f"{_f.name} ({_f.stat().st_size} bytes, suffix={_f.suffix}):\n{_f.read_text(encoding='utf-8', errors='replace')[:600]}")
-        (Path(__file__).resolve().parent.parent.parent / "data" / "case1_raw_logs_sample.txt").write_text(
-            "\n=== FILE BREAK ===\n".join(_log_info), encoding="utf-8"
-        )
+        _raw_dst.write_text("\n=== FILE BREAK ===\n".join(_log_info), encoding="utf-8")
 except Exception as _dump_err:
     logger.warning("Case 1 dump error: %s", _dump_err)
 
@@ -557,6 +564,13 @@ async def run_direct_workflow(
             dag_dict = custom_dag
         else:
             dag_dict = await plan_tasks(user_query, agent_id)
+
+        # Phase 1.5: Prepare Dynamic Hermes Profiles (Single Gateway Restart)
+        if getattr(settings, "hermes_dynamic_profiles", True) and getattr(settings, "worker_engine", "") == "hermes":
+            try:
+                dag_dict = await prepare_dag_profiles(dag_dict)
+            except Exception as prep_err:
+                logger.warning("Dynamic Hermes profile preparation error: %s; proceeding", prep_err)
 
         dag_dict["_workflow_id"] = workflow_id
         dag = TaskDAG.from_serializable(dag_dict)
@@ -1118,6 +1132,63 @@ async def get_workflow_templates():
     ]
 
 
+@app.get("/solve/case1")
+async def solve_case1(use_template: bool = True):
+    """Trigger the Case 1 APT enterprise intrusion forensic benchmark investigation."""
+    query = (
+        r"Investigate critical security logs in D:\Security-logs-test\attack-cases-benchmark\case-1-apt-enterprise-intrusion\raw-logs: "
+        "Triage alert false-positive likelihood, gather evidence on threat indicators, discover impact, compress timeline, and propose containment firewall rules."
+    )
+    workflow_id = f"uaos-{uuid4().hex[:12]}"
+    custom_dag = None
+    if use_template:
+        templates = await get_workflow_templates()
+        soc_tpl = next((t for t in templates if t["id"] == "soc-5-phase-investigation"), None)
+        if soc_tpl:
+            custom_dag = {
+                "goal": soc_tpl["goal"],
+                "tasks": [dict(t) for t in soc_tpl["tasks"]],
+            }
+    try:
+        if getattr(app.state, "temporal", None):
+            level = normalize_level(getattr(getattr(app.state, "settings", None), "default_resilience", "standard"))
+            workflow_args = [query, "", custom_dag, level]
+            await app.state.temporal.start_workflow(
+                UAOSWorkflow.run,
+                args=workflow_args,
+                id=workflow_id,
+                task_queue=app.state.settings.temporal_task_queue,
+                execution_timeout=timedelta(seconds=app.state.settings.workflow_execution_timeout_seconds),
+            )
+        else:
+            asyncio.create_task(
+                run_direct_workflow(
+                    workflow_id=workflow_id,
+                    user_query=query,
+                    agent_id="",
+                    custom_dag=custom_dag,
+                )
+            )
+        return {
+            "workflow_id": workflow_id,
+            "status": "running",
+            "custom_dag": bool(custom_dag),
+            "engine": "hermes",
+        }
+    except Exception as exc:
+        err_msg = f"solve_case1 failed: {type(exc).__name__}: {exc}"
+        logger.error(err_msg, exc_info=True)
+        try:
+            (Path("data") / "case1_error.txt").write_text(err_msg, encoding="utf-8")
+        except Exception:
+            pass
+        return {
+            "workflow_id": workflow_id,
+            "status": "error",
+            "error": err_msg,
+        }
+
+
 _status_cache: dict[str, tuple[float, StatusResponse]] = {}
 _STATUS_CACHE_TTL = 1.0  # seconds
 
@@ -1171,8 +1242,18 @@ async def get_status(workflow_id: str):
         except Exception as q_err:
             logger.debug("Query get_status returned exception: %s", q_err)
 
+        raw_status = desc.status.name.lower()
+        if "completed" in raw_status:
+            status_str = "completed"
+        elif "failed" in raw_status:
+            status_str = "failed"
+        elif "running" in raw_status:
+            status_str = "running"
+        else:
+            status_str = raw_status
+
         result_data = query_res.get("result")
-        if not result_data and desc.status.name.lower() == "completed":
+        if not result_data and status_str == "completed":
             try:
                 result_data = await handle.result()
             except Exception as r_err:
@@ -1180,7 +1261,7 @@ async def get_status(workflow_id: str):
 
         resp = StatusResponse(
             workflow_id=workflow_id,
-            status=desc.status.name.lower(),
+            status=status_str,
             awaiting_approval=query_res.get("awaiting_approval", False),
             awaiting_clarification=awaiting_clarification,
             clarification_request=clr_dict,
@@ -1283,6 +1364,13 @@ async def approve_task(workflow_id: str, request: ApproveRequest):
 
     except Exception as e:
         raise HTTPException(404, f"Workflow not found: {e}")
+
+
+@app.get("/approve/{workflow_id}")
+async def approve_task_get(workflow_id: str, approved: bool = True, guidance: str = ""):
+    """GET endpoint to approve or reject a high-risk task via simple HTTP call."""
+    req = ApproveRequest(approved=approved, guidance=guidance)
+    return await approve_task(workflow_id, req)
 
 
 class TaskAgentRequest(BaseModel):
@@ -1409,6 +1497,8 @@ async def health_check():
     )
 
 
+
+
 @app.get("/tools", response_model=list[ToolInfo])
 async def list_tools():
     """List all registered tools and their capabilities."""
@@ -1527,6 +1617,15 @@ async def disconnect_mcp_server(payload: MCPDisconnectPayload):
         "removed_tools_count": len(removed),
         "removed_tools": removed,
     }
+
+
+@app.post("/api/gateway/restart")
+async def restart_hermes_gateway():
+    """Manually restart the Hermes gateway to unpark MCP or pick up configuration."""
+    from src.hermes.profiles import HermesProfiles
+    profiles = HermesProfiles(get_settings())
+    await asyncio.to_thread(profiles.restart_gateway)
+    return {"status": "restarted"}
 
 
 @app.post("/api/tools/openapi/import")

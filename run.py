@@ -134,8 +134,8 @@ def main():
     default_port = int(os.getenv("API_PORT", "8000"))
     api_host = os.getenv("API_HOST", "127.0.0.1")
 
-    # If default port is in use and not explicitly set by user, find next free port
-    if os.getenv("API_PORT") is None and check_port(api_host, default_port, timeout=0.5):
+    # If default port is in use, find next free port
+    if check_port(api_host, default_port, timeout=0.5):
         api_port = default_port + 1
         while check_port(api_host, api_port, timeout=0.5):
             api_port += 1
@@ -157,31 +157,20 @@ def main():
     env["PYTHONPATH"] = os.getcwd()
     # Children must see the auto-selected port, not API_PORT from .env (Hermes MCP URL derives from it).
     env["API_PORT"] = str(api_port)
+    env["PYTHONUNBUFFERED"] = "1"
 
-    def get_max_src_mtime() -> float:
-        max_m = 0.0
-        src_path = os.path.join(os.getcwd(), "src")
-        if not os.path.exists(src_path):
-            return 0.0
-        for root, _, files in os.walk(src_path):
-            for f in files:
-                if f.endswith(".py"):
-                    try:
-                        m = os.path.getmtime(os.path.join(root, f))
-                        if m > max_m:
-                            max_m = m
-                    except OSError:
-                        pass
-        return max_m
-
-    last_src_mtime = get_max_src_mtime()
     processes = []
+
+    api_log_f = open(os.path.join("data", "api.log"), "a", encoding="utf-8", errors="replace")
+    worker_log_f = open(os.path.join("data", "worker.log"), "a", encoding="utf-8", errors="replace")
 
     try:
         # Start Worker Runner process
         worker_proc = subprocess.Popen(
             [sys.executable, "-m", "src.orchestrator.worker_runner"],
             env=env,
+            stdout=worker_log_f,
+            stderr=subprocess.STDOUT,
         )
         processes.append(worker_proc)
 
@@ -197,30 +186,17 @@ def main():
                 "--port",
                 str(api_port),
                 "--reload",
+                "--reload-dir",
+                "src",
             ],
             env=env,
+            stdout=api_log_f,
+            stderr=subprocess.STDOUT,
         )
         processes.append(api_proc)
 
         # Keep services running, auto-restarting child processes if they exit
         while True:
-            # Check for source code changes to auto-reload worker
-            current_src_mtime = get_max_src_mtime()
-            if current_src_mtime > last_src_mtime:
-                last_src_mtime = current_src_mtime
-                print("\n[*] Detected code change in src/. Reloading Temporal Worker...")
-                if worker_proc.poll() is None:
-                    worker_proc.terminate()
-                    try:
-                        worker_proc.wait(timeout=2)
-                    except subprocess.TimeoutExpired:
-                        worker_proc.kill()
-                time.sleep(1.0)
-                worker_proc = subprocess.Popen(
-                    [sys.executable, "-m", "src.orchestrator.worker_runner"],
-                    env=env,
-                )
-                processes[0] = worker_proc
 
             if worker_proc.poll() is not None:
                 ret = worker_proc.poll()
@@ -229,6 +205,8 @@ def main():
                 worker_proc = subprocess.Popen(
                     [sys.executable, "-m", "src.orchestrator.worker_runner"],
                     env=env,
+                    stdout=worker_log_f,
+                    stderr=subprocess.STDOUT,
                 )
                 processes[0] = worker_proc
 
@@ -247,8 +225,12 @@ def main():
                         "--port",
                         str(api_port),
                         "--reload",
+                        "--reload-dir",
+                        "src",
                     ],
                     env=env,
+                    stdout=api_log_f,
+                    stderr=subprocess.STDOUT,
                 )
                 processes[1] = api_proc
 
@@ -259,11 +241,14 @@ def main():
     finally:
         for p in processes:
             if p.poll() is None:
-                p.terminate()
-                try:
-                    p.wait(timeout=3)
-                except subprocess.TimeoutExpired:
+                if sys.platform == "win32":
                     p.kill()
+                else:
+                    p.terminate()
+                    try:
+                        p.wait(timeout=3)
+                    except subprocess.TimeoutExpired:
+                        p.kill()
         print("[OK] All processes stopped. Goodbye!")
 
 

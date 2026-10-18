@@ -183,6 +183,8 @@ def skill_documents(
             continue
         if curated and spec.name not in curated and not curated & set(spec.skills_provided):
             continue
+        if focus_tools is not None and spec.name not in focus_tools and not focus_tools & set(spec.skills_provided):
+            continue
         if focus_skills is not None and spec.name not in focus_skills and not focus_skills & set(spec.skills_provided):
             continue
         docs.setdefault(slug(path.stem), imported_skill(content, path.stem, spec.description))

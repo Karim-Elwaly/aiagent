@@ -16,6 +16,7 @@ import logging
 import os
 import re
 import secrets
+import shutil
 import subprocess
 import threading
 import time
@@ -32,6 +33,7 @@ logger = logging.getLogger(__name__)
 
 PROFILE_PREFIX = "aiagent-"
 DEFAULT_PROFILE = "aiagent-default"
+DYNAMIC_PROFILE_PREFIX = "aiagent-dyn-"
 # Runs aiagent's planner, supervisor and report model calls when the Hermes engine is on; has no aiagent tools.
 ORCHESTRATOR_PROFILE = "aiagent-orchestrator"
 ORCHESTRATOR_SOUL = (
@@ -135,6 +137,28 @@ class ProfileState:
     def get(self, name: str) -> dict[str, Any]:
         return self.load().get(name, {})
 
+    def remove(self, name: str) -> None:
+        with _state_lock:
+            data = self.load()
+            if name in data:
+                del data[name]
+                self.path.parent.mkdir(parents=True, exist_ok=True)
+                tmp = self.path.with_suffix(".tmp")
+                tmp.write_text(json.dumps(data, indent=2), encoding="utf-8")
+                os.replace(tmp, self.path)
+
+    def touch_profile(self, name: str) -> None:
+        self.update(name, {"last_used_at": time.time()})
+
+    def list_dynamic_profiles(self) -> list[tuple[str, dict[str, Any]]]:
+        """Returns list of (profile_name, entry) for all dynamic bespoke profiles."""
+        data = self.load()
+        return [
+            (name, entry)
+            for name, entry in data.items()
+            if entry.get("is_dynamic") or name.startswith(DYNAMIC_PROFILE_PREFIX)
+        ]
+
     def by_token(self, token: str) -> dict[str, Any] | None:
         if not token:
             return None
@@ -206,6 +230,30 @@ def _digest(text: str) -> str:
     return hashlib.sha256(text.encode("utf-8")).hexdigest()
 
 
+def purge_cloned_skills(profile_dir: Path, allowed_skills: set[str] | None = None) -> None:
+    """Removes generic Hermes built-in skills and any unapproved skills from profile."""
+    skills_dir = profile_dir / "skills"
+    if not skills_dir.is_dir():
+        return
+    for item in list(skills_dir.iterdir()):
+        try:
+            if allowed_skills is not None:
+                if item.name not in allowed_skills:
+                    if item.is_dir():
+                        shutil.rmtree(item, ignore_errors=True)
+                    elif item.is_file():
+                        item.unlink(missing_ok=True)
+            else:
+                if item.name.startswith("aiagent-"):
+                    continue
+                if item.is_dir():
+                    shutil.rmtree(item, ignore_errors=True)
+                elif item.is_file():
+                    item.unlink(missing_ok=True)
+        except OSError:
+            pass
+
+
 Runner = Callable[[list[str]], str]
 
 
@@ -247,30 +295,63 @@ class HermesProfiles:
         }
         if tools is not None:
             # Hermes registers only these tools of the aiagent server for this profile.
-            config[f"mcp_servers.{MCP_SERVER_NAME}.tools.include"] = json.dumps(tools)
+            config[f"mcp_servers.{MCP_SERVER_NAME}.tools.include"] = json.dumps(sorted(tools))
         return config
 
     def ensure(
         self, agent_id: str | None, agent_toolsets: list[str] | None = None,
         skill_docs: dict[str, str] | None = None, agent: Any = None, bundle: str | None = None,
+        dynamic_tools: list[str] | None = None, profile_name_override: str | None = None,
     ) -> ProfileInfo:
         """Create or update the profile so it matches what aiagent allows. Idempotent.
 
         ``bundle`` selects a tool-group profile (tasks without an agent) instead of the agent's own profile.
+        ``dynamic_tools`` & ``profile_name_override`` configure bespoke dynamic task profiles.
         """
-        name = bundle_profile(bundle) if bundle else profile_name(agent_id)
-        tools = bundle_tools(bundle) if bundle else None
+        is_dynamic = bool(profile_name_override and profile_name_override.startswith(DYNAMIC_PROFILE_PREFIX))
+        if profile_name_override:
+            name = profile_name_override
+            tools = sorted(dynamic_tools) if dynamic_tools is not None else []
+        elif bundle:
+            name = bundle_profile(bundle)
+            tools = bundle_tools(bundle)
+        else:
+            name = profile_name(agent_id)
+            tools = None
         pdir = self.home / "profiles" / name
         changed = False
         restarted_at = 0.0
-        created = not pdir.is_dir()
-        if created:
-            description = (render_description(agent) if agent else
-                           f"aiagent tool group '{bundle}'" if bundle else
-                           f"aiagent agent '{agent_id}'" if agent_id else "aiagent tasks run without a selected agent")
-            self._run(["profile", "create", name, "--clone-from", "default", "--no-alias", "--description", description])
+        if pdir.is_dir() and not self.profile_has_model(name):
+            logger.info("Profile '%s' on disk is missing model configuration; deleting to re-clone from default", name)
+            self.delete_profile(name)
             changed = True
-            logger.info("Created Hermes profile '%s'", name)
+
+        profile_exists = pdir.is_dir() and (pdir / "config.yaml").is_file()
+        if not profile_exists:
+            description = (
+                f"aiagent dynamic bespoke profile '{name}'" if is_dynamic else
+                render_description(agent) if agent else
+                f"aiagent tool group '{bundle}'" if bundle else
+                f"aiagent agent '{agent_id}'" if agent_id else "aiagent tasks run without a selected agent"
+            )
+            if pdir.is_dir():
+                (pdir / "config.yaml").unlink(missing_ok=True)
+                shutil.rmtree(pdir, ignore_errors=True)
+            try:
+                self._run(["profile", "create", name, "--clone-from", "default", "--no-alias", "--description", description])
+                changed = True
+                logger.info("Created Hermes profile '%s'", name)
+            except HermesError as exc:
+                pdir.mkdir(parents=True, exist_ok=True)
+                if not (pdir / "config.yaml").is_file():
+                    logger.warning("Hermes profile create failed (%s); bootstrapping profile '%s' directly", exc, name)
+                    self.sync_model_from_default(name)
+                changed = True
+
+        if is_dynamic or name == ORCHESTRATOR_PROFILE or bundle:
+            purge_cloned_skills(pdir)
+            if self.sync_model_from_default(name):
+                changed = True
 
         env = pdir / ".env"
         api_key = read_env_value(env, "API_SERVER_KEY")
@@ -304,26 +385,33 @@ class HermesProfiles:
         if applied.get("disabled_skills", []) != disabled:
             self.apply_disabled_skills(name, disabled)
 
-        if skill_docs is not None and write_skills(self.skills_root / name, skill_docs):
-            logger.info("Synced %d aiagent skills to Hermes profile '%s'", len(skill_docs), name)
+        if skill_docs is not None:
+            if write_skills(self.skills_root / name, skill_docs):
+                logger.info("Synced %d aiagent skills to Hermes profile '%s'", len(skill_docs), name)
+            if name != DEFAULT_PROFILE:
+                write_skills(pdir / "skills", skill_docs)
         (self.skills_root / name).mkdir(parents=True, exist_ok=True)
         config = self.profile_config(name, tools)
         applied_config = applied.get("config", {})
+        config_to_set: dict[str, str] = {}
         for key, value in config.items():
-            if applied_config.get(key) != value:
-                self._run(["-p", name, "config", "set", key, value])
+            prev_val = applied_config.get(key)
+            if key.endswith(".tools.include") and prev_val is not None:
+                try:
+                    if set(json.loads(prev_val)) == set(json.loads(value)):
+                        continue
+                except Exception:
+                    pass
+            if prev_val != value:
+                config_to_set[key] = value
                 if key.endswith(".tools.include") and applied.get("mcp_url"):
                     changed = True  # Hermes lists the tools again only after a gateway restart
 
         mcp_url = self.settings.hermes_mcp_url
         if applied.get("mcp_url") != mcp_url:
-            self._run(["-p", name, "config", "set", f"mcp_servers.{MCP_SERVER_NAME}.url", mcp_url])
-            self._run([
-                "-p", name, "config", "set", f"mcp_servers.{MCP_SERVER_NAME}.headers.Authorization",
-                "Bearer ${" + TOKEN_ENV + "}",
-            ])
-            self._run(["-p", name, "config", "set", f"mcp_servers.{MCP_SERVER_NAME}.timeout",
-                       str(self.settings.hermes_run_timeout_seconds)])
+            config_to_set[f"mcp_servers.{MCP_SERVER_NAME}.url"] = mcp_url
+            config_to_set[f"mcp_servers.{MCP_SERVER_NAME}.headers.Authorization"] = "Bearer ${" + TOKEN_ENV + "}"
+            config_to_set[f"mcp_servers.{MCP_SERVER_NAME}.timeout"] = str(self.settings.hermes_run_timeout_seconds)
             changed = True
             if applied.get("mcp_url"):
                 # The running gateway keeps the old URL for new runs until it restarts (no MCP reload command).
@@ -331,6 +419,10 @@ class HermesProfiles:
                 restarted_at = time.time()
                 self.restart_gateway()
 
+        if config_to_set:
+            self.write_profile_config(name, config_to_set)
+
+        now = time.time()
         self.state.update(name, {
             "agent_id": agent_id or "",
             "token_sha256": token_hash(token),
@@ -338,10 +430,119 @@ class HermesProfiles:
             "mcp_url": mcp_url,
             "config": config,
             **({"bundle": tools} if tools is not None else {}),
+            **({"is_dynamic": True, "created_at": applied.get("created_at", now), "last_used_at": now} if is_dynamic else {}),
             **identity,
-            **({"configured_at": restarted_at or time.time()} if changed else {}),
+            **({"configured_at": restarted_at or now} if changed else {}),
         })
         return ProfileInfo(name=name, api_key=api_key, changed=changed, restarted_at=restarted_at)
+
+    def delete_profile(self, name: str) -> bool:
+        """Delete a dynamic profile from disk and state. Refuses to delete permanent profiles."""
+        if name in (DEFAULT_PROFILE, ORCHESTRATOR_PROFILE) or not name.startswith(DYNAMIC_PROFILE_PREFIX):
+            logger.warning("Refusing to delete permanent profile %r", name)
+            return False
+        pdir = self.home / "profiles" / name
+        sdir = self.skills_root / name
+        try:
+            try:
+                self._run(["profile", "delete", name, "--yes"])
+            except Exception:
+                pass
+            if pdir.is_dir():
+                (pdir / "config.yaml").unlink(missing_ok=True)
+                shutil.rmtree(pdir, ignore_errors=True)
+            if sdir.is_dir():
+                shutil.rmtree(sdir, ignore_errors=True)
+            self.state.remove(name)
+            logger.info("Evicted dynamic profile %r", name)
+            return True
+        except Exception as exc:
+            logger.warning("Failed to evict dynamic profile %r: %s", name, exc)
+            return False
+
+    def evict_lru_dynamic_profiles(
+        self, needed_slots: int, max_dynamic: int, active_profiles: set[str] | None = None
+    ) -> list[str]:
+        """Evict least-recently used dynamic profiles if dynamic count + needed_slots > max_dynamic."""
+        active = active_profiles or set()
+        p_root = self.home / "profiles"
+        disk_profiles: dict[str, dict[str, Any]] = {}
+        if p_root.is_dir():
+            for p in p_root.iterdir():
+                if p.is_dir() and p.name.startswith(DYNAMIC_PROFILE_PREFIX):
+                    try:
+                        mtime = p.stat().st_mtime
+                    except OSError:
+                        mtime = 0.0
+                    disk_profiles[p.name] = {
+                        "is_dynamic": True,
+                        "created_at": mtime,
+                        "last_used_at": mtime,
+                    }
+
+        state_profiles = dict(self.state.list_dynamic_profiles())
+        all_dynamic = {**disk_profiles, **state_profiles}
+        excess = (len(all_dynamic) + needed_slots) - max_dynamic
+        if excess <= 0:
+            return []
+
+        candidates = [
+            (name, entry) for name, entry in all_dynamic.items()
+            if name not in active and name.startswith(DYNAMIC_PROFILE_PREFIX)
+        ]
+        candidates.sort(
+            key=lambda pair: float(pair[1].get("last_used_at") or pair[1].get("created_at") or 0.0)
+        )
+
+        evicted = []
+        for name, _ in candidates[:excess]:
+            if self.delete_profile(name):
+                evicted.append(name)
+        return evicted
+
+    def purge_orphan_profiles(self) -> list[str]:
+        """Remove obsolete test profiles that bloat multiplexing and slow down gateway restart."""
+        known_orphans = {
+            "case-orchestrator",
+            "evidence-collector-agent",
+            "evidence-gatherer",
+            "firewall-rule-generator",
+            "firewall-rule-generator-agent",
+            "firewall-rule-proposer",
+            "impact-analyzer",
+            "impact-analyzer-agent",
+            "indicator-analyzer",
+            "log-reader",
+            "log-triage-agent",
+            "log-triager",
+            "report-generator",
+            "threat-indicator-extractor",
+            "timeline-compressor-agent",
+            "timeline-constructor",
+        }
+        p_root = self.home / "profiles"
+        purged = []
+        if not p_root.is_dir():
+            return purged
+
+        for pdir in list(p_root.iterdir()):
+            if not pdir.is_dir():
+                continue
+            name = pdir.name
+            if name in known_orphans:
+                try:
+                    try:
+                        self._run(["profile", "delete", name, "--yes"])
+                    except Exception:
+                        pass
+                    (pdir / "config.yaml").unlink(missing_ok=True)
+                    shutil.rmtree(pdir, ignore_errors=True)
+                    self.state.remove(name)
+                    purged.append(name)
+                    logger.info("Purged orphan profile '%s'", name)
+                except Exception as exc:
+                    logger.warning("Could not purge orphan profile '%s': %s", name, exc)
+        return purged
 
     def ensure_orchestrator(self) -> ProfileInfo:
         """The profile that answers aiagent's planner, supervisor and report calls: no aiagent tools, no skills."""
@@ -352,6 +553,9 @@ class HermesProfiles:
             self._run(["profile", "create", name, "--clone-from", "default", "--no-alias", "--description",
                        "aiagent planner, supervisor and report model calls"])
             logger.info("Created Hermes profile '%s'", name)
+        purge_cloned_skills(pdir, allowed_skills=set())
+        if self.sync_model_from_default(name):
+            created = True
         env = pdir / ".env"
         api_key = read_env_value(env, "API_SERVER_KEY")
         if not api_key:
@@ -374,9 +578,244 @@ class HermesProfiles:
         })
         return ProfileInfo(name=name, api_key=api_key, changed=created)
 
+    def purge_all_dynamic_cloned_skills(self) -> None:
+        """Purge generic Hermes built-in skills from all dynamic profiles, bundles, and orchestrator."""
+        p_root = self.home / "profiles"
+        if not p_root.is_dir():
+            return
+        targets = [ORCHESTRATOR_PROFILE] + [
+            p.name for p in p_root.iterdir()
+            if p.is_dir() and (p.name.startswith(DYNAMIC_PROFILE_PREFIX) or p.name.startswith("aiagent-bundle-"))
+        ]
+        from src.hermes.skills import SKILL_FILE
+
+        for name in targets:
+            pdir = p_root / name
+            if name == ORCHESTRATOR_PROFILE:
+                purge_cloned_skills(pdir, allowed_skills=set())
+            else:
+                s_src = self.skills_root / name
+                bundle_tools_set = set(self.state.get(name).get("bundle") or [])
+                if name.startswith(DYNAMIC_PROFILE_PREFIX) and bundle_tools_set:
+                    expected_skills = {f"aiagent-{t.replace('_', '-')}" for t in bundle_tools_set}
+                    if s_src.is_dir():
+                        for item in list(s_src.iterdir()):
+                            if item.is_dir() and item.name not in expected_skills:
+                                shutil.rmtree(item, ignore_errors=True)
+                allowed: set[str] = set()
+                if s_src.is_dir():
+                    allowed = {
+                        item.name for item in s_src.iterdir()
+                        if item.is_dir() and (item / SKILL_FILE).is_file()
+                    }
+                purge_cloned_skills(pdir, allowed_skills=allowed)
+                if allowed:
+                    p_skills = pdir / "skills"
+                    p_skills.mkdir(parents=True, exist_ok=True)
+                    for item in s_src.iterdir():
+                        if item.name in allowed:
+                            dst = p_skills / item.name
+                            if not dst.exists():
+                                shutil.copytree(item, dst)
+
+    def _find_reference_model_config(self) -> tuple[dict[str, Any], dict[str, str]]:
+        """Finds a valid (config_dict, env_dict) holding model/provider settings to propagate to profiles."""
+        import yaml
+
+        candidate_dirs = [
+            self.home,
+            self.home / "profiles" / DEFAULT_PROFILE,
+            self.home / "profiles" / "default",
+        ]
+        p_root = self.home / "profiles"
+        if p_root.is_dir():
+            for p in p_root.iterdir():
+                if p.is_dir() and p not in candidate_dirs:
+                    candidate_dirs.append(p)
+
+        ref_config: dict[str, Any] = {}
+        ref_env: dict[str, str] = {}
+
+        for cdir in candidate_dirs:
+            cyaml = cdir / "config.yaml"
+            if cyaml.is_file() and not ref_config:
+                try:
+                    loaded = yaml.safe_load(cyaml.read_text(encoding="utf-8")) or {}
+                    if loaded.get("model") or loaded.get("provider") or loaded.get("custom_providers"):
+                        ref_config = loaded
+                except Exception:
+                    pass
+
+            cenv = cdir / ".env"
+            if cenv.is_file():
+                try:
+                    for line in cenv.read_text(encoding="utf-8").splitlines():
+                        line_s = line.strip()
+                        if line_s and not line_s.startswith("#") and "=" in line_s:
+                            k, v = line_s.split("=", 1)
+                            k, v = k.strip(), v.strip().strip('"').strip("'")
+                            if k not in ("API_SERVER_KEY", "API_SERVER_PORT", "API_SERVER_HOST", TOKEN_ENV) and k not in ref_env:
+                                ref_env[k] = v
+                except Exception:
+                    pass
+
+            if ref_config and any(k in ref_env for k in ("OPENAI_API_BASE", "OPENAI_BASE_URL", "HERMES_MODEL")):
+                break
+
+        return ref_config, ref_env
+
+    def profile_has_model(self, name: str) -> bool:
+        """True if the profile has a model or provider defined in its config.yaml or .env."""
+        pdir = self.home / "profiles" / name
+        if not pdir.is_dir():
+            return False
+        ref_config, ref_env = self._find_reference_model_config()
+        if not ref_config and not ref_env:
+            # No reference model configured in the environment (e.g. mock unit tests)
+            return True
+        yaml_path = pdir / "config.yaml"
+        if yaml_path.is_file():
+            try:
+                import yaml
+                data = yaml.safe_load(yaml_path.read_text(encoding="utf-8")) or {}
+                if data.get("model") or data.get("provider"):
+                    return True
+            except Exception:
+                pass
+        env_path = pdir / ".env"
+        if env_path.is_file():
+            try:
+                text = env_path.read_text(encoding="utf-8")
+                if "HERMES_MODEL" in text or "OPENAI_API_BASE" in text or "OPENROUTER_API_KEY" in text:
+                    return True
+            except Exception:
+                pass
+        return False
+
+    def sync_model_from_default(self, name: str) -> bool:
+        """Propagate model, provider, custom_providers, and provider env credentials into profile."""
+        pdir = self.home / "profiles" / name
+        if not pdir.is_dir():
+            return False
+
+        ref_config, ref_env = self._find_reference_model_config()
+        if not ref_config and not ref_env:
+            return False
+
+        import yaml
+        updated = False
+        target_yaml = pdir / "config.yaml"
+        target_data: dict[str, Any] = {}
+        if target_yaml.is_file():
+            try:
+                target_data = yaml.safe_load(target_yaml.read_text(encoding="utf-8")) or {}
+            except Exception:
+                target_data = {}
+
+        for k in ("model", "provider", "custom_providers", "fallback_models", "model_options", "llm"):
+            if k in ref_config and (k not in target_data or not target_data[k]):
+                target_data[k] = ref_config[k]
+                updated = True
+
+        if updated:
+            try:
+                target_yaml.write_text(
+                    yaml.safe_dump(target_data, sort_keys=False, default_flow_style=False),
+                    encoding="utf-8",
+                )
+                logger.info("Synchronized model/provider configuration into profile '%s'", name)
+            except Exception as e:
+                logger.warning("Failed writing synced config to profile '%s': %s", name, e)
+
+        target_env = pdir / ".env"
+        target_lines = target_env.read_text(encoding="utf-8").splitlines() if target_env.is_file() else []
+        target_keys = {l.split("=", 1)[0].strip() for l in target_lines if "=" in l}
+
+        to_append = []
+        for k, v in ref_env.items():
+            if k not in target_keys:
+                to_append.append(f"{k}={v}")
+
+        if to_append:
+            try:
+                sep = "\n" if target_lines and target_lines[-1].strip() else ""
+                with open(target_env, "a", encoding="utf-8") as f:
+                    f.write(sep + "\n".join(to_append) + "\n")
+                logger.info("Synchronized %d environment variables into profile '%s'", len(to_append), name)
+                updated = True
+            except Exception as e:
+                logger.warning("Failed appending env to profile '%s': %s", name, e)
+
+        return updated
+
+    def repair_all_dynamic_profiles(self) -> int:
+        """Inspect all dynamic bespoke profiles on disk. Evict broken model-less profiles so they are cleanly re-cloned."""
+        p_root = self.home / "profiles"
+        if not p_root.is_dir():
+            return 0
+        repaired = 0
+        for p in list(p_root.iterdir()):
+            if p.is_dir() and p.name.startswith(DYNAMIC_PROFILE_PREFIX):
+                if not self.profile_has_model(p.name):
+                    logger.info("Evicting model-less dynamic profile '%s' so it will be freshly cloned from default", p.name)
+                    self.delete_profile(p.name)
+                    repaired += 1
+                else:
+                    self.sync_model_from_default(p.name)
+        return repaired
+
+    def write_profile_config(self, name: str, entries: dict[str, str]) -> None:
+        """Update profile config keys directly in config.yaml for speed, falling back to CLI."""
+        pdir = self.home / "profiles" / name
+        yaml_path = pdir / "config.yaml"
+        updated_directly = False
+        if pdir.is_dir():
+            try:
+                import yaml
+
+                data: dict[str, Any] = {}
+                if yaml_path.is_file():
+                    try:
+                        data = yaml.safe_load(yaml_path.read_text(encoding="utf-8")) or {}
+                    except Exception:
+                        data = {}
+                for key, value in entries.items():
+                    parts = key.split(".")
+                    curr = data
+                    for p in parts[:-1]:
+                        if not isinstance(curr.get(p), dict):
+                            curr[p] = {}
+                        curr = curr[p]
+                    val: Any = value
+                    if isinstance(value, str):
+                        s = value.strip()
+                        if (s.startswith("[") and s.endswith("]")) or (s.startswith("{") and s.endswith("}")):
+                            try:
+                                val = json.loads(s)
+                            except Exception:
+                                pass
+                        elif s.lower() in ("true", "yes", "on"):
+                            val = True
+                        elif s.lower() in ("false", "no", "off"):
+                            val = False
+                    curr[parts[-1]] = val
+                yaml_path.write_text(yaml.safe_dump(data, sort_keys=False, default_flow_style=False), encoding="utf-8")
+                updated_directly = True
+            except Exception as exc:
+                logger.debug("Direct YAML update for profile '%s' failed (%s); falling back to CLI", name, exc)
+
+        # In mock runner tests or when direct write was not possible, invoke CLI
+        if not updated_directly or self._run != self._cli:
+            for key, value in entries.items():
+                self._run(["-p", name, "config", "set", key, value])
+
     def write_profile_skills(self, name: str, docs: dict[str, str]) -> None:
         if write_skills(self.skills_root / name, docs):
             logger.info("Synced %d aiagent skills to Hermes profile '%s'", len(docs), name)
+        if name != DEFAULT_PROFILE:
+            p_skills = self.profile_dir(name) / "skills"
+            if p_skills.parent.is_dir():
+                write_skills(p_skills, docs)
 
     def bundle_ready(self, bundle: str) -> bool:
         """The group's profile exists with the group's tool filter, and Hermes has connected its tools."""
@@ -384,6 +823,40 @@ class HermesProfiles:
         if not (self.home / "profiles" / name).is_dir():
             return False
         return self.state.get(name).get("bundle") == bundle_tools(bundle) and self.state.mcp_connected(name)
+
+    def sync_all_profiles_mcp_url(self) -> int:
+        """Ensure every profile on disk and in state points to the current hermes_mcp_url."""
+        target_url = self.settings.hermes_mcp_url
+        updated = 0
+        p_root = self.home / "profiles"
+        if p_root.is_dir():
+            for pdir in p_root.iterdir():
+                if not pdir.is_dir():
+                    continue
+                cyaml = pdir / "config.yaml"
+                if not cyaml.is_file():
+                    continue
+                try:
+                    import yaml
+                    data = yaml.safe_load(cyaml.read_text(encoding="utf-8")) or {}
+                    mcp_servers = data.get("mcp_servers", {})
+                    aiagent_mcp = mcp_servers.get(MCP_SERVER_NAME)
+                    if isinstance(aiagent_mcp, dict):
+                        curr_url = aiagent_mcp.get("url")
+                        if curr_url and curr_url != target_url:
+                            aiagent_mcp["url"] = target_url
+                            cyaml.write_text(yaml.safe_dump(data, sort_keys=False, default_flow_style=False), encoding="utf-8")
+                            logger.info("Fixed stale MCP URL in %s: %s -> %s", pdir.name, curr_url, target_url)
+                            updated += 1
+                except Exception as exc:
+                    logger.debug("Could not inspect/update MCP URL in %s: %s", pdir.name, exc)
+
+        for name, entry in list(self.state.load().items()):
+            if entry.get("mcp_url") and entry.get("mcp_url") != target_url:
+                self.state.update(name, {"mcp_url": target_url})
+                updated += 1
+
+        return updated
 
     def restart_gateway(self) -> None:
         """The only way to revive a parked MCP server or drop a cached URL in a running gateway."""
@@ -400,9 +873,15 @@ class HermesProfiles:
 
     def apply_toolsets(self, name: str, wanted: list[str]) -> None:
         off = [t for t in BUILTIN_TOOLSETS if t not in wanted]
-        self._run(["-p", name, "tools", "disable", "--platform", "api_server", *off])
+        try:
+            self._run(["-p", name, "tools", "disable", "--platform", "api_server", *off])
+        except HermesError as exc:
+            logger.warning("Could not disable toolsets for profile '%s' via CLI: %s", name, exc)
         if wanted:
-            self._run(["-p", name, "tools", "enable", "--platform", "api_server", *wanted])
+            try:
+                self._run(["-p", name, "tools", "enable", "--platform", "api_server", *wanted])
+            except HermesError as exc:
+                logger.warning("Could not enable toolsets for profile '%s' via CLI: %s", name, exc)
         self.state.update(name, {"toolsets": wanted})
 
     def wanted_disabled_skills(self, name: str, agent: Any = None) -> list[str]:
@@ -412,7 +891,10 @@ class HermesProfiles:
 
     def apply_disabled_skills(self, name: str, disabled: list[str]) -> None:
         """Hermes skills the profile's API runs must not load (``skills.platform_disabled.api_server``)."""
-        self._run(["-p", name, "config", "set", "skills.platform_disabled.api_server", json.dumps(disabled)])
+        try:
+            self._run(["-p", name, "config", "set", "skills.platform_disabled.api_server", json.dumps(disabled)])
+        except HermesError as exc:
+            logger.warning("Could not set platform_disabled skills for profile '%s' via CLI: %s", name, exc)
         self.state.update(name, {"disabled_skills": disabled})
 
     def set_default_toolsets(self, toolsets: list[str]) -> None:

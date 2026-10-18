@@ -136,6 +136,7 @@ class ToolGate:
         return base | self.grants.get(active.get("workflow_id", ""), set())
 
     async def call(self, entry: dict[str, Any], name: str, arguments: dict[str, Any]) -> str:
+        name = name.removeprefix("mcp__aiagent__").removeprefix("mcp__")
         reason = ""
         if name == REQUEST_TOOL:
             target = str(arguments.get("tool_name") or "").strip()
@@ -149,21 +150,31 @@ class ToolGate:
                 except ValueError:
                     raise ToolDenied("request_tool.arguments must be a JSON object") from None
             name, arguments = target, raw_args if isinstance(raw_args, dict) else {}
+            name = name.removeprefix("mcp__aiagent__").removeprefix("mcp__")
 
+        logger.info("[MCP] Tool call received: profile=%s, tool=%s, args=%s", entry.get("profile"), name, arguments)
         active = self.active.get(entry["profile"])
         if not active:
+            logger.warning("[MCP] ToolDenied: No active task for profile '%s'", entry.get("profile"))
             raise ToolDenied(f"No aiagent task is running on Hermes profile '{entry['profile']}'.")
         spec = self.registry.get_tool_by_name(name)
         if spec is None or spec.source_type in HIDDEN_SOURCES:
             names = ", ".join(sorted(t.name for t in self._candidates()))
+            logger.warning("[MCP] ToolDenied: Unknown tool '%s' for profile '%s'", name, entry.get("profile"))
             raise ToolDenied(f"aiagent has no tool named '{name}'. Its tools: {names}")
 
         if name not in self.allowed(entry, active) and not await self._approve(entry, active, spec, reason):
+            logger.warning("[MCP] ToolDenied: Operator did not approve tool '%s'", name)
             raise ToolDenied(f"The operator did not approve the aiagent tool '{name}' for this task.")
 
         timeout = getattr(self.settings, "hermes_run_timeout_seconds", 1800)
-        result = await asyncio.wait_for(spec.invoke(**arguments), timeout=timeout)
-        return smart_truncate(str(result), max_chars=getattr(self.settings, "worker_max_output_chars", 8000))
+        try:
+            result = await asyncio.wait_for(spec.invoke(**arguments), timeout=timeout)
+            logger.info("[MCP] Tool '%s' executed successfully: result=%s", name, str(result)[:150])
+            return smart_truncate(str(result), max_chars=getattr(self.settings, "worker_max_output_chars", 8000))
+        except Exception as exc:
+            logger.error("[MCP] Tool '%s' invoke error: %s", name, exc, exc_info=True)
+            return f"Error executing tool '{name}': {exc}"
 
     async def _approve(self, entry: dict[str, Any], active: dict[str, Any], spec: ToolSpec, reason: str) -> bool:
         agent = self._agent(entry)
@@ -273,8 +284,12 @@ def build_server(gate: ToolGate) -> Server:
 
     @server.call_tool(validate_input=False)
     async def call_tool(name: str, arguments: dict[str, Any] | None) -> list[types.TextContent]:
-        text = await gate.call(current_entry(), name, arguments or {})
-        return [types.TextContent(type="text", text=text)]
+        try:
+            text = await gate.call(current_entry(), name, arguments or {})
+            return [types.TextContent(type="text", text=text)]
+        except Exception as exc:
+            logger.error("[MCP] call_tool error on '%s': %s", name, exc, exc_info=True)
+            return [types.TextContent(type="text", text=f"Error executing tool '{name}': {exc}")]
 
     return server
 

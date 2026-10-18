@@ -116,12 +116,21 @@ async def _fallback_search(client: httpx.AsyncClient, query: str, max_results: i
     return results[:max_results]
 
 
-async def web_search(query: str, max_results: int = 5) -> str:
+async def web_search(query: str = "", max_results: int = 5, **kwargs: Any) -> str:
     """Search the web for information.
 
     Returns relevant results with titles, snippets, and source URLs.
     Tries SearXNG first, then seamlessly falls back to public search.
     """
+    clean_query = str(query or kwargs.get("q") or kwargs.get("search") or kwargs.get("query_text") or "")
+    if not clean_query.strip():
+        return "No search query provided."
+
+    try:
+        max_results = int(kwargs.get("max_results", max_results) or 5)
+    except (ValueError, TypeError):
+        max_results = 5
+
     results: list[dict[str, str]] = []
     try:
         async with httpx.AsyncClient(timeout=15.0) as client:
@@ -129,7 +138,7 @@ async def web_search(query: str, max_results: int = 5) -> str:
                 resp = await client.get(
                     f"{SEARXNG_URL}/search",
                     params={
-                        "q": query,
+                        "q": clean_query,
                         "format": "json",
                         "categories": "general",
                     },
@@ -174,7 +183,12 @@ WEB_SEARCH_SPEC = ToolSpec(
         "query": {
             "type": "string",
             "description": "The search query",
-            "required": True,
+            "required": False,
+        },
+        "q": {
+            "type": "string",
+            "description": "Alternative alias for search query",
+            "required": False,
         },
         "max_results": {
             "type": "integer",

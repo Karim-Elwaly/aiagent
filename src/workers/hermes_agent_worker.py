@@ -109,15 +109,24 @@ class HermesAgentWorker:
         review_feedback: str | None = None,
         approval_tools: list[ToolSpec] | None = None,
         continue_profile: str | None = None,
+        dynamic_profile: str | None = None,
     ) -> TaskResult:
         start = time.monotonic()
         agent_id = self.agent.id if self.agent else None
         toolsets = list(self.agent.hermes_toolsets) if self.agent else []
         approval = approval_tools or []
-        bundle = self._ready_bundle(tools, approval)
+        dyn_prof = dynamic_profile or getattr(task, "hermes_profile", None)
+        bundle = None if dyn_prof else self._ready_bundle(tools, approval)
 
         def prepare() -> Any:
             # Skills are written later, under the profile lock, so a parallel task can't swap them mid-run.
+            if dyn_prof:
+                self.profiles.state.touch_profile(dyn_prof)
+                return self.profiles.ensure(
+                    None,
+                    dynamic_tools=[t.name for t in [*tools, *approval]],
+                    profile_name_override=dyn_prof,
+                )
             if bundle:
                 return self.profiles.ensure(None, [], None, bundle=bundle)
             return self.profiles.ensure(agent_id, toolsets, None, agent=self.agent)
@@ -129,7 +138,9 @@ class HermesAgentWorker:
 
         if info.restarted_at:
             _mark_gateway_restarted(info.restarted_at)
-        if not self._mcp_ready(info.name):
+        dyn_prefix = getattr(self.settings, "hermes_profile_prefix_dynamic", "aiagent-dyn-")
+        is_dynamic = info.name.startswith(dyn_prefix)
+        if not is_dynamic and not self._mcp_ready(info.name):
             # Hermes reconnects a known server by itself (e.g. after aiagent restarts); a new or
             # reconfigured profile is only picked up by a gateway restart.
             if not await self._wait_for_mcp(info.name, CONFIG_PICKUP_SECONDS):
@@ -140,7 +151,7 @@ class HermesAgentWorker:
                     f"{MCP_READY_TIMEOUT_SECONDS}s. Check that the Hermes gateway is running "
                     f"(hermes gateway restart) and can reach {self.settings.hermes_mcp_url}."
                 ))
-        if self._restart_recent():
+        if self._restart_recent() or is_dynamic:
             await self._wait_for_api(MCP_READY_TIMEOUT_SECONDS)
 
         if continue_session and continue_profile and continue_profile != info.name:
@@ -237,13 +248,47 @@ class HermesAgentWorker:
                 await asyncio.shield(self._stop(profile, key, run_id))
                 raise
             except HermesAPIError as exc:
+                if run_id and ("run_not_found" in str(exc).lower() or "not found" in str(exc).lower() or "404" in str(exc)):
+                    logger.warning("Hermes run %s not found on gateway; resetting to start fresh run: %s", run_id, exc)
+                    run_id, last_seq = None, -1
+                    continue
+                if run_id:
+                    await self._stop(profile, key, run_id)
                 return self._failed(task, start, str(exc), tool_calls)
             except httpx.HTTPError as exc:
+                if run_id:
+                    await self._stop(profile, key, run_id)
                 raise TransientLLMError(f"Lost the Hermes run {run_id}: {exc}", original_error=exc) from exc
+            except Exception as exc:
+                if run_id:
+                    await self._stop(profile, key, run_id)
+                logger.error("Task '%s' Hermes run %s encountered an unexpected exception: %s", task.id, run_id, exc, exc_info=True)
+                return self._failed(task, start, f"Unexpected error during Hermes run {run_id}: {exc}", tool_calls)
 
             status = str(outcome.get("status") or str(outcome.get("event", "")).removeprefix("run."))
             session_id = str(outcome.get("session_id") or session_id)
+            output_text = str(outcome.get("output") or "")
+            lowered_out = output_text.lower()
+            # Only check for MCP unreachable if no tools were called and task is not grounded.
+            # Security logs naturally mention 'connection refused', 'failed connection', etc., so we must
+            # match explicitly on MCP infrastructure error phrases.
+            is_mcp_unreachable = (
+                not (tool_calls or grounded) and (
+                    ("mcp" in lowered_out and any(k in lowered_out for k in ("unreach", "cannot connect", "could not connect", "connection error", "mcp server error", "failed to connect")))
+                    or "mcp server is down" in lowered_out
+                    or "mcp endpoint error" in lowered_out
+                )
+            )
             if status == "completed":
+                if is_mcp_unreachable and model_errors < MODEL_ERROR_RETRIES:
+                    model_errors += 1
+                    logger.warning("Task '%s' Hermes run %s hit parked/unreachable MCP backend; restarting gateway to revive MCP connection...", task.id, run_id)
+                    await self._restart_gateway(profile, force=True)
+                    run_id, last_seq = None, -1
+                    session_id, follow_up, steered, tool_calls = self._new_session_id(workflow_id, task), None, False, []
+                    grounded = False
+                    continue
+
                 if tools and not tool_calls and not steered and not grounded:
                     # Same session: Hermes replays its history, so the model sees its own ungrounded answer.
                     logger.info("Task '%s' Hermes run %s answered without tools; steering it to use them",
@@ -253,6 +298,21 @@ class HermesAgentWorker:
                     continue
                 break
             reason = str(outcome.get("error") or f"Hermes run ended as '{status or 'unknown'}'")
+            lowered_reason = reason.lower()
+            is_mcp_err_reason = (
+                not (tool_calls or grounded) and (
+                    ("mcp" in lowered_reason and any(k in lowered_reason for k in ("unreach", "cannot connect", "could not connect", "connection error", "mcp server error", "failed to connect")))
+                    or "mcp connection refused" in lowered_reason
+                )
+            )
+            if (is_mcp_err_reason or is_mcp_unreachable) and model_errors < MODEL_ERROR_RETRIES:
+                model_errors += 1
+                logger.warning("Task '%s' Hermes run %s hit parked/unreachable MCP backend (%s); restarting gateway...", task.id, run_id, reason)
+                await self._restart_gateway(profile, force=True)
+                run_id, last_seq = None, -1
+                session_id, follow_up, steered, tool_calls = self._new_session_id(workflow_id, task), None, False, []
+                grounded = False
+                continue
             if model_errors < MODEL_ERROR_RETRIES and MODEL_ERROR.search(reason):
                 model_errors += 1
                 logger.warning("Task '%s' Hermes run %s hit an inference-server error (retry %d/%d), "
@@ -296,21 +356,30 @@ class HermesAgentWorker:
         workflow_id: str,
     ) -> bool:
         """Relay one Hermes event; True when it ends the run."""
-        name = event.get("event", "")
+        name = str(event.get("event") or event.get("type") or "")
+        if name != "message.delta":
+            logger.info("[Hermes Event] task=%s, profile=%s, event=%s, tool=%s, error=%s, payload=%s",
+                        task.id, profile, name, event.get("tool"), event.get("error"),
+                        {k: (str(v)[:100] if k != "preview" else f"<{len(str(v))} chars>") for k, v in event.items()})
         if name == "message.delta" and on_token and event.get("delta"):
             on_token(str(event["delta"]))
         elif name == "tool.started":
-            if on_event:
-                on_event({"type": "tool_start", "task_id": task.id,
-                          "tool": display_tool_name(str(event.get("tool", ""))), "args": event.get("preview")})
-        elif name in ("tool.completed", "tool.failed"):
             tool = display_tool_name(str(event.get("tool", "")))
-            failed = name == "tool.failed" or bool(event.get("error"))
-            if not failed:
+            if tool and tool not in tool_calls:
                 tool_calls.append(tool)
             if on_event:
+                on_event({"type": "tool_start", "task_id": task.id,
+                          "tool": tool, "args": event.get("preview")})
+        elif name in ("tool.completed", "tool.failed"):
+            tool = display_tool_name(str(event.get("tool", "")))
+            if tool and tool not in tool_calls:
+                tool_calls.append(tool)
+            failed = name == "tool.failed" or bool(event.get("error"))
+            preview_str = str(event.get("preview") or "")
+            logger.info("[Hermes Tool Result] tool=%s, failed=%s, preview=%r", tool, failed, preview_str[:500])
+            if on_event:
                 on_event({"type": "tool_end", "task_id": task.id, "tool": tool,
-                          "output": str(event.get("preview") or "")[:200], "error": failed})
+                          "output": preview_str[:200], "error": failed})
         elif name == "approval.request":
             await self._approval(event, task, profile, key, run_id, workflow_id)
         return name in TERMINAL_EVENTS
@@ -327,20 +396,26 @@ class HermesAgentWorker:
         await self.client.respond_approval(profile, key, run_id, choice, event.get("request_id"))
         logger.info("Task '%s' Hermes approval on run %s answered '%s'", task.id, run_id, choice)
 
-    async def _restart_gateway(self, profile: str) -> None:
+    async def _restart_gateway(self, profile: str, force: bool = False) -> None:
         async with _gateway_lock:
-            if self._mcp_ready(profile):
+            if not force and self._mcp_ready(profile):
                 return
-            if time.monotonic() - _gateway_restarted_at < MCP_READY_TIMEOUT_SECONDS:
-                return  # a concurrent task already restarted it; just wait for the listing
-            logger.info("Hermes has not listed aiagent's tools on profile '%s'; restarting the gateway", profile)
+            restarted_wall = self.profiles.state.gateway_restarted_at()
+            cooldown = 5.0 if force else 60.0
+            if (time.time() - restarted_wall < cooldown) or (time.monotonic() - _gateway_restarted_at < cooldown):
+                logger.info("Gateway was restarted recently (%0.1fs ago); waiting for profile '%s' instead of restarting again",
+                            time.time() - restarted_wall, profile)
+                return
+            logger.info("Hermes MCP server unreachable or unready on profile '%s' (force=%s); restarting the gateway", profile, force)
             # Marked before the call: the new gateway lists MCP tools during startup, before the CLI returns.
             began = time.time()
             await asyncio.to_thread(self.profiles.restart_gateway)
             _mark_gateway_restarted(began)
+            await self._wait_for_api(MCP_READY_TIMEOUT_SECONDS)
 
     def _mcp_ready(self, profile: str) -> bool:
-        return self.profiles.state.mcp_connected(profile, since=_gateway_restarted_wall)
+        wall = max(_gateway_restarted_wall, self.profiles.state.gateway_restarted_at())
+        return self.profiles.state.mcp_connected(profile, since=wall)
 
     def _restart_recent(self) -> bool:
         if time.monotonic() - _gateway_restarted_at < MCP_READY_TIMEOUT_SECONDS:

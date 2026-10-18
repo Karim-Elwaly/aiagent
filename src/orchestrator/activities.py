@@ -228,6 +228,50 @@ async def plan_tasks(user_query: str, agent_id: str = "") -> dict:
     return serialized
 
 
+_prepare_dag_profiles_lock = asyncio.Lock()
+
+
+@activity.defn
+async def prepare_dag_profiles(dag_dict: dict) -> dict:
+    """Binds bespoke dynamic Hermes profiles for tasks in the planned DAG,
+    enforces LRU capacity, and restarts the gateway once if new profiles were added.
+    """
+    settings = get_settings()
+    if not getattr(settings, "hermes_dynamic_profiles", True) or getattr(settings, "worker_engine", "") != "hermes":
+        return dag_dict
+
+    async with _prepare_dag_profiles_lock:
+        from temporalio import activity
+        from src.hermes.provision import provision_dag_profiles
+
+        registry = _get_registry()
+
+        async def _heartbeat_loop():
+            while True:
+                await asyncio.sleep(4.0)
+                try:
+                    if activity.in_activity():
+                        activity.heartbeat("Preparing dynamic profiles...")
+                except Exception:
+                    pass
+
+        hb_task = asyncio.create_task(_heartbeat_loop())
+        try:
+            updated_dag, restarted = await asyncio.to_thread(
+                provision_dag_profiles, dag_dict, registry, settings
+            )
+            logger.info("Dynamic Hermes profile preparation completed (gateway_restarted=%s)", restarted)
+            return updated_dag
+        except asyncio.CancelledError:
+            logger.warning("Dynamic Hermes profile preparation activity was cancelled; returning dag_dict")
+            return dag_dict
+        except Exception as exc:
+            logger.warning("Failed to prepare dynamic Hermes profiles: %s; continuing with standard routing", exc)
+            return dag_dict
+        finally:
+            hb_task.cancel()
+
+
 @activity.defn
 async def execute_task(
     task_dict: dict, upstream_outputs: dict[str, str], agent_id: str = ""
@@ -408,14 +452,18 @@ async def execute_task(
         hb_task = asyncio.create_task(_periodic_heartbeat())
 
         continuation: dict[str, Any] = {}
-        if engine == "hermes" and task_dict.get("_hermes_session_id"):
-            continuation = {
-                "continue_session": task_dict["_hermes_session_id"],
-                "review_feedback": task_dict.get("_supervisor_feedback", ""),
-                "continue_profile": task_dict.get("_hermes_profile"),
-            }
-        if engine == "hermes" and approval_tools:
-            continuation["approval_tools"] = approval_tools
+        if engine == "hermes":
+            dyn_prof = task_dict.get("_hermes_profile") or getattr(task, "hermes_profile", None)
+            if dyn_prof:
+                continuation["dynamic_profile"] = dyn_prof
+            if task_dict.get("_hermes_session_id"):
+                continuation.update({
+                    "continue_session": task_dict["_hermes_session_id"],
+                    "review_feedback": task_dict.get("_supervisor_feedback", ""),
+                    "continue_profile": task_dict.get("_hermes_profile"),
+                })
+            if approval_tools:
+                continuation["approval_tools"] = approval_tools
 
         try:
             result = await worker.execute(

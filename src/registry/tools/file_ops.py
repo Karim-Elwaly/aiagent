@@ -47,7 +47,7 @@ async def read_file(
 
     Large files are truncated to prevent context window overflow.
     """
-    raw_path = file_path or path or kwargs.get("filepath") or kwargs.get("file") or ""
+    raw_path = file_path or path or kwargs.get("filepath") or kwargs.get("file") or kwargs.get("target_path") or ""
     target = resolve_target_path(raw_path)
     clean_path = str(target)
 
@@ -113,7 +113,15 @@ async def list_directory(
     Supports recursive traversal (recursive=True) up to max_depth levels to generate
     a structured tree. Shows file names, human-readable sizes, and subdirectory item counts.
     """
-    raw_path = directory_path or path or dir_path or kwargs.get("directory") or kwargs.get("folder") or "D:\\"
+    raw_path = (
+        directory_path
+        or path
+        or dir_path
+        or kwargs.get("target_path")
+        or kwargs.get("directory")
+        or kwargs.get("folder")
+        or "D:\\"
+    )
     target = resolve_target_path(raw_path)
     clean_path = str(target)
 
@@ -149,6 +157,16 @@ async def list_directory(
     rec_val = kwargs.get("recursive", recursive)
     if isinstance(rec_val, str):
         rec_val = rec_val.lower() in ("true", "1", "yes")
+
+    try:
+        max_depth = int(kwargs.get("max_depth", max_depth))
+    except (ValueError, TypeError):
+        max_depth = 2
+
+    try:
+        max_items = int(kwargs.get("max_items", max_items))
+    except (ValueError, TypeError):
+        max_items = 150
 
     if rec_val:
         lines = [f"# Directory Tree for '{clean_path}' (recursive, max depth {max_depth}):"]

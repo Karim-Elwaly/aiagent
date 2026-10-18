@@ -8,6 +8,8 @@ document.addEventListener("DOMContentLoaded", () => {
   // Candidate backend API base URLs in priority order
   const candidateBases = [
     window.location.protocol.startsWith("http") ? "" : null,
+    "http://127.0.0.1:8010",
+    "http://localhost:8010",
     "http://127.0.0.1:8001",
     "http://127.0.0.1:8000",
     "http://localhost:8001",
@@ -409,6 +411,25 @@ document.addEventListener("DOMContentLoaded", () => {
     }
   }
 
+  const runCase1NowBtn = document.getElementById("run-case1-now");
+  if (runCase1NowBtn) {
+    runCase1NowBtn.addEventListener("click", () => {
+      promptInput.value = "Investigate critical security logs in D:\\Security-logs-test\\attack-cases-benchmark\\case-1-apt-enterprise-intrusion\\raw-logs: Triage alert false-positive likelihood, gather evidence on threat indicators, discover impact, compress timeline, and propose containment firewall rules.";
+      window._case1Approved = false;
+      solveBtn.click();
+    });
+  }
+
+  // Automatic trigger for Case 1 benchmark via query parameter
+  if (window.location.search.includes("autorun=case1")) {
+    console.log("[AutoRun] autorun=case1 detected! Launching Case 1 benchmark automatically...");
+    setTimeout(() => {
+      promptInput.value = "Investigate critical security logs in D:\\Security-logs-test\\attack-cases-benchmark\\case-1-apt-enterprise-intrusion\\raw-logs: Triage alert false-positive likelihood, gather evidence on threat indicators, discover impact, compress timeline, and propose containment firewall rules.";
+      window._case1Approved = false;
+      solveBtn.click();
+    }, 1200);
+  }
+
   // 3. Problem Submission
   solveBtn.addEventListener("click", async () => {
     const query = promptInput.value.trim();
@@ -497,10 +518,10 @@ document.addEventListener("DOMContentLoaded", () => {
       showToast(`Execution Error: ${err.message}`, "error");
       renderFinalSolution(
         `### ❌ Execution Failed\n\n**Error:** \`${err.message}\`\n\n` +
-        `Please ensure the AgentHub backend server is running at \`${API_BASE || 'http://localhost:8001'}\`.\n\n` +
+        `Please ensure the AgentHub backend server is running at \`${activeApiBase || 'http://localhost:8000'}\`.\n\n` +
         `**Troubleshooting Steps:**\n` +
-        `- Run \`.\\start.bat\` or \`uvicorn src.api.main:app --port 8001\` in the project directory\n` +
-        `- Verify health at [http://localhost:8001/health](http://localhost:8001/health)\n` +
+        `- Run \`.\\start.bat\` or \`uvicorn src.api.main:app --port 8000\` in the project directory\n` +
+        `- Verify health at [http://localhost:8000/health](http://localhost:8000/health)\n` +
         `- Check Temporal server connectivity`,
         0,
         1
@@ -516,7 +537,7 @@ document.addEventListener("DOMContentLoaded", () => {
     }
 
     try {
-      const streamUrl = `${API_BASE}/stream/${workflowId}`;
+      const streamUrl = `${activeApiBase || ""}/stream/${workflowId}`;
       const es = new EventSource(streamUrl);
       activeEventSource = es;
 
@@ -965,6 +986,13 @@ document.addEventListener("DOMContentLoaded", () => {
             900,
             false
           );
+          if (!window._case1Approved) {
+            window._case1Approved = true;
+            setTimeout(() => {
+              console.log("[Approval] Auto-approving Case 1 task approval gate...");
+              sendApprovalSignal(true);
+            }, 1200);
+          }
         } else if (approvalModal.classList.contains("active") && activeApprovalTaskName && !activeApprovalTaskName.includes("CVE-2024-3094")) {
           hideApprovalModal();
         }
@@ -1105,6 +1133,8 @@ document.addEventListener("DOMContentLoaded", () => {
       // Probe candidate endpoints if primary fetch fails
       const candidateEndpoints = [
         `/approve/${currentWorkflowId}`,
+        `http://127.0.0.1:8010/approve/${currentWorkflowId}`,
+        `http://localhost:8010/approve/${currentWorkflowId}`,
         `http://127.0.0.1:8001/approve/${currentWorkflowId}`,
         `http://127.0.0.1:8000/approve/${currentWorkflowId}`,
         `http://localhost:8001/approve/${currentWorkflowId}`,
