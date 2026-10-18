@@ -746,8 +746,10 @@ class HermesProfiles:
             tokens.add(clean_s)
 
         full_context = f"{task_name or ''} {task_desc or ''}".lower()
-        has_k8s = any(k in full_context for k in ("k8s", "kubernetes", "pod", "container", "cluster", "node", "docker"))
         has_security = any(k in full_context for k in ("threat", "rootkit", "malware", "compromise", "attacker", "exfiltration", "reverse shell", "audit", "rbac", "security", "forensic"))
+        has_k8s = any(k in full_context for k in ("k8s", "kubernetes", "pod", "container", "cluster", "node", "docker"))
+        has_fs = any(k in full_context for k in ("list", "file", "tree", "directory", "enumerate", "read", "parse", "log", "read_file", "list_dir"))
+        has_net = any(k in full_context for k in ("firewall", "iptables", "netsh", "containment", "traffic", "network", "c2", "beacon"))
         has_code = any(k in full_context for k in ("refactor", "codebase", "pull request", "syntax error"))
         has_git = any(k in full_context for k in ("git", "github", "commit", "repo", "branch"))
         has_db = any(k in full_context for k in ("database", "sql query", "postgres", "mysql", "slow query"))
@@ -756,12 +758,13 @@ class HermesProfiles:
         unrelated_blacklist = {
             "drug_discovery", "fitness_nutrition", "apple_notes", "apple_reminders",
             "ascii_art", "home_assistant", "stripe_payments", "airtable_crm", "discord_notifier",
+            "1password", "sherlock", "bitwarden", "lastpass",
         }
 
         scores: dict[str, int] = {}
         for sname, smeta in available.items():
             sname_clean = sname.lower().replace("-", "_")
-            if sname_clean in unrelated_blacklist:
+            if sname_clean in unrelated_blacklist and sname_clean not in tokens:
                 continue
 
             score = 0
@@ -770,7 +773,7 @@ class HermesProfiles:
             if sname_clean in tokens or sname.lower() in [s.lower() for s in skills_list]:
                 score += 15
 
-            # 2. Tag matches (exact tag match)
+            # 2. Tag matches (exact tag match with requested tokens)
             skill_tags = set(smeta.get("tags", []))
             if skill_tags & tokens:
                 score += 8
@@ -782,13 +785,17 @@ class HermesProfiles:
                     if ms == sname_clean or ms in skill_tags:
                         score += 6
 
-            # 4. Context matches
+            # 4. Granular context matches
             if has_k8s and sname_clean in ("docker_ops", "container_management", "devops_troubleshooting"):
+                score += 10
+            if has_security and sname_clean in ("oss_forensics", "oss-forensics"):
+                score += 10
+            if has_fs and sname_clean in ("simplify_code", "computer_use", "file_ops"):
                 score += 8
-            if has_security and (sname_clean in ("oss_forensics", "oss-forensics") or "security" in skill_tags):
-                score += 8
+            if has_net and sname_clean in ("docker_ops", "computer_use"):
+                score += 6
             if has_code and sname_clean in ("simplify_code", "computer_use"):
-                score += 5
+                score += 7
             if has_git and sname_clean in ("github_workflow", "gitnexus_explorer"):
                 score += 8
             if has_db and sname_clean in ("database_optimizer", "sql"):
@@ -803,18 +810,24 @@ class HermesProfiles:
             if score > 0:
                 scores[sname] = score
 
-        # Rank candidates
+        # Rank candidates and deduplicate by normalized name (e.g. oss_forensics vs oss-forensics)
         ranked = sorted(scores.items(), key=lambda x: x[1], reverse=True)
-        matched = {name for name, sc in ranked if sc >= 6}
+        seen_normalized: set[str] = set()
+        matched: set[str] = set()
+        for name, sc in ranked:
+            if sc < 6:
+                continue
+            norm = name.lower().replace("-", "_")
+            if norm in seen_normalized:
+                continue
+            seen_normalized.add(norm)
+            matched.add(name)
+            if len(matched) >= 4:
+                break
 
         # Fallback only to top mapped tool skill if none matched
         if not matched and ranked and ranked[0][1] >= 5:
             matched = {ranked[0][0]}
-
-        # Bounded subset: between 0 and 65 (cap at top 4 to prevent prompt bloat)
-        if len(matched) > 4:
-            top_names = [name for name, _ in ranked[:4]]
-            matched = set(top_names)
 
         return matched
 

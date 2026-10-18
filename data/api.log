@@ -25019,3 +25019,1835 @@ INFO:     Waiting for application shutdown.
 2026-10-18 23:24:16 | INFO     | src.api.main | UAOS API shutting down
 INFO:     Application shutdown complete.
 INFO:     Finished server process [35584]
+INFO:     Will watch for changes in these directories: ['D:\\projects\\aiagent\\src']
+INFO:     Uvicorn running on http://127.0.0.1:8000 (Press CTRL+C to quit)
+INFO:     Started reloader process [22484] using WatchFiles
+INFO:     Started server process [28676]
+INFO:     Waiting for application startup.
+2026-10-19 00:14:15 | INFO     | src.registry.tool_registry | Registered tool 'python_executor_v1' (native) providing skills: ['code_execution', 'data_analysis', 'math_computation', 'data_processing']
+2026-10-19 00:14:15 | INFO     | src.registry.tool_registry | Registered tool 'file_deleter_v1' (native) providing skills: ['file_deletion']
+2026-10-19 00:14:15 | INFO     | src.registry.tool_registry | Registered tool 'disk_usage_v1' (native) providing skills: ['disk_usage', 'disk_space', 'storage_report', 'filesystem_capacity']
+2026-10-19 00:14:15 | INFO     | src.registry.tool_registry | Registered tool 'dir_lister_v1' (native) providing skills: ['directory_listing', 'file_discovery', 'filesystem_inspection', 'file_enumeration', 'recursive_file_listing', 'file_tree', 'data_processing']
+2026-10-19 00:14:15 | INFO     | src.registry.tool_registry | Registered tool 'file_reader_v1' (native) providing skills: ['file_reading']
+2026-10-19 00:14:15 | INFO     | src.registry.tool_registry | Registered tool 'file_writer_v1' (native) providing skills: ['file_writing']
+2026-10-19 00:14:15 | INFO     | src.registry.tool_registry | Registered tool 'hermes_clarify_v1' (hermes) providing skills: ['clarify', 'clarify_question', 'operator_inquiry', 'hitl_dialog']
+2026-10-19 00:14:15 | INFO     | src.registry.tool_registry | Registered tool 'hermes_cronjob_manage_v1' (hermes) providing skills: ['cronjob_manage', 'cronjob', 'schedule_automation', 'recurring_workflows']
+2026-10-19 00:14:15 | INFO     | src.registry.tool_registry | Registered tool 'hermes_delegate_task_v1' (hermes) providing skills: ['delegate_task', 'subagent_delegation', 'parallel_execution', 'worker_spawn']
+2026-10-19 00:14:15 | INFO     | src.registry.tool_registry | Registered tool 'hermes_image_generate_v1' (hermes) providing skills: ['image_generate', 'image_generation', 'diagram_generation', 'visual_design']
+2026-10-19 00:14:15 | INFO     | src.registry.tool_registry | Registered tool 'hermes_memory_v1' (hermes) providing skills: ['memory', 'memory_manager', 'knowledge_persistence', 'user_profile']
+2026-10-19 00:14:15 | INFO     | src.registry.tool_registry | Registered tool 'hermes_patch_file_v1' (hermes) providing skills: ['patch_file', 'patch', 'surgical_edit', 'code_patching']
+2026-10-19 00:14:15 | INFO     | src.registry.tool_registry | Registered tool 'hermes_session_search_v1' (hermes) providing skills: ['session_search', 'historical_recall', 'conversation_search']
+2026-10-19 00:14:15 | INFO     | src.registry.tool_registry | Registered tool 'hermes_todo_v1' (hermes) providing skills: ['todo_list', 'task_planning', 'milestone_tracking']
+2026-10-19 00:14:15 | INFO     | src.registry.tool_registry | Registered tool 'hermes_tts_speak_v1' (hermes) providing skills: ['tts_speak', 'text_to_speech', 'voice_synthesis', 'audio_narration']
+2026-10-19 00:14:15 | INFO     | src.registry.tool_registry | Registered tool 'hermes_vision_analyze_v1' (hermes) providing skills: ['vision_analyze', 'image_inspection', 'ocr', 'visual_reasoning']
+2026-10-19 00:14:15 | INFO     | src.registry.tool_registry | Registered tool 'hermes_web_extract_v1' (hermes) providing skills: ['web_extract', 'web_scraping', 'article_reading', 'content_extraction']
+2026-10-19 00:14:15 | INFO     | src.registry.tool_registry | Registered tool 'soc_analyze_impact' (native) providing skills: ['impact_analysis', 'blast_radius', 'asset_mapping', 'lateral_movement']
+2026-10-19 00:14:15 | INFO     | src.registry.tool_registry | Registered tool 'soc_compress_timeline' (native) providing skills: ['log_compression', 'timeline_synthesis', 'context_compression', 'summarization', 'incident_compression', 'mitre_mapping', 'mitre_rca']
+2026-10-19 00:14:15 | INFO     | src.registry.tool_registry | Registered tool 'soc_gather_evidence' (native) providing skills: ['evidence_gathering', 'log_forensics', 'artifact_inspection', 'file_reading', 'directory_listing']
+2026-10-19 00:14:15 | INFO     | src.registry.tool_registry | Registered tool 'soc_lookup_threat' (native) providing skills: ['threat_discovery', 'threat_intel', 'ioc_lookup', 'reputation_check']
+2026-10-19 00:14:15 | INFO     | src.registry.tool_registry | Registered tool 'soc_propose_containment' (native) providing skills: ['incident_response', 'containment_playbook', 'remediation', 'firewall_rule', 'containment_actions', 'containment_rules', 'response_action']
+2026-10-19 00:14:15 | INFO     | src.registry.tool_registry | Registered tool 'soc_triage_alert' (native) providing skills: ['triage', 'alert_triage', 'ioc_extraction', 'security_audit', 'general_reasoning']
+2026-10-19 00:14:15 | INFO     | src.registry.tool_registry | Registered tool 'system_command_v1' (native) providing skills: ['shell_command', 'system_command', 'command_execution', 'powershell_execution', 'system_inspection', 'terminal_command']
+2026-10-19 00:14:15 | INFO     | src.registry.tool_registry | Registered tool 'system_info_v1' (native) providing skills: ['system_info', 'host_info', 'device_info', 'hostname_lookup', 'system_inspection', 'environment_query']
+2026-10-19 00:14:15 | INFO     | src.registry.tool_registry | Registered tool 'web_search_v1' (native) providing skills: ['web_search', 'research', 'fact_checking']
+2026-10-19 00:14:15 | INFO     | src.registry.auto_discover | Auto-discovery built-ins complete: 26 tools registered, 0 errors
+2026-10-19 00:14:15 | INFO     | src.registry.tool_registry | Registered tool 'verify_ssl_cert_v1' (native) providing skills: ['ssl_verification', 'security_audit']
+2026-10-19 00:14:15 | INFO     | src.registry.auto_discover | Discovered custom tool 'verify_ssl_cert' from ssl_verifier.py
+2026-10-19 00:14:15 | INFO     | src.registry.tool_registry | Registered tool 'summarize_to_presentation_v1' (native) providing skills: ['summarization']
+2026-10-19 00:14:15 | INFO     | src.registry.auto_discover | Discovered custom tool 'summarize_to_presentation' from summarize_to_presentation.py
+2026-10-19 00:14:15 | INFO     | src.registry.tool_registry | Registered tool 'skill_airtable_crm_v1' (skill) providing skills: ['airtable_crm', 'crm_management', 'database_query', 'records']
+2026-10-19 00:14:15 | INFO     | src.registry.hermes.hermes_loader | Discovered Hermes skill 'airtable_crm' from airtable_crm.md
+2026-10-19 00:14:15 | INFO     | src.registry.tool_registry | Registered tool 'skill_apple_notes_v1' (skill) providing skills: ['apple_notes', 'knowledge_base', 'markdown_notes', 'note_taking']
+2026-10-19 00:14:15 | INFO     | src.registry.hermes.hermes_loader | Discovered Hermes skill 'apple_notes' from apple_notes.md
+2026-10-19 00:14:15 | INFO     | src.registry.tool_registry | Registered tool 'skill_apple_reminders_v1' (skill) providing skills: ['apple_reminders', 'deadline_tracking', 'reminder_alerts', 'task_scheduling']
+2026-10-19 00:14:15 | INFO     | src.registry.hermes.hermes_loader | Discovered Hermes skill 'apple_reminders' from apple_reminders.md
+2026-10-19 00:14:15 | INFO     | src.registry.tool_registry | Registered tool 'skill_architecture_diagram_v1' (skill) providing skills: ['architecture_diagram', 'cloud_architecture', 'diagram', 'svg']
+2026-10-19 00:14:15 | INFO     | src.registry.hermes.hermes_loader | Discovered Hermes skill 'architecture_diagram' from architecture_diagram.md
+2026-10-19 00:14:15 | INFO     | src.registry.tool_registry | Registered tool 'skill_arxiv_research_v1' (skill) providing skills: ['arxiv_research', 'literature_review', 'ml_research', 'paper_search']
+2026-10-19 00:14:15 | INFO     | src.registry.hermes.hermes_loader | Discovered Hermes skill 'arxiv_research' from arxiv_research.md
+2026-10-19 00:14:15 | INFO     | src.registry.tool_registry | Registered tool 'skill_ascii_art_v1' (skill) providing skills: ['ansi_banners', 'ascii_art', 'cli_typography', 'terminal_graphics']
+2026-10-19 00:14:15 | INFO     | src.registry.hermes.hermes_loader | Discovered Hermes skill 'ascii_art' from ascii_art.md
+2026-10-19 00:14:15 | INFO     | src.registry.tool_registry | Registered tool 'skill_claude_code_v1' (skill) providing skills: ['claude_code', 'codebase_search', 'pair_programming', 'test_driven_dev']
+2026-10-19 00:14:15 | INFO     | src.registry.hermes.hermes_loader | Discovered Hermes skill 'claude_code' from claude_code.md
+2026-10-19 00:14:15 | INFO     | src.registry.tool_registry | Registered tool 'skill_computer_use_v1' (skill) providing skills: ['computer_use', 'desktop_control', 'gui_automation', 'screenshot_grounding']
+2026-10-19 00:14:15 | INFO     | src.registry.hermes.hermes_loader | Discovered Hermes skill 'computer_use' from computer_use.md
+2026-10-19 00:14:15 | INFO     | src.registry.tool_registry | Registered tool 'skill_database_optimizer_v1' (skill) providing skills: ['database_optimizer', 'explain_analyze', 'index_optimization', 'sql_tuning']
+2026-10-19 00:14:15 | INFO     | src.registry.hermes.hermes_loader | Discovered Hermes skill 'database_optimizer' from database_optimizer.md
+2026-10-19 00:14:15 | INFO     | src.registry.tool_registry | Registered tool 'skill_discord_notifier_v1' (skill) providing skills: ['chat_notifications', 'discord_notifier', 'embed_builder', 'webhook_alerts']
+2026-10-19 00:14:15 | INFO     | src.registry.hermes.hermes_loader | Discovered Hermes skill 'discord_notifier' from discord_notifier.md
+2026-10-19 00:14:15 | INFO     | src.registry.tool_registry | Registered tool 'skill_docker_ops_v1' (skill) providing skills: ['container_management', 'devops_troubleshooting', 'docker_compose', 'docker_ops']
+2026-10-19 00:14:15 | INFO     | src.registry.hermes.hermes_loader | Discovered Hermes skill 'docker_ops' from docker_ops.md
+2026-10-19 00:14:15 | INFO     | src.registry.tool_registry | Registered tool 'skill_drug_discovery_v1' (skill) providing skills: ['bioactivity', 'cheminformatics', 'drug_discovery', 'molecular_biology', 'smiles']
+2026-10-19 00:14:15 | INFO     | src.registry.hermes.hermes_loader | Discovered Hermes skill 'drug_discovery' from drug_discovery.md
+2026-10-19 00:14:15 | INFO     | src.registry.tool_registry | Registered tool 'skill_fitness_nutrition_v1' (skill) providing skills: ['fitness_nutrition', 'health_science', 'macronutrient_planning', 'metabolic_calculation']
+2026-10-19 00:14:15 | INFO     | src.registry.hermes.hermes_loader | Discovered Hermes skill 'fitness_nutrition' from fitness_nutrition.md
+2026-10-19 00:14:15 | INFO     | src.registry.tool_registry | Registered tool 'skill_github_workflow_v1' (skill) providing skills: ['ci_cd_debug', 'github_workflow', 'pull_requests', 'release_notes']
+2026-10-19 00:14:15 | INFO     | src.registry.hermes.hermes_loader | Discovered Hermes skill 'github_workflow' from github_workflow.md
+2026-10-19 00:14:15 | INFO     | src.registry.tool_registry | Registered tool 'skill_gitnexus_explorer_v1' (skill) providing skills: ['architecture_recovery', 'ast', 'code_analysis', 'dependency_graph', 'gitnexus_explorer']
+2026-10-19 00:14:15 | INFO     | src.registry.hermes.hermes_loader | Discovered Hermes skill 'gitnexus_explorer' from gitnexus_explorer.md
+2026-10-19 00:14:15 | INFO     | src.registry.tool_registry | Registered tool 'skill_here_now_v1' (skill) providing skills: ['environmental_briefing', 'here_now', 'local_intelligence', 'timezone', 'weather']
+2026-10-19 00:14:15 | INFO     | src.registry.hermes.hermes_loader | Discovered Hermes skill 'here_now' from here_now.md
+2026-10-19 00:14:15 | INFO     | src.registry.tool_registry | Registered tool 'skill_home_assistant_v1' (skill) providing skills: ['home_assistant', 'iot_automation', 'rest_api', 'smart_home']
+2026-10-19 00:14:15 | INFO     | src.registry.hermes.hermes_loader | Discovered Hermes skill 'home_assistant' from home_assistant.md
+2026-10-19 00:14:15 | INFO     | src.registry.tool_registry | Registered tool 'skill_impeccable_design_v1' (skill) providing skills: ['accessibility', 'design_audit', 'impeccable_design', 'ui_ux', 'visual_hierarchy', 'web_styling']
+2026-10-19 00:14:15 | INFO     | src.registry.hermes.hermes_loader | Discovered Hermes skill 'impeccable_design' from impeccable_design.md
+2026-10-19 00:14:15 | INFO     | src.registry.tool_registry | Registered tool 'skill_instructor_mlops_v1' (skill) providing skills: ['instructor_mlops', 'json_extraction', 'pydantic', 'schema_validation', 'structured_output']
+2026-10-19 00:14:15 | INFO     | src.registry.hermes.hermes_loader | Discovered Hermes skill 'instructor_mlops' from instructor_mlops.md
+2026-10-19 00:14:15 | INFO     | src.registry.tool_registry | Registered tool 'skill_oss_forensics_v1' (skill) providing skills: ['audit', 'malware_analysis', 'oss_forensics', 'reverse_engineering', 'supply_chain_security']
+2026-10-19 00:14:15 | INFO     | src.registry.hermes.hermes_loader | Discovered Hermes skill 'oss_forensics' from oss_forensics.md
+2026-10-19 00:14:15 | INFO     | src.registry.tool_registry | Registered tool 'skill_simplify_code_v1' (skill) providing skills: ['clean_code', 'code_refactoring', 'complexity_reduction', 'simplify_code']
+2026-10-19 00:14:15 | INFO     | src.registry.hermes.hermes_loader | Discovered Hermes skill 'simplify_code' from simplify_code.md
+2026-10-19 00:14:15 | INFO     | src.registry.tool_registry | Registered tool 'skill_stripe_payments_v1' (skill) providing skills: ['billing_reconcile', 'invoice_check', 'stripe_payments', 'subscription_audit']
+2026-10-19 00:14:15 | INFO     | src.registry.hermes.hermes_loader | Discovered Hermes skill 'stripe_payments' from stripe_payments.md
+2026-10-19 00:14:15 | INFO     | src.registry.tool_registry | Registered tool 'skill_subagent_delegation_v1' (skill) providing skills: ['multi_agent_orchestration', 'parallel_execution', 'subagent_delegation', 'task_decomposition']
+2026-10-19 00:14:15 | INFO     | src.registry.hermes.hermes_loader | Discovered Hermes skill 'subagent_delegation' from subagent_delegation.md
+2026-10-19 00:14:15 | INFO     | src.registry.auto_discover | Discovered 23 Hermes skills
+2026-10-19 00:14:15 | INFO     | src.registry.auto_discover | Total auto-discovery complete: 51 tools registered, 0 errors
+2026-10-19 00:14:15 | INFO     | src.api.main | Tool Registry: ToolRegistry(tools=51, skills=201)
+2026-10-19 00:14:16 | INFO     | src.connectors.manager | Initialized Security Connector [Elasticsearch SIEM] (siem) - Status: simulated
+2026-10-19 00:14:16 | INFO     | src.connectors.manager | Initialized Security Connector [CrowdStrike Falcon EDR] (edr) - Status: simulated
+2026-10-19 00:14:16 | INFO     | src.connectors.manager | Initialized Security Connector [Splunk Enterprise SIEM] (siem) - Status: simulated
+2026-10-19 00:14:16 | INFO     | src.connectors.manager | Initialized Security Connector [Microsoft Sentinel] (siem) - Status: simulated
+2026-10-19 00:14:16 | INFO     | src.connectors.manager | Initialized Security Connector [Microsoft Defender for Endpoint] (edr) - Status: simulated
+2026-10-19 00:14:16 | INFO     | src.connectors.manager | Initialized Security Connector [SentinelOne Singularity] (edr) - Status: simulated
+2026-10-19 00:14:16 | INFO     | src.connectors.manager | Initialized Security Connector [Palo Alto NGFW / Panorama] (firewall) - Status: simulated
+2026-10-19 00:14:16 | INFO     | src.connectors.manager | Initialized Security Connector [Fortinet FortiGate Firewall] (firewall) - Status: simulated
+2026-10-19 00:14:16 | INFO     | src.connectors.manager | Initialized Security Connector [Okta Identity Cloud] (iam) - Status: simulated
+2026-10-19 00:14:16 | INFO     | src.connectors.manager | Initialized Security Connector [Microsoft Entra ID] (iam) - Status: simulated
+2026-10-19 00:14:16 | INFO     | src.connectors.manager | Initialized Security Connector [VirusTotal v3 CTI] (threat_intel) - Status: simulated
+2026-10-19 00:14:16 | INFO     | src.connectors.manager | Initialized Security Connector [AbuseIPDB Threat Intel] (threat_intel) - Status: simulated
+2026-10-19 00:14:16 | INFO     | src.connectors.manager | Initialized Security Connector [TheHive SOAR & Case Management] (itsm) - Status: simulated
+2026-10-19 00:14:16 | INFO     | src.registry.tool_registry | Registered tool 'elastic_search_logs' (connector) providing skills: ['siem_search', 'log_query', 'telemetry_investigation']
+2026-10-19 00:14:16 | INFO     | src.registry.tool_registry | Registered tool 'elastic_lookup_ioc' (connector) providing skills: ['ioc_lookup', 'threat_hunting', 'telemetry_investigation']
+2026-10-19 00:14:16 | INFO     | src.registry.tool_registry | Registered tool 'crowdstrike_get_device' (connector) providing skills: ['edr_telemetry', 'host_investigation', 'endpoint_lookup']
+2026-10-19 00:14:16 | INFO     | src.registry.tool_registry | Registered tool 'crowdstrike_contain_host' (connector) providing skills: ['host_containment', 'endpoint_isolation', 'incident_mitigation']
+2026-10-19 00:14:16 | INFO     | src.registry.tool_registry | Registered tool 'crowdstrike_lift_containment' (connector) providing skills: ['host_remediation', 'lift_isolation']
+2026-10-19 00:14:16 | INFO     | src.registry.tool_registry | Registered tool 'splunk_search_spl' (connector) providing skills: ['siem_search', 'splunk_query', 'telemetry_investigation']
+2026-10-19 00:14:16 | INFO     | src.registry.tool_registry | Registered tool 'sentinel_query_kql' (connector) providing skills: ['siem_search', 'kql_query', 'cloud_threat_hunting']
+2026-10-19 00:14:16 | INFO     | src.registry.tool_registry | Registered tool 'defender_get_machine' (connector) providing skills: ['edr_telemetry', 'host_investigation', 'endpoint_lookup']
+2026-10-19 00:14:16 | INFO     | src.registry.tool_registry | Registered tool 'defender_isolate_machine' (connector) providing skills: ['host_containment', 'endpoint_isolation', 'incident_mitigation']
+2026-10-19 00:14:16 | INFO     | src.registry.tool_registry | Registered tool 'sentinelone_find_agent' (connector) providing skills: ['edr_telemetry', 'host_investigation', 'endpoint_lookup']
+2026-10-19 00:14:16 | INFO     | src.registry.tool_registry | Registered tool 'sentinelone_quarantine_agent' (connector) providing skills: ['host_containment', 'endpoint_isolation', 'incident_mitigation']
+2026-10-19 00:14:16 | INFO     | src.registry.tool_registry | Registered tool 'paloalto_register_ip_dag' (connector) providing skills: ['firewall_blocking', 'ip_containment', 'perimeter_defense']
+2026-10-19 00:14:16 | INFO     | src.registry.tool_registry | Registered tool 'paloalto_unregister_ip_dag' (connector) providing skills: ['firewall_remediation', 'unblock_ip']
+2026-10-19 00:14:16 | INFO     | src.registry.tool_registry | Registered tool 'fortigate_ban_ip' (connector) providing skills: ['firewall_blocking', 'ip_containment', 'perimeter_defense']
+2026-10-19 00:14:16 | INFO     | src.registry.tool_registry | Registered tool 'fortigate_unban_ip' (connector) providing skills: ['firewall_remediation', 'unblock_ip']
+2026-10-19 00:14:16 | INFO     | src.registry.tool_registry | Registered tool 'okta_get_user' (connector) providing skills: ['identity_lookup', 'iam_investigation', 'user_context']
+2026-10-19 00:14:16 | INFO     | src.registry.tool_registry | Registered tool 'okta_clear_user_sessions' (connector) providing skills: ['session_revocation', 'identity_containment', 'credential_invalidation']
+2026-10-19 00:14:16 | INFO     | src.registry.tool_registry | Registered tool 'okta_suspend_user' (connector) providing skills: ['account_suspension', 'identity_containment']
+2026-10-19 00:14:16 | INFO     | src.registry.tool_registry | Registered tool 'entraid_get_user' (connector) providing skills: ['identity_lookup', 'iam_investigation', 'user_context']
+2026-10-19 00:14:16 | INFO     | src.registry.tool_registry | Registered tool 'entraid_revoke_sessions' (connector) providing skills: ['session_revocation', 'identity_containment']
+2026-10-19 00:14:16 | INFO     | src.registry.tool_registry | Registered tool 'entraid_disable_account' (connector) providing skills: ['account_suspension', 'identity_containment']
+2026-10-19 00:14:16 | INFO     | src.registry.tool_registry | Registered tool 'virustotal_lookup_ip' (connector) providing skills: ['threat_intel', 'ioc_enrichment', 'ip_reputation']
+2026-10-19 00:14:16 | INFO     | src.registry.tool_registry | Registered tool 'virustotal_lookup_hash' (connector) providing skills: ['threat_intel', 'ioc_enrichment', 'malware_analysis']
+2026-10-19 00:14:16 | INFO     | src.registry.tool_registry | Registered tool 'abuseipdb_check_ip' (connector) providing skills: ['threat_intel', 'ioc_enrichment', 'ip_reputation']
+2026-10-19 00:14:16 | INFO     | src.registry.tool_registry | Registered tool 'thehive_create_case' (connector) providing skills: ['case_management', 'soar_incident', 'incident_ticketing']
+2026-10-19 00:14:16 | INFO     | src.registry.tool_registry | Registered tool 'thehive_add_observable' (connector) providing skills: ['case_management', 'soar_incident', 'attach_ioc']
+2026-10-19 00:14:16 | INFO     | src.connectors.manager | Registered 26 tools from enterprise security connectors
+2026-10-19 00:14:16 | INFO     | src.api.main | Enterprise Security Connectors initialized: 13 active
+2026-10-19 00:14:16 | INFO     | src.api.main | Connected to Temporal at localhost:7234
+2026-10-19 00:14:16 | INFO     | src.api.main | Connected to Temporal at localhost:7234 (activities handled by worker_runner)
+2026-10-19 00:14:16 | INFO     | src.orchestrator.cron_scheduler | Loaded 2 scheduled jobs from D:\projects\aiagent\data\schedules.json
+2026-10-19 00:14:16 | INFO     | src.orchestrator.cron_scheduler | CronScheduler background service started
+2026-10-19 00:14:16 | INFO     | src.api.main | UAOS API ready at http://0.0.0.0:8000
+2026-10-19 00:14:17 | INFO     | mcp.server.streamable_http_manager | StreamableHTTP session manager started
+INFO:     Application startup complete.
+INFO:     127.0.0.1:63766 - "GET /api/schedules HTTP/1.1" 200 OK
+2026-10-19 00:14:29 | INFO     | httpx | HTTP Request: GET http://10.7.75.103:1234/v1/models "HTTP/1.1 200 OK"
+INFO:     127.0.0.1:56647 - "GET /health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:56647 - "GET /api/schedules HTTP/1.1" 200 OK
+2026-10-19 00:14:36 | INFO     | src.api.main | Solving (async via Temporal): workflow=uaos-12fd378a5770, query=Investigate critical security logs in D:\Security-logs-test\attack-cases-benchmark\case-6-ddos-recon, agent_id=default, custom_dag=no, resilience=standard
+INFO:     127.0.0.1:54431 - "POST /solve/async HTTP/1.1" 200 OK
+INFO:     127.0.0.1:54431 - "GET /stream/uaos-12fd378a5770 HTTP/1.1" 200 OK
+2026-10-19 00:14:39 | INFO     | httpx | HTTP Request: GET http://10.7.75.103:1234/v1/models "HTTP/1.1 200 OK"
+INFO:     127.0.0.1:50618 - "GET /health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:50618 - "GET /api/schedules HTTP/1.1" 200 OK
+INFO:     127.0.0.1:63745 - "GET /status/uaos-12fd378a5770 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:55735 - "HEAD /mcp/ HTTP/1.1" 200 OK
+INFO:     127.0.0.1:55736 - "POST /mcp/ HTTP/1.1" 200 OK
+2026-10-19 00:15:07 | INFO     | mcp.server.streamable_http | Terminating session: None
+INFO:     127.0.0.1:55736 - "POST /mcp/ HTTP/1.1" 202 Accepted
+2026-10-19 00:15:07 | INFO     | mcp.server.streamable_http | Terminating session: None
+2026-10-19 00:15:07 | INFO     | mcp.server.lowlevel.server | Processing request of type ListToolsRequest
+INFO:     127.0.0.1:55737 - "POST /mcp/ HTTP/1.1" 200 OK
+2026-10-19 00:15:07 | INFO     | mcp.server.streamable_http | Terminating session: None
+INFO:     127.0.0.1:55746 - "HEAD /mcp/ HTTP/1.1" 200 OK
+INFO:     127.0.0.1:55747 - "POST /mcp/ HTTP/1.1" 200 OK
+2026-10-19 00:15:08 | INFO     | mcp.server.streamable_http | Terminating session: None
+INFO:     127.0.0.1:55747 - "POST /mcp/ HTTP/1.1" 202 Accepted
+2026-10-19 00:15:08 | INFO     | mcp.server.streamable_http | Terminating session: None
+2026-10-19 00:15:08 | INFO     | mcp.server.lowlevel.server | Processing request of type ListToolsRequest
+INFO:     127.0.0.1:55748 - "POST /mcp/ HTTP/1.1" 200 OK
+2026-10-19 00:15:08 | INFO     | mcp.server.streamable_http | Terminating session: None
+INFO:     127.0.0.1:55749 - "HEAD /mcp/ HTTP/1.1" 200 OK
+INFO:     127.0.0.1:55750 - "POST /mcp/ HTTP/1.1" 200 OK
+2026-10-19 00:15:08 | INFO     | mcp.server.streamable_http | Terminating session: None
+INFO:     127.0.0.1:55750 - "POST /mcp/ HTTP/1.1" 202 Accepted
+2026-10-19 00:15:08 | INFO     | mcp.server.streamable_http | Terminating session: None
+2026-10-19 00:15:08 | INFO     | mcp.server.lowlevel.server | Processing request of type ListToolsRequest
+INFO:     127.0.0.1:55751 - "POST /mcp/ HTTP/1.1" 200 OK
+2026-10-19 00:15:08 | INFO     | mcp.server.streamable_http | Terminating session: None
+INFO:     127.0.0.1:55752 - "HEAD /mcp/ HTTP/1.1" 200 OK
+INFO:     127.0.0.1:55753 - "POST /mcp/ HTTP/1.1" 200 OK
+2026-10-19 00:15:09 | INFO     | mcp.server.streamable_http | Terminating session: None
+INFO:     127.0.0.1:55753 - "POST /mcp/ HTTP/1.1" 202 Accepted
+2026-10-19 00:15:09 | INFO     | mcp.server.streamable_http | Terminating session: None
+2026-10-19 00:15:09 | INFO     | mcp.server.lowlevel.server | Processing request of type ListToolsRequest
+INFO:     127.0.0.1:55754 - "POST /mcp/ HTTP/1.1" 200 OK
+2026-10-19 00:15:09 | INFO     | mcp.server.streamable_http | Terminating session: None
+INFO:     127.0.0.1:55755 - "HEAD /mcp/ HTTP/1.1" 200 OK
+INFO:     127.0.0.1:55756 - "POST /mcp/ HTTP/1.1" 200 OK
+2026-10-19 00:15:09 | INFO     | mcp.server.streamable_http | Terminating session: None
+INFO:     127.0.0.1:55756 - "POST /mcp/ HTTP/1.1" 202 Accepted
+2026-10-19 00:15:09 | INFO     | mcp.server.streamable_http | Terminating session: None
+2026-10-19 00:15:09 | INFO     | mcp.server.lowlevel.server | Processing request of type ListToolsRequest
+INFO:     127.0.0.1:55757 - "POST /mcp/ HTTP/1.1" 200 OK
+2026-10-19 00:15:09 | INFO     | mcp.server.streamable_http | Terminating session: None
+INFO:     127.0.0.1:55758 - "HEAD /mcp/ HTTP/1.1" 200 OK
+INFO:     127.0.0.1:55759 - "POST /mcp/ HTTP/1.1" 200 OK
+2026-10-19 00:15:10 | INFO     | mcp.server.streamable_http | Terminating session: None
+INFO:     127.0.0.1:55759 - "POST /mcp/ HTTP/1.1" 202 Accepted
+2026-10-19 00:15:10 | INFO     | mcp.server.streamable_http | Terminating session: None
+2026-10-19 00:15:10 | INFO     | mcp.server.lowlevel.server | Processing request of type ListToolsRequest
+INFO:     127.0.0.1:55760 - "POST /mcp/ HTTP/1.1" 200 OK
+2026-10-19 00:15:10 | INFO     | mcp.server.streamable_http | Terminating session: None
+INFO:     127.0.0.1:55761 - "HEAD /mcp/ HTTP/1.1" 200 OK
+INFO:     127.0.0.1:55762 - "POST /mcp/ HTTP/1.1" 200 OK
+2026-10-19 00:15:10 | INFO     | mcp.server.streamable_http | Terminating session: None
+INFO:     127.0.0.1:55762 - "POST /mcp/ HTTP/1.1" 202 Accepted
+2026-10-19 00:15:10 | INFO     | mcp.server.streamable_http | Terminating session: None
+2026-10-19 00:15:10 | INFO     | mcp.server.lowlevel.server | Processing request of type ListToolsRequest
+INFO:     127.0.0.1:55763 - "POST /mcp/ HTTP/1.1" 200 OK
+2026-10-19 00:15:10 | INFO     | mcp.server.streamable_http | Terminating session: None
+INFO:     127.0.0.1:55765 - "HEAD /mcp/ HTTP/1.1" 200 OK
+INFO:     127.0.0.1:55766 - "POST /mcp/ HTTP/1.1" 200 OK
+2026-10-19 00:15:11 | INFO     | mcp.server.streamable_http | Terminating session: None
+INFO:     127.0.0.1:55766 - "POST /mcp/ HTTP/1.1" 202 Accepted
+2026-10-19 00:15:11 | INFO     | mcp.server.streamable_http | Terminating session: None
+2026-10-19 00:15:11 | INFO     | mcp.server.lowlevel.server | Processing request of type ListToolsRequest
+INFO:     127.0.0.1:55767 - "POST /mcp/ HTTP/1.1" 200 OK
+2026-10-19 00:15:11 | INFO     | mcp.server.streamable_http | Terminating session: None
+INFO:     127.0.0.1:55768 - "HEAD /mcp/ HTTP/1.1" 200 OK
+INFO:     127.0.0.1:55769 - "POST /mcp/ HTTP/1.1" 200 OK
+2026-10-19 00:15:11 | INFO     | mcp.server.streamable_http | Terminating session: None
+INFO:     127.0.0.1:55769 - "POST /mcp/ HTTP/1.1" 202 Accepted
+2026-10-19 00:15:11 | INFO     | mcp.server.streamable_http | Terminating session: None
+2026-10-19 00:15:11 | INFO     | mcp.server.lowlevel.server | Processing request of type ListToolsRequest
+INFO:     127.0.0.1:55770 - "POST /mcp/ HTTP/1.1" 200 OK
+2026-10-19 00:15:11 | INFO     | mcp.server.streamable_http | Terminating session: None
+INFO:     127.0.0.1:55777 - "HEAD /mcp/ HTTP/1.1" 200 OK
+INFO:     127.0.0.1:55778 - "POST /mcp/ HTTP/1.1" 200 OK
+2026-10-19 00:15:12 | INFO     | mcp.server.streamable_http | Terminating session: None
+INFO:     127.0.0.1:55778 - "POST /mcp/ HTTP/1.1" 202 Accepted
+2026-10-19 00:15:12 | INFO     | mcp.server.streamable_http | Terminating session: None
+2026-10-19 00:15:12 | INFO     | mcp.server.lowlevel.server | Processing request of type ListToolsRequest
+INFO:     127.0.0.1:55779 - "POST /mcp/ HTTP/1.1" 200 OK
+2026-10-19 00:15:12 | INFO     | mcp.server.streamable_http | Terminating session: None
+INFO:     127.0.0.1:55780 - "HEAD /mcp/ HTTP/1.1" 200 OK
+INFO:     127.0.0.1:55781 - "POST /mcp/ HTTP/1.1" 200 OK
+2026-10-19 00:15:12 | INFO     | mcp.server.streamable_http | Terminating session: None
+INFO:     127.0.0.1:55781 - "POST /mcp/ HTTP/1.1" 202 Accepted
+2026-10-19 00:15:12 | INFO     | mcp.server.streamable_http | Terminating session: None
+2026-10-19 00:15:12 | INFO     | mcp.server.lowlevel.server | Processing request of type ListToolsRequest
+INFO:     127.0.0.1:55782 - "POST /mcp/ HTTP/1.1" 200 OK
+2026-10-19 00:15:12 | INFO     | mcp.server.streamable_http | Terminating session: None
+INFO:     127.0.0.1:55783 - "HEAD /mcp/ HTTP/1.1" 200 OK
+INFO:     127.0.0.1:55784 - "POST /mcp/ HTTP/1.1" 200 OK
+2026-10-19 00:15:12 | INFO     | mcp.server.streamable_http | Terminating session: None
+INFO:     127.0.0.1:55784 - "POST /mcp/ HTTP/1.1" 202 Accepted
+2026-10-19 00:15:12 | INFO     | mcp.server.streamable_http | Terminating session: None
+2026-10-19 00:15:12 | INFO     | mcp.server.lowlevel.server | Processing request of type ListToolsRequest
+INFO:     127.0.0.1:55785 - "POST /mcp/ HTTP/1.1" 200 OK
+2026-10-19 00:15:12 | INFO     | mcp.server.streamable_http | Terminating session: None
+INFO:     127.0.0.1:60400 - "HEAD /mcp/ HTTP/1.1" 200 OK
+INFO:     127.0.0.1:60401 - "POST /mcp/ HTTP/1.1" 200 OK
+2026-10-19 00:15:13 | INFO     | mcp.server.streamable_http | Terminating session: None
+INFO:     127.0.0.1:60401 - "POST /mcp/ HTTP/1.1" 202 Accepted
+2026-10-19 00:15:13 | INFO     | mcp.server.streamable_http | Terminating session: None
+2026-10-19 00:15:13 | INFO     | mcp.server.lowlevel.server | Processing request of type ListToolsRequest
+INFO:     127.0.0.1:60402 - "POST /mcp/ HTTP/1.1" 200 OK
+2026-10-19 00:15:13 | INFO     | mcp.server.streamable_http | Terminating session: None
+INFO:     127.0.0.1:60403 - "HEAD /mcp/ HTTP/1.1" 200 OK
+INFO:     127.0.0.1:60404 - "POST /mcp/ HTTP/1.1" 200 OK
+2026-10-19 00:15:13 | INFO     | mcp.server.streamable_http | Terminating session: None
+INFO:     127.0.0.1:60404 - "POST /mcp/ HTTP/1.1" 202 Accepted
+2026-10-19 00:15:13 | INFO     | mcp.server.streamable_http | Terminating session: None
+2026-10-19 00:15:13 | INFO     | mcp.server.lowlevel.server | Processing request of type ListToolsRequest
+INFO:     127.0.0.1:60405 - "POST /mcp/ HTTP/1.1" 200 OK
+2026-10-19 00:15:13 | INFO     | mcp.server.streamable_http | Terminating session: None
+INFO:     127.0.0.1:60406 - "HEAD /mcp/ HTTP/1.1" 200 OK
+INFO:     127.0.0.1:60407 - "POST /mcp/ HTTP/1.1" 200 OK
+2026-10-19 00:15:14 | INFO     | mcp.server.streamable_http | Terminating session: None
+INFO:     127.0.0.1:60407 - "POST /mcp/ HTTP/1.1" 202 Accepted
+2026-10-19 00:15:14 | INFO     | mcp.server.streamable_http | Terminating session: None
+2026-10-19 00:15:14 | INFO     | mcp.server.lowlevel.server | Processing request of type ListToolsRequest
+INFO:     127.0.0.1:60408 - "POST /mcp/ HTTP/1.1" 200 OK
+2026-10-19 00:15:14 | INFO     | mcp.server.streamable_http | Terminating session: None
+INFO:     127.0.0.1:60409 - "HEAD /mcp/ HTTP/1.1" 200 OK
+INFO:     127.0.0.1:60410 - "POST /mcp/ HTTP/1.1" 200 OK
+2026-10-19 00:15:14 | INFO     | mcp.server.streamable_http | Terminating session: None
+INFO:     127.0.0.1:60410 - "POST /mcp/ HTTP/1.1" 202 Accepted
+2026-10-19 00:15:14 | INFO     | mcp.server.streamable_http | Terminating session: None
+2026-10-19 00:15:14 | INFO     | mcp.server.lowlevel.server | Processing request of type ListToolsRequest
+INFO:     127.0.0.1:60411 - "POST /mcp/ HTTP/1.1" 200 OK
+2026-10-19 00:15:14 | INFO     | mcp.server.streamable_http | Terminating session: None
+INFO:     127.0.0.1:60412 - "HEAD /mcp/ HTTP/1.1" 200 OK
+INFO:     127.0.0.1:60413 - "POST /mcp/ HTTP/1.1" 200 OK
+2026-10-19 00:15:15 | INFO     | mcp.server.streamable_http | Terminating session: None
+INFO:     127.0.0.1:60413 - "POST /mcp/ HTTP/1.1" 202 Accepted
+2026-10-19 00:15:15 | INFO     | mcp.server.streamable_http | Terminating session: None
+2026-10-19 00:15:15 | INFO     | mcp.server.lowlevel.server | Processing request of type ListToolsRequest
+INFO:     127.0.0.1:60415 - "POST /mcp/ HTTP/1.1" 200 OK
+2026-10-19 00:15:15 | INFO     | mcp.server.streamable_http | Terminating session: None
+INFO:     127.0.0.1:60416 - "HEAD /mcp/ HTTP/1.1" 200 OK
+INFO:     127.0.0.1:60421 - "POST /mcp/ HTTP/1.1" 200 OK
+2026-10-19 00:15:15 | INFO     | mcp.server.streamable_http | Terminating session: None
+INFO:     127.0.0.1:60421 - "POST /mcp/ HTTP/1.1" 202 Accepted
+2026-10-19 00:15:15 | INFO     | mcp.server.streamable_http | Terminating session: None
+2026-10-19 00:15:15 | INFO     | mcp.server.lowlevel.server | Processing request of type ListToolsRequest
+INFO:     127.0.0.1:60422 - "POST /mcp/ HTTP/1.1" 200 OK
+2026-10-19 00:15:15 | INFO     | mcp.server.streamable_http | Terminating session: None
+INFO:     127.0.0.1:60423 - "HEAD /mcp/ HTTP/1.1" 200 OK
+INFO:     127.0.0.1:60424 - "POST /mcp/ HTTP/1.1" 200 OK
+2026-10-19 00:15:16 | INFO     | mcp.server.streamable_http | Terminating session: None
+INFO:     127.0.0.1:60424 - "POST /mcp/ HTTP/1.1" 202 Accepted
+2026-10-19 00:15:16 | INFO     | mcp.server.streamable_http | Terminating session: None
+2026-10-19 00:15:16 | INFO     | mcp.server.lowlevel.server | Processing request of type ListToolsRequest
+INFO:     127.0.0.1:60425 - "POST /mcp/ HTTP/1.1" 200 OK
+2026-10-19 00:15:16 | INFO     | mcp.server.streamable_http | Terminating session: None
+INFO:     127.0.0.1:60426 - "HEAD /mcp/ HTTP/1.1" 200 OK
+INFO:     127.0.0.1:60427 - "POST /mcp/ HTTP/1.1" 200 OK
+2026-10-19 00:15:16 | INFO     | mcp.server.streamable_http | Terminating session: None
+INFO:     127.0.0.1:60427 - "POST /mcp/ HTTP/1.1" 202 Accepted
+2026-10-19 00:15:16 | INFO     | mcp.server.streamable_http | Terminating session: None
+2026-10-19 00:15:16 | INFO     | mcp.server.lowlevel.server | Processing request of type ListToolsRequest
+INFO:     127.0.0.1:60428 - "POST /mcp/ HTTP/1.1" 200 OK
+2026-10-19 00:15:16 | INFO     | mcp.server.streamable_http | Terminating session: None
+INFO:     127.0.0.1:60429 - "HEAD /mcp/ HTTP/1.1" 200 OK
+INFO:     127.0.0.1:60430 - "POST /mcp/ HTTP/1.1" 200 OK
+2026-10-19 00:15:17 | INFO     | mcp.server.streamable_http | Terminating session: None
+INFO:     127.0.0.1:60430 - "POST /mcp/ HTTP/1.1" 202 Accepted
+2026-10-19 00:15:17 | INFO     | mcp.server.streamable_http | Terminating session: None
+2026-10-19 00:15:17 | INFO     | mcp.server.lowlevel.server | Processing request of type ListToolsRequest
+INFO:     127.0.0.1:60431 - "POST /mcp/ HTTP/1.1" 200 OK
+2026-10-19 00:15:17 | INFO     | mcp.server.streamable_http | Terminating session: None
+INFO:     127.0.0.1:60432 - "HEAD /mcp/ HTTP/1.1" 200 OK
+INFO:     127.0.0.1:60433 - "POST /mcp/ HTTP/1.1" 200 OK
+2026-10-19 00:15:17 | INFO     | mcp.server.streamable_http | Terminating session: None
+INFO:     127.0.0.1:60433 - "POST /mcp/ HTTP/1.1" 202 Accepted
+2026-10-19 00:15:17 | INFO     | mcp.server.streamable_http | Terminating session: None
+2026-10-19 00:15:17 | INFO     | mcp.server.lowlevel.server | Processing request of type ListToolsRequest
+INFO:     127.0.0.1:60434 - "POST /mcp/ HTTP/1.1" 200 OK
+2026-10-19 00:15:17 | INFO     | mcp.server.streamable_http | Terminating session: None
+INFO:     127.0.0.1:60435 - "HEAD /mcp/ HTTP/1.1" 200 OK
+INFO:     127.0.0.1:60436 - "POST /mcp/ HTTP/1.1" 200 OK
+2026-10-19 00:15:18 | INFO     | mcp.server.streamable_http | Terminating session: None
+INFO:     127.0.0.1:60436 - "POST /mcp/ HTTP/1.1" 202 Accepted
+2026-10-19 00:15:18 | INFO     | mcp.server.streamable_http | Terminating session: None
+2026-10-19 00:15:18 | INFO     | mcp.server.lowlevel.server | Processing request of type ListToolsRequest
+INFO:     127.0.0.1:60437 - "POST /mcp/ HTTP/1.1" 200 OK
+2026-10-19 00:15:18 | INFO     | mcp.server.streamable_http | Terminating session: None
+INFO:     127.0.0.1:49957 - "HEAD /mcp/ HTTP/1.1" 200 OK
+INFO:     127.0.0.1:49958 - "POST /mcp/ HTTP/1.1" 200 OK
+2026-10-19 00:16:28 | INFO     | mcp.server.streamable_http | Terminating session: None
+INFO:     127.0.0.1:49958 - "POST /mcp/ HTTP/1.1" 202 Accepted
+2026-10-19 00:16:28 | INFO     | mcp.server.streamable_http | Terminating session: None
+2026-10-19 00:16:28 | INFO     | mcp.server.lowlevel.server | Processing request of type ListToolsRequest
+INFO:     127.0.0.1:49959 - "POST /mcp/ HTTP/1.1" 200 OK
+2026-10-19 00:16:28 | INFO     | mcp.server.streamable_http | Terminating session: None
+INFO:     127.0.0.1:49960 - "HEAD /mcp/ HTTP/1.1" 200 OK
+INFO:     127.0.0.1:49961 - "POST /mcp/ HTTP/1.1" 200 OK
+2026-10-19 00:16:28 | INFO     | mcp.server.streamable_http | Terminating session: None
+INFO:     127.0.0.1:49961 - "POST /mcp/ HTTP/1.1" 202 Accepted
+2026-10-19 00:16:28 | INFO     | mcp.server.streamable_http | Terminating session: None
+2026-10-19 00:16:28 | INFO     | mcp.server.lowlevel.server | Processing request of type ListToolsRequest
+INFO:     127.0.0.1:49963 - "POST /mcp/ HTTP/1.1" 200 OK
+2026-10-19 00:16:28 | INFO     | mcp.server.streamable_http | Terminating session: None
+INFO:     127.0.0.1:49964 - "HEAD /mcp/ HTTP/1.1" 200 OK
+INFO:     127.0.0.1:49965 - "POST /mcp/ HTTP/1.1" 200 OK
+2026-10-19 00:16:29 | INFO     | mcp.server.streamable_http | Terminating session: None
+INFO:     127.0.0.1:49965 - "POST /mcp/ HTTP/1.1" 202 Accepted
+2026-10-19 00:16:29 | INFO     | mcp.server.streamable_http | Terminating session: None
+2026-10-19 00:16:29 | INFO     | mcp.server.lowlevel.server | Processing request of type ListToolsRequest
+INFO:     127.0.0.1:49966 - "POST /mcp/ HTTP/1.1" 200 OK
+2026-10-19 00:16:29 | INFO     | mcp.server.streamable_http | Terminating session: None
+INFO:     127.0.0.1:49967 - "HEAD /mcp/ HTTP/1.1" 200 OK
+INFO:     127.0.0.1:49968 - "POST /mcp/ HTTP/1.1" 200 OK
+2026-10-19 00:16:29 | INFO     | mcp.server.streamable_http | Terminating session: None
+INFO:     127.0.0.1:49968 - "POST /mcp/ HTTP/1.1" 202 Accepted
+2026-10-19 00:16:29 | INFO     | mcp.server.streamable_http | Terminating session: None
+2026-10-19 00:16:29 | INFO     | mcp.server.lowlevel.server | Processing request of type ListToolsRequest
+INFO:     127.0.0.1:49969 - "POST /mcp/ HTTP/1.1" 200 OK
+2026-10-19 00:16:29 | INFO     | mcp.server.streamable_http | Terminating session: None
+INFO:     127.0.0.1:49973 - "HEAD /mcp/ HTTP/1.1" 200 OK
+INFO:     127.0.0.1:49974 - "POST /mcp/ HTTP/1.1" 200 OK
+2026-10-19 00:16:30 | INFO     | mcp.server.streamable_http | Terminating session: None
+INFO:     127.0.0.1:49974 - "POST /mcp/ HTTP/1.1" 202 Accepted
+2026-10-19 00:16:30 | INFO     | mcp.server.streamable_http | Terminating session: None
+2026-10-19 00:16:30 | INFO     | mcp.server.lowlevel.server | Processing request of type ListToolsRequest
+INFO:     127.0.0.1:49975 - "POST /mcp/ HTTP/1.1" 200 OK
+2026-10-19 00:16:30 | INFO     | mcp.server.streamable_http | Terminating session: None
+INFO:     127.0.0.1:49976 - "HEAD /mcp/ HTTP/1.1" 200 OK
+INFO:     127.0.0.1:49977 - "POST /mcp/ HTTP/1.1" 200 OK
+2026-10-19 00:16:30 | INFO     | mcp.server.streamable_http | Terminating session: None
+INFO:     127.0.0.1:49977 - "POST /mcp/ HTTP/1.1" 202 Accepted
+2026-10-19 00:16:30 | INFO     | mcp.server.streamable_http | Terminating session: None
+2026-10-19 00:16:30 | INFO     | mcp.server.lowlevel.server | Processing request of type ListToolsRequest
+INFO:     127.0.0.1:49978 - "POST /mcp/ HTTP/1.1" 200 OK
+2026-10-19 00:16:30 | INFO     | mcp.server.streamable_http | Terminating session: None
+INFO:     127.0.0.1:49981 - "HEAD /mcp/ HTTP/1.1" 200 OK
+INFO:     127.0.0.1:49982 - "POST /mcp/ HTTP/1.1" 200 OK
+2026-10-19 00:16:31 | INFO     | mcp.server.streamable_http | Terminating session: None
+INFO:     127.0.0.1:49982 - "POST /mcp/ HTTP/1.1" 202 Accepted
+2026-10-19 00:16:31 | INFO     | mcp.server.streamable_http | Terminating session: None
+2026-10-19 00:16:31 | INFO     | mcp.server.lowlevel.server | Processing request of type ListToolsRequest
+INFO:     127.0.0.1:49983 - "POST /mcp/ HTTP/1.1" 200 OK
+2026-10-19 00:16:31 | INFO     | mcp.server.streamable_http | Terminating session: None
+INFO:     127.0.0.1:49984 - "HEAD /mcp/ HTTP/1.1" 200 OK
+INFO:     127.0.0.1:49985 - "POST /mcp/ HTTP/1.1" 200 OK
+2026-10-19 00:16:31 | INFO     | mcp.server.streamable_http | Terminating session: None
+INFO:     127.0.0.1:49985 - "POST /mcp/ HTTP/1.1" 202 Accepted
+2026-10-19 00:16:31 | INFO     | mcp.server.streamable_http | Terminating session: None
+2026-10-19 00:16:31 | INFO     | mcp.server.lowlevel.server | Processing request of type ListToolsRequest
+INFO:     127.0.0.1:49986 - "POST /mcp/ HTTP/1.1" 200 OK
+2026-10-19 00:16:31 | INFO     | mcp.server.streamable_http | Terminating session: None
+INFO:     127.0.0.1:49988 - "HEAD /mcp/ HTTP/1.1" 200 OK
+INFO:     127.0.0.1:49989 - "POST /mcp/ HTTP/1.1" 200 OK
+2026-10-19 00:16:32 | INFO     | mcp.server.streamable_http | Terminating session: None
+INFO:     127.0.0.1:49989 - "POST /mcp/ HTTP/1.1" 202 Accepted
+2026-10-19 00:16:32 | INFO     | mcp.server.streamable_http | Terminating session: None
+2026-10-19 00:16:32 | INFO     | mcp.server.lowlevel.server | Processing request of type ListToolsRequest
+INFO:     127.0.0.1:49990 - "POST /mcp/ HTTP/1.1" 200 OK
+2026-10-19 00:16:32 | INFO     | mcp.server.streamable_http | Terminating session: None
+INFO:     127.0.0.1:49991 - "HEAD /mcp/ HTTP/1.1" 200 OK
+INFO:     127.0.0.1:49992 - "POST /mcp/ HTTP/1.1" 200 OK
+2026-10-19 00:16:32 | INFO     | mcp.server.streamable_http | Terminating session: None
+INFO:     127.0.0.1:49992 - "POST /mcp/ HTTP/1.1" 202 Accepted
+2026-10-19 00:16:32 | INFO     | mcp.server.streamable_http | Terminating session: None
+2026-10-19 00:16:32 | INFO     | mcp.server.lowlevel.server | Processing request of type ListToolsRequest
+INFO:     127.0.0.1:49994 - "POST /mcp/ HTTP/1.1" 200 OK
+2026-10-19 00:16:32 | INFO     | mcp.server.streamable_http | Terminating session: None
+INFO:     127.0.0.1:49995 - "HEAD /mcp/ HTTP/1.1" 200 OK
+INFO:     127.0.0.1:49996 - "POST /mcp/ HTTP/1.1" 200 OK
+2026-10-19 00:16:32 | INFO     | mcp.server.streamable_http | Terminating session: None
+INFO:     127.0.0.1:49996 - "POST /mcp/ HTTP/1.1" 202 Accepted
+2026-10-19 00:16:32 | INFO     | mcp.server.streamable_http | Terminating session: None
+2026-10-19 00:16:32 | INFO     | mcp.server.lowlevel.server | Processing request of type ListToolsRequest
+INFO:     127.0.0.1:49997 - "POST /mcp/ HTTP/1.1" 200 OK
+2026-10-19 00:16:32 | INFO     | mcp.server.streamable_http | Terminating session: None
+INFO:     127.0.0.1:49998 - "HEAD /mcp/ HTTP/1.1" 200 OK
+INFO:     127.0.0.1:49999 - "POST /mcp/ HTTP/1.1" 200 OK
+2026-10-19 00:16:33 | INFO     | mcp.server.streamable_http | Terminating session: None
+INFO:     127.0.0.1:49999 - "POST /mcp/ HTTP/1.1" 202 Accepted
+2026-10-19 00:16:33 | INFO     | mcp.server.streamable_http | Terminating session: None
+2026-10-19 00:16:33 | INFO     | mcp.server.lowlevel.server | Processing request of type ListToolsRequest
+INFO:     127.0.0.1:50160 - "POST /mcp/ HTTP/1.1" 200 OK
+2026-10-19 00:16:33 | INFO     | mcp.server.streamable_http | Terminating session: None
+INFO:     127.0.0.1:50161 - "HEAD /mcp/ HTTP/1.1" 200 OK
+INFO:     127.0.0.1:50162 - "POST /mcp/ HTTP/1.1" 200 OK
+2026-10-19 00:16:33 | INFO     | mcp.server.streamable_http | Terminating session: None
+INFO:     127.0.0.1:50162 - "POST /mcp/ HTTP/1.1" 202 Accepted
+2026-10-19 00:16:33 | INFO     | mcp.server.streamable_http | Terminating session: None
+2026-10-19 00:16:33 | INFO     | mcp.server.lowlevel.server | Processing request of type ListToolsRequest
+INFO:     127.0.0.1:50163 - "POST /mcp/ HTTP/1.1" 200 OK
+2026-10-19 00:16:33 | INFO     | mcp.server.streamable_http | Terminating session: None
+INFO:     127.0.0.1:50165 - "HEAD /mcp/ HTTP/1.1" 200 OK
+INFO:     127.0.0.1:50166 - "POST /mcp/ HTTP/1.1" 200 OK
+2026-10-19 00:16:34 | INFO     | mcp.server.streamable_http | Terminating session: None
+INFO:     127.0.0.1:50166 - "POST /mcp/ HTTP/1.1" 202 Accepted
+2026-10-19 00:16:34 | INFO     | mcp.server.streamable_http | Terminating session: None
+2026-10-19 00:16:34 | INFO     | mcp.server.lowlevel.server | Processing request of type ListToolsRequest
+INFO:     127.0.0.1:50167 - "POST /mcp/ HTTP/1.1" 200 OK
+2026-10-19 00:16:34 | INFO     | mcp.server.streamable_http | Terminating session: None
+INFO:     127.0.0.1:50168 - "HEAD /mcp/ HTTP/1.1" 200 OK
+INFO:     127.0.0.1:50169 - "POST /mcp/ HTTP/1.1" 200 OK
+2026-10-19 00:16:34 | INFO     | mcp.server.streamable_http | Terminating session: None
+INFO:     127.0.0.1:50169 - "POST /mcp/ HTTP/1.1" 202 Accepted
+2026-10-19 00:16:34 | INFO     | mcp.server.streamable_http | Terminating session: None
+2026-10-19 00:16:34 | INFO     | mcp.server.lowlevel.server | Processing request of type ListToolsRequest
+INFO:     127.0.0.1:50170 - "POST /mcp/ HTTP/1.1" 200 OK
+2026-10-19 00:16:34 | INFO     | mcp.server.streamable_http | Terminating session: None
+INFO:     127.0.0.1:50272 - "HEAD /mcp/ HTTP/1.1" 200 OK
+INFO:     127.0.0.1:50273 - "POST /mcp/ HTTP/1.1" 200 OK
+2026-10-19 00:16:35 | INFO     | mcp.server.streamable_http | Terminating session: None
+INFO:     127.0.0.1:50273 - "POST /mcp/ HTTP/1.1" 202 Accepted
+2026-10-19 00:16:35 | INFO     | mcp.server.streamable_http | Terminating session: None
+2026-10-19 00:16:35 | INFO     | mcp.server.lowlevel.server | Processing request of type ListToolsRequest
+INFO:     127.0.0.1:50274 - "POST /mcp/ HTTP/1.1" 200 OK
+2026-10-19 00:16:35 | INFO     | mcp.server.streamable_http | Terminating session: None
+INFO:     127.0.0.1:50276 - "HEAD /mcp/ HTTP/1.1" 200 OK
+INFO:     127.0.0.1:50277 - "POST /mcp/ HTTP/1.1" 200 OK
+2026-10-19 00:16:35 | INFO     | mcp.server.streamable_http | Terminating session: None
+INFO:     127.0.0.1:50277 - "POST /mcp/ HTTP/1.1" 202 Accepted
+2026-10-19 00:16:35 | INFO     | mcp.server.streamable_http | Terminating session: None
+2026-10-19 00:16:35 | INFO     | mcp.server.lowlevel.server | Processing request of type ListToolsRequest
+INFO:     127.0.0.1:50278 - "POST /mcp/ HTTP/1.1" 200 OK
+2026-10-19 00:16:35 | INFO     | mcp.server.streamable_http | Terminating session: None
+INFO:     127.0.0.1:50279 - "HEAD /mcp/ HTTP/1.1" 200 OK
+INFO:     127.0.0.1:50280 - "POST /mcp/ HTTP/1.1" 200 OK
+2026-10-19 00:16:36 | INFO     | mcp.server.streamable_http | Terminating session: None
+INFO:     127.0.0.1:50280 - "POST /mcp/ HTTP/1.1" 202 Accepted
+2026-10-19 00:16:36 | INFO     | mcp.server.streamable_http | Terminating session: None
+2026-10-19 00:16:36 | INFO     | mcp.server.lowlevel.server | Processing request of type ListToolsRequest
+INFO:     127.0.0.1:50281 - "POST /mcp/ HTTP/1.1" 200 OK
+2026-10-19 00:16:36 | INFO     | mcp.server.streamable_http | Terminating session: None
+INFO:     127.0.0.1:50282 - "HEAD /mcp/ HTTP/1.1" 200 OK
+INFO:     127.0.0.1:50283 - "POST /mcp/ HTTP/1.1" 200 OK
+2026-10-19 00:16:36 | INFO     | mcp.server.streamable_http | Terminating session: None
+INFO:     127.0.0.1:50283 - "POST /mcp/ HTTP/1.1" 202 Accepted
+2026-10-19 00:16:36 | INFO     | mcp.server.streamable_http | Terminating session: None
+2026-10-19 00:16:36 | INFO     | mcp.server.lowlevel.server | Processing request of type ListToolsRequest
+INFO:     127.0.0.1:50284 - "POST /mcp/ HTTP/1.1" 200 OK
+2026-10-19 00:16:36 | INFO     | mcp.server.streamable_http | Terminating session: None
+INFO:     127.0.0.1:50285 - "HEAD /mcp/ HTTP/1.1" 200 OK
+INFO:     127.0.0.1:50286 - "POST /mcp/ HTTP/1.1" 200 OK
+2026-10-19 00:16:37 | INFO     | mcp.server.streamable_http | Terminating session: None
+INFO:     127.0.0.1:50286 - "POST /mcp/ HTTP/1.1" 202 Accepted
+2026-10-19 00:16:37 | INFO     | mcp.server.streamable_http | Terminating session: None
+2026-10-19 00:16:37 | INFO     | mcp.server.lowlevel.server | Processing request of type ListToolsRequest
+INFO:     127.0.0.1:50287 - "POST /mcp/ HTTP/1.1" 200 OK
+2026-10-19 00:16:37 | INFO     | mcp.server.streamable_http | Terminating session: None
+INFO:     127.0.0.1:50288 - "HEAD /mcp/ HTTP/1.1" 200 OK
+INFO:     127.0.0.1:50289 - "POST /mcp/ HTTP/1.1" 200 OK
+2026-10-19 00:16:37 | INFO     | mcp.server.streamable_http | Terminating session: None
+INFO:     127.0.0.1:50289 - "POST /mcp/ HTTP/1.1" 202 Accepted
+2026-10-19 00:16:37 | INFO     | mcp.server.streamable_http | Terminating session: None
+2026-10-19 00:16:37 | INFO     | mcp.server.lowlevel.server | Processing request of type ListToolsRequest
+INFO:     127.0.0.1:50290 - "POST /mcp/ HTTP/1.1" 200 OK
+2026-10-19 00:16:37 | INFO     | mcp.server.streamable_http | Terminating session: None
+INFO:     127.0.0.1:50294 - "HEAD /mcp/ HTTP/1.1" 200 OK
+INFO:     127.0.0.1:50295 - "POST /mcp/ HTTP/1.1" 200 OK
+2026-10-19 00:16:38 | INFO     | mcp.server.streamable_http | Terminating session: None
+INFO:     127.0.0.1:50295 - "POST /mcp/ HTTP/1.1" 202 Accepted
+2026-10-19 00:16:38 | INFO     | mcp.server.streamable_http | Terminating session: None
+2026-10-19 00:16:38 | INFO     | mcp.server.lowlevel.server | Processing request of type ListToolsRequest
+INFO:     127.0.0.1:50296 - "POST /mcp/ HTTP/1.1" 200 OK
+2026-10-19 00:16:38 | INFO     | mcp.server.streamable_http | Terminating session: None
+INFO:     127.0.0.1:50297 - "HEAD /mcp/ HTTP/1.1" 200 OK
+INFO:     127.0.0.1:50298 - "POST /mcp/ HTTP/1.1" 200 OK
+2026-10-19 00:16:38 | INFO     | mcp.server.streamable_http | Terminating session: None
+INFO:     127.0.0.1:50298 - "POST /mcp/ HTTP/1.1" 202 Accepted
+2026-10-19 00:16:38 | INFO     | mcp.server.streamable_http | Terminating session: None
+2026-10-19 00:16:38 | INFO     | mcp.server.lowlevel.server | Processing request of type ListToolsRequest
+INFO:     127.0.0.1:50299 - "POST /mcp/ HTTP/1.1" 200 OK
+2026-10-19 00:16:38 | INFO     | mcp.server.streamable_http | Terminating session: None
+2026-10-19 00:16:51 | INFO     | mcp.server.lowlevel.server | Processing request of type CallToolRequest
+2026-10-19 00:16:51 | INFO     | src.hermes.mcp_server | [MCP] Tool call received: profile=aiagent-dyn-3037fb06, tool=list_directory, args={'directory_path': 'D:\\Security-logs-test\\attack-cases-benchmark\\case-6-ddos-recon-firewall-evasion\\raw-logs', 'recursive': False, 'max_depth': 2, 'max_items': 500}
+2026-10-19 00:16:51 | INFO     | src.hermes.mcp_server | [MCP] Tool 'list_directory' executed successfully: result=# Directory Listing for 'D:\Security-logs-test\attack-cases-benchmark\case-6-ddos-recon-firewall-evasion\raw-logs':
+\U0001f4c4 cisco_asa_firewall.log (5.9 KB)
+
+INFO:     127.0.0.1:57495 - "POST /mcp/ HTTP/1.1" 200 OK
+2026-10-19 00:16:51 | INFO     | mcp.server.streamable_http | Terminating session: None
+INFO:     127.0.0.1:62296 - "GET /api/schedules HTTP/1.1" 200 OK
+2026-10-19 00:16:53 | INFO     | mcp.server.lowlevel.server | Processing request of type CallToolRequest
+2026-10-19 00:16:53 | INFO     | src.hermes.mcp_server | [MCP] Tool call received: profile=aiagent-dyn-3037fb06, tool=read_file, args={'file_path': 'D:\\Security-logs-test\\attack-cases-benchmark\\case-6-ddos-recon-firewall-evasion\\raw-logs\\cisco_asa_firewall.log'}
+2026-10-19 00:16:53 | INFO     | src.hermes.mcp_server | [MCP] Tool 'read_file' executed successfully: result=# Cisco ASA 5585-X Adaptive Security Appliance Syslog
+# Hostname: asa-core-01
+# Log Format: %ASA-<Severity>-<Message_ID>: <Text>
+
+# --- BASELINE NORMA
+INFO:     127.0.0.1:57495 - "POST /mcp/ HTTP/1.1" 200 OK
+2026-10-19 00:16:53 | INFO     | mcp.server.streamable_http | Terminating session: None
+2026-10-19 00:16:53 | INFO     | httpx | HTTP Request: GET http://10.7.75.103:1234/v1/models "HTTP/1.1 200 OK"
+INFO:     127.0.0.1:65119 - "GET /health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:65119 - "GET /api/schedules HTTP/1.1" 200 OK
+INFO:     127.0.0.1:64264 - "GET /status/uaos-12fd378a5770 HTTP/1.1" 200 OK
+2026-10-19 00:16:53 | INFO     | mcp.server.lowlevel.server | Processing request of type CallToolRequest
+2026-10-19 00:16:53 | INFO     | src.hermes.mcp_server | [MCP] Tool call received: profile=aiagent-dyn-3037fb06, tool=read_file, args={'file_path': 'D:\\Security-logs-test\\attack-cases-benchmark\\case-6-ddos-recon-firewall-evasion\\raw-logs\\fortigate_utm_anomaly.log'}
+2026-10-19 00:16:54 | INFO     | src.hermes.mcp_server | [MCP] Tool 'read_file' executed successfully: result=# Fortinet FortiGate UTM Anomaly & IPS Log
+# Appliance: FGT-CORP-FW01 (FG200ETK19004812)
+# OS Version: FortiOS 7.2.5
+# Format: Key-Value Pair (KVP) RF
+INFO:     127.0.0.1:57495 - "POST /mcp/ HTTP/1.1" 200 OK
+2026-10-19 00:16:54 | INFO     | mcp.server.streamable_http | Terminating session: None
+2026-10-19 00:16:54 | INFO     | mcp.server.lowlevel.server | Processing request of type CallToolRequest
+2026-10-19 00:16:54 | INFO     | src.hermes.mcp_server | [MCP] Tool call received: profile=aiagent-dyn-3037fb06, tool=read_file, args={'file_path': 'D:\\Security-logs-test\\attack-cases-benchmark\\case-6-ddos-recon-firewall-evasion\\raw-logs\\pfsense_filterlog.csv'}
+2026-10-19 00:16:54 | INFO     | src.hermes.mcp_server | [MCP] Tool 'read_file' executed successfully: result=Rule,SubRule,Anchor,Tracker,Interface,Reason,Action,Direction,IPVersion,TOS,ECN,TTL,ID,Offset,Flags,ProtocolID,Protocol,Length,SourceIP,DestinationIP,
+INFO:     127.0.0.1:57495 - "POST /mcp/ HTTP/1.1" 200 OK
+2026-10-19 00:16:54 | INFO     | mcp.server.streamable_http | Terminating session: None
+2026-10-19 00:17:19 | INFO     | mcp.server.lowlevel.server | Processing request of type CallToolRequest
+2026-10-19 00:17:19 | INFO     | src.hermes.mcp_server | [MCP] Tool call received: profile=aiagent-dyn-fa08c9f1, tool=gather_log_evidence, args={'target_path': 'D:\\Security-logs-test\\attack-cases-benchmark\\case-6-ddos-recon-firewall-evasion\\raw-logs', 'recursive': True}
+2026-10-19 00:17:19 | INFO     | src.hermes.mcp_server | [MCP] Tool 'gather_log_evidence' executed successfully: result==== [EVIDENCE COLLECTION: D:\Security-logs-test\attack-cases-benchmark\case-6-ddos-recon-firewall-evasion\raw-logs] ===
+=== [UNIVERSAL FORENSIC LOG AU
+INFO:     127.0.0.1:65410 - "POST /mcp/ HTTP/1.1" 200 OK
+2026-10-19 00:17:19 | INFO     | mcp.server.streamable_http | Terminating session: None
+2026-10-19 00:17:19 | INFO     | mcp.server.lowlevel.server | Processing request of type CallToolRequest
+2026-10-19 00:17:19 | INFO     | src.hermes.mcp_server | [MCP] Tool call received: profile=aiagent-dyn-4d43acbd, tool=gather_log_evidence, args={'target_path': 'D:\\Security-logs-test\\attack-cases-benchmark\\case-6-ddos-recon-firewall-evasion\\raw-logs', 'max_files': 50, 'recursive': True}
+2026-10-19 00:17:19 | INFO     | src.hermes.mcp_server | [MCP] Tool 'gather_log_evidence' executed successfully: result==== [EVIDENCE COLLECTION: D:\Security-logs-test\attack-cases-benchmark\case-6-ddos-recon-firewall-evasion\raw-logs] ===
+=== [UNIVERSAL FORENSIC LOG AU
+INFO:     127.0.0.1:65411 - "POST /mcp/ HTTP/1.1" 200 OK
+2026-10-19 00:17:19 | INFO     | mcp.server.streamable_http | Terminating session: None
+2026-10-19 00:18:14 | INFO     | mcp.server.lowlevel.server | Processing request of type CallToolRequest
+2026-10-19 00:18:14 | INFO     | src.hermes.mcp_server | [MCP] Tool call received: profile=aiagent-dyn-d8f90b43, tool=analyze_incident_impact, args={'evidence_summary': 'High\u2011confidence alerts from Cisco ASA (port scans, DoS attempts, SSH brute force), FortiGate UTM (Log4j RCE attempt, SYN flood), pfSense filterlog (port scan, SMB sweep). Adversary IPs: 198.51.100.15/220/50/75, 203.0.113.88\u201192. Impact includes potential denial of service to network appliances, credential compromise attempts, exploitation of CVE\u20112021\u201144228 on FortiGate, lateral movement via SMB sweep. Affected assets: ASA firewall, FortiGate UTM, pfSense router, internal hosts behind them. Risk level: high due to confirmed malicious IPs and exploit attempt.', 'target_scope': 'D:\\Security-logs-test\\attack-cases-benchmark\\case-6-ddos-recon-firewall-evasion\\raw-logs'}
+2026-10-19 00:18:14 | INFO     | src.hermes.mcp_server | [MCP] Tool 'analyze_incident_impact' executed successfully: result==== [ENTERPRISE BLAST RADIUS & IMPACT ASSESSMENT REPORT] ===
+Incident Severity Rating   : CRITICAL
+
+1. IMPACTED INFRASTRUCTURE & TARGETED ASSETS:
+  • 
+INFO:     127.0.0.1:59566 - "POST /mcp/ HTTP/1.1" 200 OK
+2026-10-19 00:18:14 | INFO     | mcp.server.streamable_http | Terminating session: None
+2026-10-19 00:18:53 | INFO     | mcp.server.lowlevel.server | Processing request of type CallToolRequest
+2026-10-19 00:18:53 | INFO     | src.hermes.mcp_server | [MCP] Tool call received: profile=aiagent-dyn-e96b190a, tool=compress_security_timeline, args={'raw_evidence_text': 'D:\\Security-logs-test\\attack-cases-benchmark\\case-6-ddos-recon-firewall-evasion\\raw-logs', 'max_timeline_events': 20}
+2026-10-19 00:18:53 | INFO     | src.registry.tools.soc_tools | Materialized 3 evidence file(s) from 'D:\Security-logs-test\attack-cases-benchmark\case-6-ddos-recon-firewall-evasion\raw-logs' for text analysis
+2026-10-19 00:18:53 | INFO     | src.hermes.mcp_server | [MCP] Tool 'compress_security_timeline' executed successfully: result==== [COMPRESSED INCIDENT TIMELINE] === [CHRONOLOGICAL INCIDENT TIMELINE & ATTACK SEQUENCE]
+Original Evidence Context: 93 records analyzed -> Synthesiz
+INFO:     127.0.0.1:51061 - "POST /mcp/ HTTP/1.1" 200 OK
+2026-10-19 00:18:53 | INFO     | mcp.server.streamable_http | Terminating session: None
+2026-10-19 00:18:54 | INFO     | mcp.server.lowlevel.server | Processing request of type CallToolRequest
+2026-10-19 00:18:54 | INFO     | src.hermes.mcp_server | [MCP] Tool call received: profile=aiagent-dyn-e96b190a, tool=propose_containment_response, args={'target_entity': '198.51.100.15,198.51.100.220,198.51.100.50,198.51.100.75,203.0.113.88-92', 'action_type': 'block_ip', 'justification': 'Malicious traffic from known adversary IPs identified in logs; blocking prevents further reconnaissance, DoS, and exploitation attempts.', 'dry_run': True}
+2026-10-19 00:18:54 | INFO     | src.hermes.mcp_server | [MCP] Tool 'propose_containment_response' executed successfully: result==== [UNIVERSAL INCIDENT CONTAINMENT PLAYBOOK] === [INCIDENT CONTAINMENT PLAN] [PROPOSED - AWAITING OPERATOR REVIEW] ===
+Target Entity  : 198.51.100.15
+INFO:     127.0.0.1:51061 - "POST /mcp/ HTTP/1.1" 200 OK
+2026-10-19 00:18:54 | INFO     | mcp.server.streamable_http | Terminating session: None
+2026-10-19 00:19:28 | INFO     | mcp.server.lowlevel.server | Processing request of type PingRequest
+INFO:     127.0.0.1:53838 - "POST /mcp/ HTTP/1.1" 200 OK
+2026-10-19 00:19:28 | INFO     | mcp.server.streamable_http | Terminating session: None
+2026-10-19 00:19:28 | INFO     | mcp.server.lowlevel.server | Processing request of type PingRequest
+INFO:     127.0.0.1:53839 - "POST /mcp/ HTTP/1.1" 200 OK
+2026-10-19 00:19:28 | INFO     | mcp.server.streamable_http | Terminating session: None
+2026-10-19 00:19:29 | INFO     | mcp.server.lowlevel.server | Processing request of type PingRequest
+INFO:     127.0.0.1:53840 - "POST /mcp/ HTTP/1.1" 200 OK
+2026-10-19 00:19:29 | INFO     | mcp.server.streamable_http | Terminating session: None
+2026-10-19 00:19:29 | INFO     | mcp.server.lowlevel.server | Processing request of type PingRequest
+INFO:     127.0.0.1:53844 - "POST /mcp/ HTTP/1.1" 200 OK
+2026-10-19 00:19:29 | INFO     | mcp.server.streamable_http | Terminating session: None
+2026-10-19 00:19:30 | INFO     | mcp.server.lowlevel.server | Processing request of type PingRequest
+INFO:     127.0.0.1:53846 - "POST /mcp/ HTTP/1.1" 200 OK
+2026-10-19 00:19:30 | INFO     | mcp.server.streamable_http | Terminating session: None
+2026-10-19 00:19:30 | INFO     | mcp.server.lowlevel.server | Processing request of type PingRequest
+INFO:     127.0.0.1:53847 - "POST /mcp/ HTTP/1.1" 200 OK
+2026-10-19 00:19:30 | INFO     | mcp.server.streamable_http | Terminating session: None
+2026-10-19 00:19:31 | INFO     | mcp.server.lowlevel.server | Processing request of type PingRequest
+INFO:     127.0.0.1:53848 - "POST /mcp/ HTTP/1.1" 200 OK
+2026-10-19 00:19:31 | INFO     | mcp.server.streamable_http | Terminating session: None
+2026-10-19 00:19:31 | INFO     | mcp.server.lowlevel.server | Processing request of type PingRequest
+INFO:     127.0.0.1:53858 - "POST /mcp/ HTTP/1.1" 200 OK
+2026-10-19 00:19:31 | INFO     | mcp.server.streamable_http | Terminating session: None
+2026-10-19 00:19:32 | INFO     | mcp.server.lowlevel.server | Processing request of type PingRequest
+INFO:     127.0.0.1:53859 - "POST /mcp/ HTTP/1.1" 200 OK
+2026-10-19 00:19:32 | INFO     | mcp.server.streamable_http | Terminating session: None
+2026-10-19 00:19:32 | INFO     | mcp.server.lowlevel.server | Processing request of type PingRequest
+INFO:     127.0.0.1:53860 - "POST /mcp/ HTTP/1.1" 200 OK
+2026-10-19 00:19:32 | INFO     | mcp.server.streamable_http | Terminating session: None
+2026-10-19 00:19:32 | INFO     | mcp.server.lowlevel.server | Processing request of type PingRequest
+INFO:     127.0.0.1:53861 - "POST /mcp/ HTTP/1.1" 200 OK
+2026-10-19 00:19:32 | INFO     | mcp.server.streamable_http | Terminating session: None
+2026-10-19 00:19:33 | INFO     | mcp.server.lowlevel.server | Processing request of type PingRequest
+INFO:     127.0.0.1:53862 - "POST /mcp/ HTTP/1.1" 200 OK
+2026-10-19 00:19:33 | INFO     | mcp.server.streamable_http | Terminating session: None
+2026-10-19 00:19:33 | INFO     | mcp.server.lowlevel.server | Processing request of type PingRequest
+INFO:     127.0.0.1:53863 - "POST /mcp/ HTTP/1.1" 200 OK
+2026-10-19 00:19:33 | INFO     | mcp.server.streamable_http | Terminating session: None
+2026-10-19 00:19:34 | INFO     | mcp.server.lowlevel.server | Processing request of type PingRequest
+INFO:     127.0.0.1:53864 - "POST /mcp/ HTTP/1.1" 200 OK
+2026-10-19 00:19:34 | INFO     | mcp.server.streamable_http | Terminating session: None
+2026-10-19 00:19:34 | INFO     | mcp.server.lowlevel.server | Processing request of type PingRequest
+INFO:     127.0.0.1:53865 - "POST /mcp/ HTTP/1.1" 200 OK
+2026-10-19 00:19:34 | INFO     | mcp.server.streamable_http | Terminating session: None
+2026-10-19 00:19:35 | INFO     | mcp.server.lowlevel.server | Processing request of type PingRequest
+INFO:     127.0.0.1:53866 - "POST /mcp/ HTTP/1.1" 200 OK
+2026-10-19 00:19:35 | INFO     | mcp.server.streamable_http | Terminating session: None
+2026-10-19 00:19:35 | INFO     | mcp.server.lowlevel.server | Processing request of type PingRequest
+INFO:     127.0.0.1:53867 - "POST /mcp/ HTTP/1.1" 200 OK
+2026-10-19 00:19:35 | INFO     | mcp.server.streamable_http | Terminating session: None
+2026-10-19 00:19:36 | INFO     | mcp.server.lowlevel.server | Processing request of type PingRequest
+INFO:     127.0.0.1:53868 - "POST /mcp/ HTTP/1.1" 200 OK
+2026-10-19 00:19:36 | INFO     | mcp.server.streamable_http | Terminating session: None
+2026-10-19 00:19:36 | INFO     | mcp.server.lowlevel.server | Processing request of type PingRequest
+INFO:     127.0.0.1:53869 - "POST /mcp/ HTTP/1.1" 200 OK
+2026-10-19 00:19:36 | INFO     | mcp.server.streamable_http | Terminating session: None
+2026-10-19 00:19:37 | INFO     | mcp.server.lowlevel.server | Processing request of type PingRequest
+INFO:     127.0.0.1:53870 - "POST /mcp/ HTTP/1.1" 200 OK
+2026-10-19 00:19:37 | INFO     | mcp.server.streamable_http | Terminating session: None
+2026-10-19 00:19:37 | INFO     | mcp.server.lowlevel.server | Processing request of type PingRequest
+INFO:     127.0.0.1:53871 - "POST /mcp/ HTTP/1.1" 200 OK
+2026-10-19 00:19:37 | INFO     | mcp.server.streamable_http | Terminating session: None
+2026-10-19 00:19:38 | INFO     | mcp.server.lowlevel.server | Processing request of type PingRequest
+INFO:     127.0.0.1:53873 - "POST /mcp/ HTTP/1.1" 200 OK
+2026-10-19 00:19:38 | INFO     | mcp.server.streamable_http | Terminating session: None
+2026-10-19 00:19:39 | INFO     | mcp.server.lowlevel.server | Processing request of type PingRequest
+INFO:     127.0.0.1:53151 - "POST /mcp/ HTTP/1.1" 200 OK
+2026-10-19 00:19:39 | INFO     | mcp.server.streamable_http | Terminating session: None
+INFO:     127.0.0.1:57845 - "GET /api/schedules HTTP/1.1" 200 OK
+2026-10-19 00:21:23 | INFO     | httpx | HTTP Request: GET http://10.7.75.103:1234/v1/models "HTTP/1.1 200 OK"
+INFO:     127.0.0.1:61549 - "GET /health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:61549 - "GET /api/schedules HTTP/1.1" 200 OK
+INFO:     127.0.0.1:50451 - "GET /status/uaos-12fd378a5770 HTTP/1.1" 200 OK
+2026-10-19 00:22:28 | INFO     | mcp.server.lowlevel.server | Processing request of type PingRequest
+INFO:     127.0.0.1:63722 - "POST /mcp/ HTTP/1.1" 200 OK
+2026-10-19 00:22:28 | INFO     | mcp.server.streamable_http | Terminating session: None
+2026-10-19 00:22:28 | INFO     | mcp.server.lowlevel.server | Processing request of type PingRequest
+INFO:     127.0.0.1:64201 - "POST /mcp/ HTTP/1.1" 200 OK
+2026-10-19 00:22:28 | INFO     | mcp.server.streamable_http | Terminating session: None
+2026-10-19 00:22:29 | INFO     | mcp.server.lowlevel.server | Processing request of type PingRequest
+INFO:     127.0.0.1:64202 - "POST /mcp/ HTTP/1.1" 200 OK
+2026-10-19 00:22:29 | INFO     | mcp.server.streamable_http | Terminating session: None
+2026-10-19 00:22:29 | INFO     | mcp.server.lowlevel.server | Processing request of type PingRequest
+INFO:     127.0.0.1:64203 - "POST /mcp/ HTTP/1.1" 200 OK
+2026-10-19 00:22:29 | INFO     | mcp.server.streamable_http | Terminating session: None
+2026-10-19 00:22:30 | INFO     | mcp.server.lowlevel.server | Processing request of type PingRequest
+INFO:     127.0.0.1:64204 - "POST /mcp/ HTTP/1.1" 200 OK
+2026-10-19 00:22:30 | INFO     | mcp.server.streamable_http | Terminating session: None
+2026-10-19 00:22:30 | INFO     | mcp.server.lowlevel.server | Processing request of type PingRequest
+INFO:     127.0.0.1:64206 - "POST /mcp/ HTTP/1.1" 200 OK
+2026-10-19 00:22:30 | INFO     | mcp.server.streamable_http | Terminating session: None
+2026-10-19 00:22:31 | INFO     | mcp.server.lowlevel.server | Processing request of type PingRequest
+INFO:     127.0.0.1:64207 - "POST /mcp/ HTTP/1.1" 200 OK
+2026-10-19 00:22:31 | INFO     | mcp.server.streamable_http | Terminating session: None
+2026-10-19 00:22:31 | INFO     | mcp.server.lowlevel.server | Processing request of type PingRequest
+INFO:     127.0.0.1:64208 - "POST /mcp/ HTTP/1.1" 200 OK
+2026-10-19 00:22:31 | INFO     | mcp.server.streamable_http | Terminating session: None
+2026-10-19 00:22:32 | INFO     | mcp.server.lowlevel.server | Processing request of type PingRequest
+INFO:     127.0.0.1:64209 - "POST /mcp/ HTTP/1.1" 200 OK
+2026-10-19 00:22:32 | INFO     | mcp.server.streamable_http | Terminating session: None
+2026-10-19 00:22:32 | INFO     | mcp.server.lowlevel.server | Processing request of type PingRequest
+INFO:     127.0.0.1:64210 - "POST /mcp/ HTTP/1.1" 200 OK
+2026-10-19 00:22:32 | INFO     | mcp.server.streamable_http | Terminating session: None
+2026-10-19 00:22:32 | INFO     | mcp.server.lowlevel.server | Processing request of type PingRequest
+INFO:     127.0.0.1:64211 - "POST /mcp/ HTTP/1.1" 200 OK
+2026-10-19 00:22:32 | INFO     | mcp.server.streamable_http | Terminating session: None
+2026-10-19 00:22:33 | INFO     | mcp.server.lowlevel.server | Processing request of type PingRequest
+INFO:     127.0.0.1:64212 - "POST /mcp/ HTTP/1.1" 200 OK
+2026-10-19 00:22:33 | INFO     | mcp.server.streamable_http | Terminating session: None
+2026-10-19 00:22:33 | INFO     | mcp.server.lowlevel.server | Processing request of type PingRequest
+INFO:     127.0.0.1:64213 - "POST /mcp/ HTTP/1.1" 200 OK
+2026-10-19 00:22:33 | INFO     | mcp.server.streamable_http | Terminating session: None
+2026-10-19 00:22:34 | INFO     | mcp.server.lowlevel.server | Processing request of type PingRequest
+INFO:     127.0.0.1:64214 - "POST /mcp/ HTTP/1.1" 200 OK
+2026-10-19 00:22:34 | INFO     | mcp.server.streamable_http | Terminating session: None
+2026-10-19 00:22:34 | INFO     | mcp.server.lowlevel.server | Processing request of type PingRequest
+INFO:     127.0.0.1:64215 - "POST /mcp/ HTTP/1.1" 200 OK
+2026-10-19 00:22:34 | INFO     | mcp.server.streamable_http | Terminating session: None
+2026-10-19 00:22:35 | INFO     | mcp.server.lowlevel.server | Processing request of type PingRequest
+INFO:     127.0.0.1:64216 - "POST /mcp/ HTTP/1.1" 200 OK
+2026-10-19 00:22:35 | INFO     | mcp.server.streamable_http | Terminating session: None
+2026-10-19 00:22:36 | INFO     | mcp.server.lowlevel.server | Processing request of type PingRequest
+INFO:     127.0.0.1:64217 - "POST /mcp/ HTTP/1.1" 200 OK
+2026-10-19 00:22:36 | INFO     | mcp.server.streamable_http | Terminating session: None
+2026-10-19 00:22:36 | INFO     | mcp.server.lowlevel.server | Processing request of type PingRequest
+INFO:     127.0.0.1:64218 - "POST /mcp/ HTTP/1.1" 200 OK
+2026-10-19 00:22:36 | INFO     | mcp.server.streamable_http | Terminating session: None
+2026-10-19 00:22:36 | INFO     | mcp.server.lowlevel.server | Processing request of type PingRequest
+INFO:     127.0.0.1:64219 - "POST /mcp/ HTTP/1.1" 200 OK
+2026-10-19 00:22:36 | INFO     | mcp.server.streamable_http | Terminating session: None
+2026-10-19 00:22:37 | INFO     | mcp.server.lowlevel.server | Processing request of type PingRequest
+INFO:     127.0.0.1:64220 - "POST /mcp/ HTTP/1.1" 200 OK
+2026-10-19 00:22:37 | INFO     | mcp.server.streamable_http | Terminating session: None
+2026-10-19 00:22:37 | INFO     | mcp.server.lowlevel.server | Processing request of type PingRequest
+INFO:     127.0.0.1:64223 - "POST /mcp/ HTTP/1.1" 200 OK
+2026-10-19 00:22:37 | INFO     | mcp.server.streamable_http | Terminating session: None
+2026-10-19 00:22:38 | INFO     | mcp.server.lowlevel.server | Processing request of type PingRequest
+INFO:     127.0.0.1:64224 - "POST /mcp/ HTTP/1.1" 200 OK
+2026-10-19 00:22:38 | INFO     | mcp.server.streamable_http | Terminating session: None
+2026-10-19 00:22:39 | INFO     | mcp.server.lowlevel.server | Processing request of type PingRequest
+INFO:     127.0.0.1:64225 - "POST /mcp/ HTTP/1.1" 200 OK
+2026-10-19 00:22:39 | INFO     | mcp.server.streamable_http | Terminating session: None
+INFO:     127.0.0.1:49374 - "GET /api/schedules HTTP/1.1" 200 OK
+2026-10-19 00:22:44 | INFO     | httpx | HTTP Request: GET http://10.7.75.103:1234/v1/models "HTTP/1.1 200 OK"
+INFO:     127.0.0.1:52207 - "GET /health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:52207 - "GET /api/schedules HTTP/1.1" 200 OK
+INFO:     127.0.0.1:60242 - "GET /api/schedules HTTP/1.1" 200 OK
+2026-10-19 00:23:03 | INFO     | httpx | HTTP Request: GET http://10.7.75.103:1234/v1/models "HTTP/1.1 200 OK"
+INFO:     127.0.0.1:55367 - "GET /health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:55367 - "GET /api/schedules HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57510 - "GET /api/schedules HTTP/1.1" 200 OK
+2026-10-19 00:23:12 | INFO     | httpx | HTTP Request: GET http://10.7.75.103:1234/v1/models "HTTP/1.1 200 OK"
+INFO:     127.0.0.1:56659 - "GET /health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:56659 - "GET /api/schedules HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57510 - "GET /api/schedules HTTP/1.1" 200 OK
+2026-10-19 00:23:14 | INFO     | httpx | HTTP Request: GET http://10.7.75.103:1234/v1/models "HTTP/1.1 200 OK"
+INFO:     127.0.0.1:56659 - "GET /health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:56659 - "GET /api/schedules HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57510 - "GET /api/schedules HTTP/1.1" 200 OK
+2026-10-19 00:23:16 | INFO     | httpx | HTTP Request: GET http://10.7.75.103:1234/v1/models "HTTP/1.1 200 OK"
+INFO:     127.0.0.1:56659 - "GET /health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:56659 - "GET /api/schedules HTTP/1.1" 200 OK
+2026-10-19 00:23:25 | INFO     | src.api.main | Solving (async via Temporal): workflow=uaos-f4314201a0dd, query=Investigate critical security logs in D:\Security-logs-test\attack-cases-benchmark\case-1-apt-enterp, agent_id=default, custom_dag=no, resilience=standard
+INFO:     127.0.0.1:53579 - "POST /solve/async HTTP/1.1" 200 OK
+INFO:     127.0.0.1:53579 - "GET /stream/uaos-f4314201a0dd HTTP/1.1" 200 OK
+2026-10-19 00:23:26 | INFO     | httpx | HTTP Request: GET http://10.7.75.103:1234/v1/models "HTTP/1.1 200 OK"
+INFO:     127.0.0.1:64763 - "GET /health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:64763 - "GET /api/schedules HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57784 - "GET /status/uaos-f4314201a0dd HTTP/1.1" 200 OK
+2026-10-19 00:23:36 | INFO     | httpx | HTTP Request: GET http://10.7.75.103:1234/v1/models "HTTP/1.1 200 OK"
+INFO:     127.0.0.1:57784 - "GET /health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57784 - "GET /api/schedules HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57784 - "GET /status/uaos-f4314201a0dd HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57784 - "GET /status/uaos-f4314201a0dd HTTP/1.1" 200 OK
+2026-10-19 00:23:46 | INFO     | httpx | HTTP Request: GET http://10.7.75.103:1234/v1/models "HTTP/1.1 200 OK"
+INFO:     127.0.0.1:57784 - "GET /health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57784 - "GET /api/schedules HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57784 - "GET /status/uaos-f4314201a0dd HTTP/1.1" 200 OK
+INFO:     127.0.0.1:49302 - "GET /status/uaos-f4314201a0dd HTTP/1.1" 200 OK
+2026-10-19 00:23:56 | INFO     | httpx | HTTP Request: GET http://10.7.75.103:1234/v1/models "HTTP/1.1 200 OK"
+INFO:     127.0.0.1:49302 - "GET /health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:49302 - "GET /api/schedules HTTP/1.1" 200 OK
+INFO:     127.0.0.1:49302 - "GET /status/uaos-f4314201a0dd HTTP/1.1" 200 OK
+INFO:     127.0.0.1:62816 - "GET /status/uaos-f4314201a0dd HTTP/1.1" 200 OK
+2026-10-19 00:24:06 | INFO     | httpx | HTTP Request: GET http://10.7.75.103:1234/v1/models "HTTP/1.1 200 OK"
+INFO:     127.0.0.1:62816 - "GET /health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:62816 - "GET /api/schedules HTTP/1.1" 200 OK
+INFO:     127.0.0.1:62816 - "GET /status/uaos-f4314201a0dd HTTP/1.1" 200 OK
+INFO:     127.0.0.1:60647 - "GET /status/uaos-f4314201a0dd HTTP/1.1" 200 OK
+2026-10-19 00:24:16 | INFO     | httpx | HTTP Request: GET http://10.7.75.103:1234/v1/models "HTTP/1.1 200 OK"
+INFO:     127.0.0.1:60647 - "GET /health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:60647 - "GET /api/schedules HTTP/1.1" 200 OK
+WARNING:  WatchFiles detected changes in 'src\hermes\profiles.py'. Reloading...
+ INFO:     Shutting down
+INFO:     Waiting for connections to close. (CTRL+C to force quit)
+INFO:     Finished server process [28676]
+2026-10-19 00:30:27 | INFO     | mcp.server.streamable_http_manager | StreamableHTTP session manager shutting down
+ERROR:    Traceback (most recent call last):
+  File "D:\projects\aiagent\.venv\Lib\site-packages\uvicorn\_compat.py", line 30, in asyncio_run
+    return runner.run(main)
+           ^^^^^^^^^^^^^^^^
+  File "C:\Users\Karim ElWaly\AppData\Local\Programs\Python\Python311\Lib\asyncio\runners.py", line 118, in run
+    return self._loop.run_until_complete(task)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\Karim ElWaly\AppData\Local\Programs\Python\Python311\Lib\asyncio\base_events.py", line 641, in run_until_complete
+    self.run_forever()
+  File "C:\Users\Karim ElWaly\AppData\Local\Programs\Python\Python311\Lib\asyncio\base_events.py", line 608, in run_forever
+    self._run_once()
+  File "C:\Users\Karim ElWaly\AppData\Local\Programs\Python\Python311\Lib\asyncio\base_events.py", line 1936, in _run_once
+    handle._run()
+  File "C:\Users\Karim ElWaly\AppData\Local\Programs\Python\Python311\Lib\asyncio\events.py", line 84, in _run
+    self._context.run(self._callback, *self._args)
+  File "D:\projects\aiagent\.venv\Lib\site-packages\uvicorn\server.py", line 89, in serve
+    with self.capture_signals():
+  File "C:\Users\Karim ElWaly\AppData\Local\Programs\Python\Python311\Lib\contextlib.py", line 144, in __exit__
+    next(self.gen)
+  File "D:\projects\aiagent\.venv\Lib\site-packages\uvicorn\server.py", line 349, in capture_signals
+    signal.raise_signal(captured_signal)
+  File "C:\Users\Karim ElWaly\AppData\Local\Programs\Python\Python311\Lib\asyncio\runners.py", line 157, in _on_sigint
+    raise KeyboardInterrupt()
+KeyboardInterrupt
+
+During handling of the above exception, another exception occurred:
+
+Traceback (most recent call last):
+  File "D:\projects\aiagent\.venv\Lib\site-packages\starlette\routing.py", line 655, in lifespan
+    await receive()
+  File "D:\projects\aiagent\.venv\Lib\site-packages\uvicorn\lifespan\on.py", line 137, in receive
+    return await self.receive_queue.get()
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\Karim ElWaly\AppData\Local\Programs\Python\Python311\Lib\asyncio\queues.py", line 158, in get
+    await getter
+asyncio.exceptions.CancelledError
+
+ERROR:    Exception in ASGI application
+Traceback (most recent call last):
+  File "D:\projects\aiagent\.venv\Lib\site-packages\uvicorn\_compat.py", line 30, in asyncio_run
+    return runner.run(main)
+           ^^^^^^^^^^^^^^^^
+  File "C:\Users\Karim ElWaly\AppData\Local\Programs\Python\Python311\Lib\asyncio\runners.py", line 118, in run
+    return self._loop.run_until_complete(task)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\Karim ElWaly\AppData\Local\Programs\Python\Python311\Lib\asyncio\base_events.py", line 641, in run_until_complete
+    self.run_forever()
+  File "C:\Users\Karim ElWaly\AppData\Local\Programs\Python\Python311\Lib\asyncio\base_events.py", line 608, in run_forever
+    self._run_once()
+  File "C:\Users\Karim ElWaly\AppData\Local\Programs\Python\Python311\Lib\asyncio\base_events.py", line 1936, in _run_once
+    handle._run()
+  File "C:\Users\Karim ElWaly\AppData\Local\Programs\Python\Python311\Lib\asyncio\events.py", line 84, in _run
+    self._context.run(self._callback, *self._args)
+  File "D:\projects\aiagent\.venv\Lib\site-packages\uvicorn\server.py", line 89, in serve
+    with self.capture_signals():
+  File "C:\Users\Karim ElWaly\AppData\Local\Programs\Python\Python311\Lib\contextlib.py", line 144, in __exit__
+    next(self.gen)
+  File "D:\projects\aiagent\.venv\Lib\site-packages\uvicorn\server.py", line 349, in capture_signals
+    signal.raise_signal(captured_signal)
+  File "C:\Users\Karim ElWaly\AppData\Local\Programs\Python\Python311\Lib\asyncio\runners.py", line 157, in _on_sigint
+    raise KeyboardInterrupt()
+KeyboardInterrupt
+
+During handling of the above exception, another exception occurred:
+
+Traceback (most recent call last):
+  File "D:\projects\aiagent\.venv\Lib\site-packages\uvicorn\protocols\http\httptools_impl.py", line 422, in run_asgi
+    result = await app(  # type: ignore[func-returns-value]
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "D:\projects\aiagent\.venv\Lib\site-packages\uvicorn\middleware\proxy_headers.py", line 63, in __call__
+    return await self.app(scope, receive, send)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "D:\projects\aiagent\.venv\Lib\site-packages\fastapi\applications.py", line 1163, in __call__
+    await super().__call__(scope, receive, send)
+  File "D:\projects\aiagent\.venv\Lib\site-packages\starlette\applications.py", line 96, in __call__
+    await self.middleware_stack(scope, receive, send)
+  File "D:\projects\aiagent\.venv\Lib\site-packages\starlette\middleware\errors.py", line 164, in __call__
+    await self.app(scope, receive, _send)
+  File "D:\projects\aiagent\.venv\Lib\site-packages\starlette\middleware\cors.py", line 88, in __call__
+    await self.app(scope, receive, send)
+  File "D:\projects\aiagent\.venv\Lib\site-packages\starlette\middleware\exceptions.py", line 63, in __call__
+    await wrap_app_handling_exceptions(self.app, conn)(scope, receive, send)
+  File "D:\projects\aiagent\.venv\Lib\site-packages\starlette\_exception_handler.py", line 42, in wrapped_app
+    await app(scope, receive, sender)
+  File "D:\projects\aiagent\.venv\Lib\site-packages\fastapi\middleware\asyncexitstack.py", line 18, in __call__
+    await self.app(scope, receive, send)
+  File "D:\projects\aiagent\.venv\Lib\site-packages\starlette\routing.py", line 670, in __call__
+    await self.middleware_stack(scope, receive, send)
+  File "D:\projects\aiagent\.venv\Lib\site-packages\fastapi\routing.py", line 2734, in app
+    await route.handle(scope, receive, send)
+  File "D:\projects\aiagent\.venv\Lib\site-packages\fastapi\routing.py", line 1281, in handle
+    await super().handle(scope, receive, send)
+  File "D:\projects\aiagent\.venv\Lib\site-packages\starlette\routing.py", line 280, in handle
+    await self.app(scope, receive, send)
+  File "D:\projects\aiagent\.venv\Lib\site-packages\fastapi\routing.py", line 158, in app
+    await wrap_app_handling_exceptions(app, request)(scope, receive, send)
+  File "D:\projects\aiagent\.venv\Lib\site-packages\starlette\_exception_handler.py", line 42, in wrapped_app
+    await app(scope, receive, sender)
+  File "D:\projects\aiagent\.venv\Lib\site-packages\fastapi\routing.py", line 145, in app
+    await response(scope, receive, send)
+  File "D:\projects\aiagent\.venv\Lib\site-packages\starlette\responses.py", line 280, in __call__
+    await wrap(partial(self.listen_for_disconnect, receive))
+  File "D:\projects\aiagent\.venv\Lib\site-packages\starlette\responses.py", line 276, in wrap
+    await func()
+  File "D:\projects\aiagent\.venv\Lib\site-packages\starlette\responses.py", line 244, in listen_for_disconnect
+    message = await receive()
+              ^^^^^^^^^^^^^^^
+  File "D:\projects\aiagent\.venv\Lib\site-packages\uvicorn\protocols\http\httptools_impl.py", line 574, in receive
+    await self.message_event.wait()
+  File "C:\Users\Karim ElWaly\AppData\Local\Programs\Python\Python311\Lib\asyncio\locks.py", line 213, in wait
+    await fut
+asyncio.exceptions.CancelledError
+INFO:     Will watch for changes in these directories: ['D:\\projects\\aiagent\\src']
+INFO:     Uvicorn running on http://127.0.0.1:8000 (Press CTRL+C to quit)
+INFO:     Started reloader process [35140] using WatchFiles
+INFO:     Started server process [5880]
+INFO:     Waiting for application startup.
+2026-10-19 00:30:35 | INFO     | src.registry.tool_registry | Registered tool 'python_executor_v1' (native) providing skills: ['code_execution', 'data_analysis', 'math_computation', 'data_processing']
+2026-10-19 00:30:35 | INFO     | src.registry.tool_registry | Registered tool 'file_deleter_v1' (native) providing skills: ['file_deletion']
+2026-10-19 00:30:35 | INFO     | src.registry.tool_registry | Registered tool 'disk_usage_v1' (native) providing skills: ['disk_usage', 'disk_space', 'storage_report', 'filesystem_capacity']
+2026-10-19 00:30:35 | INFO     | src.registry.tool_registry | Registered tool 'dir_lister_v1' (native) providing skills: ['directory_listing', 'file_discovery', 'filesystem_inspection', 'file_enumeration', 'recursive_file_listing', 'file_tree', 'data_processing']
+2026-10-19 00:30:35 | INFO     | src.registry.tool_registry | Registered tool 'file_reader_v1' (native) providing skills: ['file_reading']
+2026-10-19 00:30:35 | INFO     | src.registry.tool_registry | Registered tool 'file_writer_v1' (native) providing skills: ['file_writing']
+2026-10-19 00:30:35 | INFO     | src.registry.tool_registry | Registered tool 'hermes_clarify_v1' (hermes) providing skills: ['clarify', 'clarify_question', 'operator_inquiry', 'hitl_dialog']
+2026-10-19 00:30:35 | INFO     | src.registry.tool_registry | Registered tool 'hermes_cronjob_manage_v1' (hermes) providing skills: ['cronjob_manage', 'cronjob', 'schedule_automation', 'recurring_workflows']
+2026-10-19 00:30:35 | INFO     | src.registry.tool_registry | Registered tool 'hermes_delegate_task_v1' (hermes) providing skills: ['delegate_task', 'subagent_delegation', 'parallel_execution', 'worker_spawn']
+2026-10-19 00:30:35 | INFO     | src.registry.tool_registry | Registered tool 'hermes_image_generate_v1' (hermes) providing skills: ['image_generate', 'image_generation', 'diagram_generation', 'visual_design']
+2026-10-19 00:30:35 | INFO     | src.registry.tool_registry | Registered tool 'hermes_memory_v1' (hermes) providing skills: ['memory', 'memory_manager', 'knowledge_persistence', 'user_profile']
+2026-10-19 00:30:35 | INFO     | src.registry.tool_registry | Registered tool 'hermes_patch_file_v1' (hermes) providing skills: ['patch_file', 'patch', 'surgical_edit', 'code_patching']
+2026-10-19 00:30:35 | INFO     | src.registry.tool_registry | Registered tool 'hermes_session_search_v1' (hermes) providing skills: ['session_search', 'historical_recall', 'conversation_search']
+2026-10-19 00:30:35 | INFO     | src.registry.tool_registry | Registered tool 'hermes_todo_v1' (hermes) providing skills: ['todo_list', 'task_planning', 'milestone_tracking']
+2026-10-19 00:30:35 | INFO     | src.registry.tool_registry | Registered tool 'hermes_tts_speak_v1' (hermes) providing skills: ['tts_speak', 'text_to_speech', 'voice_synthesis', 'audio_narration']
+2026-10-19 00:30:35 | INFO     | src.registry.tool_registry | Registered tool 'hermes_vision_analyze_v1' (hermes) providing skills: ['vision_analyze', 'image_inspection', 'ocr', 'visual_reasoning']
+2026-10-19 00:30:35 | INFO     | src.registry.tool_registry | Registered tool 'hermes_web_extract_v1' (hermes) providing skills: ['web_extract', 'web_scraping', 'article_reading', 'content_extraction']
+2026-10-19 00:30:35 | INFO     | src.registry.tool_registry | Registered tool 'soc_analyze_impact' (native) providing skills: ['impact_analysis', 'blast_radius', 'asset_mapping', 'lateral_movement']
+2026-10-19 00:30:35 | INFO     | src.registry.tool_registry | Registered tool 'soc_compress_timeline' (native) providing skills: ['log_compression', 'timeline_synthesis', 'context_compression', 'summarization', 'incident_compression', 'mitre_mapping', 'mitre_rca']
+2026-10-19 00:30:35 | INFO     | src.registry.tool_registry | Registered tool 'soc_gather_evidence' (native) providing skills: ['evidence_gathering', 'log_forensics', 'artifact_inspection', 'file_reading', 'directory_listing']
+2026-10-19 00:30:35 | INFO     | src.registry.tool_registry | Registered tool 'soc_lookup_threat' (native) providing skills: ['threat_discovery', 'threat_intel', 'ioc_lookup', 'reputation_check']
+2026-10-19 00:30:35 | INFO     | src.registry.tool_registry | Registered tool 'soc_propose_containment' (native) providing skills: ['incident_response', 'containment_playbook', 'remediation', 'firewall_rule', 'containment_actions', 'containment_rules', 'response_action']
+2026-10-19 00:30:35 | INFO     | src.registry.tool_registry | Registered tool 'soc_triage_alert' (native) providing skills: ['triage', 'alert_triage', 'ioc_extraction', 'security_audit', 'general_reasoning']
+2026-10-19 00:30:35 | INFO     | src.registry.tool_registry | Registered tool 'system_command_v1' (native) providing skills: ['shell_command', 'system_command', 'command_execution', 'powershell_execution', 'system_inspection', 'terminal_command']
+2026-10-19 00:30:35 | INFO     | src.registry.tool_registry | Registered tool 'system_info_v1' (native) providing skills: ['system_info', 'host_info', 'device_info', 'hostname_lookup', 'system_inspection', 'environment_query']
+2026-10-19 00:30:35 | INFO     | src.registry.tool_registry | Registered tool 'web_search_v1' (native) providing skills: ['web_search', 'research', 'fact_checking']
+2026-10-19 00:30:35 | INFO     | src.registry.auto_discover | Auto-discovery built-ins complete: 26 tools registered, 0 errors
+2026-10-19 00:30:35 | INFO     | src.registry.tool_registry | Registered tool 'verify_ssl_cert_v1' (native) providing skills: ['ssl_verification', 'security_audit']
+2026-10-19 00:30:35 | INFO     | src.registry.auto_discover | Discovered custom tool 'verify_ssl_cert' from ssl_verifier.py
+2026-10-19 00:30:35 | INFO     | src.registry.tool_registry | Registered tool 'summarize_to_presentation_v1' (native) providing skills: ['summarization']
+2026-10-19 00:30:35 | INFO     | src.registry.auto_discover | Discovered custom tool 'summarize_to_presentation' from summarize_to_presentation.py
+2026-10-19 00:30:35 | INFO     | src.registry.tool_registry | Registered tool 'skill_airtable_crm_v1' (skill) providing skills: ['airtable_crm', 'crm_management', 'database_query', 'records']
+2026-10-19 00:30:35 | INFO     | src.registry.hermes.hermes_loader | Discovered Hermes skill 'airtable_crm' from airtable_crm.md
+2026-10-19 00:30:35 | INFO     | src.registry.tool_registry | Registered tool 'skill_apple_notes_v1' (skill) providing skills: ['apple_notes', 'knowledge_base', 'markdown_notes', 'note_taking']
+2026-10-19 00:30:35 | INFO     | src.registry.hermes.hermes_loader | Discovered Hermes skill 'apple_notes' from apple_notes.md
+2026-10-19 00:30:35 | INFO     | src.registry.tool_registry | Registered tool 'skill_apple_reminders_v1' (skill) providing skills: ['apple_reminders', 'deadline_tracking', 'reminder_alerts', 'task_scheduling']
+2026-10-19 00:30:35 | INFO     | src.registry.hermes.hermes_loader | Discovered Hermes skill 'apple_reminders' from apple_reminders.md
+2026-10-19 00:30:35 | INFO     | src.registry.tool_registry | Registered tool 'skill_architecture_diagram_v1' (skill) providing skills: ['architecture_diagram', 'cloud_architecture', 'diagram', 'svg']
+2026-10-19 00:30:35 | INFO     | src.registry.hermes.hermes_loader | Discovered Hermes skill 'architecture_diagram' from architecture_diagram.md
+2026-10-19 00:30:35 | INFO     | src.registry.tool_registry | Registered tool 'skill_arxiv_research_v1' (skill) providing skills: ['arxiv_research', 'literature_review', 'ml_research', 'paper_search']
+2026-10-19 00:30:35 | INFO     | src.registry.hermes.hermes_loader | Discovered Hermes skill 'arxiv_research' from arxiv_research.md
+2026-10-19 00:30:35 | INFO     | src.registry.tool_registry | Registered tool 'skill_ascii_art_v1' (skill) providing skills: ['ansi_banners', 'ascii_art', 'cli_typography', 'terminal_graphics']
+2026-10-19 00:30:35 | INFO     | src.registry.hermes.hermes_loader | Discovered Hermes skill 'ascii_art' from ascii_art.md
+2026-10-19 00:30:35 | INFO     | src.registry.tool_registry | Registered tool 'skill_claude_code_v1' (skill) providing skills: ['claude_code', 'codebase_search', 'pair_programming', 'test_driven_dev']
+2026-10-19 00:30:35 | INFO     | src.registry.hermes.hermes_loader | Discovered Hermes skill 'claude_code' from claude_code.md
+2026-10-19 00:30:35 | INFO     | src.registry.tool_registry | Registered tool 'skill_computer_use_v1' (skill) providing skills: ['computer_use', 'desktop_control', 'gui_automation', 'screenshot_grounding']
+2026-10-19 00:30:35 | INFO     | src.registry.hermes.hermes_loader | Discovered Hermes skill 'computer_use' from computer_use.md
+2026-10-19 00:30:35 | INFO     | src.registry.tool_registry | Registered tool 'skill_database_optimizer_v1' (skill) providing skills: ['database_optimizer', 'explain_analyze', 'index_optimization', 'sql_tuning']
+2026-10-19 00:30:35 | INFO     | src.registry.hermes.hermes_loader | Discovered Hermes skill 'database_optimizer' from database_optimizer.md
+2026-10-19 00:30:35 | INFO     | src.registry.tool_registry | Registered tool 'skill_discord_notifier_v1' (skill) providing skills: ['chat_notifications', 'discord_notifier', 'embed_builder', 'webhook_alerts']
+2026-10-19 00:30:35 | INFO     | src.registry.hermes.hermes_loader | Discovered Hermes skill 'discord_notifier' from discord_notifier.md
+2026-10-19 00:30:35 | INFO     | src.registry.tool_registry | Registered tool 'skill_docker_ops_v1' (skill) providing skills: ['container_management', 'devops_troubleshooting', 'docker_compose', 'docker_ops']
+2026-10-19 00:30:35 | INFO     | src.registry.hermes.hermes_loader | Discovered Hermes skill 'docker_ops' from docker_ops.md
+2026-10-19 00:30:35 | INFO     | src.registry.tool_registry | Registered tool 'skill_drug_discovery_v1' (skill) providing skills: ['bioactivity', 'cheminformatics', 'drug_discovery', 'molecular_biology', 'smiles']
+2026-10-19 00:30:35 | INFO     | src.registry.hermes.hermes_loader | Discovered Hermes skill 'drug_discovery' from drug_discovery.md
+2026-10-19 00:30:35 | INFO     | src.registry.tool_registry | Registered tool 'skill_fitness_nutrition_v1' (skill) providing skills: ['fitness_nutrition', 'health_science', 'macronutrient_planning', 'metabolic_calculation']
+2026-10-19 00:30:35 | INFO     | src.registry.hermes.hermes_loader | Discovered Hermes skill 'fitness_nutrition' from fitness_nutrition.md
+2026-10-19 00:30:35 | INFO     | src.registry.tool_registry | Registered tool 'skill_github_workflow_v1' (skill) providing skills: ['ci_cd_debug', 'github_workflow', 'pull_requests', 'release_notes']
+2026-10-19 00:30:35 | INFO     | src.registry.hermes.hermes_loader | Discovered Hermes skill 'github_workflow' from github_workflow.md
+2026-10-19 00:30:35 | INFO     | src.registry.tool_registry | Registered tool 'skill_gitnexus_explorer_v1' (skill) providing skills: ['architecture_recovery', 'ast', 'code_analysis', 'dependency_graph', 'gitnexus_explorer']
+2026-10-19 00:30:35 | INFO     | src.registry.hermes.hermes_loader | Discovered Hermes skill 'gitnexus_explorer' from gitnexus_explorer.md
+2026-10-19 00:30:35 | INFO     | src.registry.tool_registry | Registered tool 'skill_here_now_v1' (skill) providing skills: ['environmental_briefing', 'here_now', 'local_intelligence', 'timezone', 'weather']
+2026-10-19 00:30:35 | INFO     | src.registry.hermes.hermes_loader | Discovered Hermes skill 'here_now' from here_now.md
+2026-10-19 00:30:35 | INFO     | src.registry.tool_registry | Registered tool 'skill_home_assistant_v1' (skill) providing skills: ['home_assistant', 'iot_automation', 'rest_api', 'smart_home']
+2026-10-19 00:30:35 | INFO     | src.registry.hermes.hermes_loader | Discovered Hermes skill 'home_assistant' from home_assistant.md
+2026-10-19 00:30:35 | INFO     | src.registry.tool_registry | Registered tool 'skill_impeccable_design_v1' (skill) providing skills: ['accessibility', 'design_audit', 'impeccable_design', 'ui_ux', 'visual_hierarchy', 'web_styling']
+2026-10-19 00:30:35 | INFO     | src.registry.hermes.hermes_loader | Discovered Hermes skill 'impeccable_design' from impeccable_design.md
+2026-10-19 00:30:35 | INFO     | src.registry.tool_registry | Registered tool 'skill_instructor_mlops_v1' (skill) providing skills: ['instructor_mlops', 'json_extraction', 'pydantic', 'schema_validation', 'structured_output']
+2026-10-19 00:30:35 | INFO     | src.registry.hermes.hermes_loader | Discovered Hermes skill 'instructor_mlops' from instructor_mlops.md
+2026-10-19 00:30:35 | INFO     | src.registry.tool_registry | Registered tool 'skill_oss_forensics_v1' (skill) providing skills: ['audit', 'malware_analysis', 'oss_forensics', 'reverse_engineering', 'supply_chain_security']
+2026-10-19 00:30:35 | INFO     | src.registry.hermes.hermes_loader | Discovered Hermes skill 'oss_forensics' from oss_forensics.md
+2026-10-19 00:30:35 | INFO     | src.registry.tool_registry | Registered tool 'skill_simplify_code_v1' (skill) providing skills: ['clean_code', 'code_refactoring', 'complexity_reduction', 'simplify_code']
+2026-10-19 00:30:35 | INFO     | src.registry.hermes.hermes_loader | Discovered Hermes skill 'simplify_code' from simplify_code.md
+2026-10-19 00:30:35 | INFO     | src.registry.tool_registry | Registered tool 'skill_stripe_payments_v1' (skill) providing skills: ['billing_reconcile', 'invoice_check', 'stripe_payments', 'subscription_audit']
+2026-10-19 00:30:35 | INFO     | src.registry.hermes.hermes_loader | Discovered Hermes skill 'stripe_payments' from stripe_payments.md
+2026-10-19 00:30:35 | INFO     | src.registry.tool_registry | Registered tool 'skill_subagent_delegation_v1' (skill) providing skills: ['multi_agent_orchestration', 'parallel_execution', 'subagent_delegation', 'task_decomposition']
+2026-10-19 00:30:35 | INFO     | src.registry.hermes.hermes_loader | Discovered Hermes skill 'subagent_delegation' from subagent_delegation.md
+2026-10-19 00:30:35 | INFO     | src.registry.auto_discover | Discovered 23 Hermes skills
+2026-10-19 00:30:35 | INFO     | src.registry.auto_discover | Total auto-discovery complete: 51 tools registered, 0 errors
+2026-10-19 00:30:35 | INFO     | src.api.main | Tool Registry: ToolRegistry(tools=51, skills=201)
+2026-10-19 00:30:35 | INFO     | src.connectors.manager | Initialized Security Connector [Elasticsearch SIEM] (siem) - Status: simulated
+2026-10-19 00:30:35 | INFO     | src.connectors.manager | Initialized Security Connector [CrowdStrike Falcon EDR] (edr) - Status: simulated
+2026-10-19 00:30:35 | INFO     | src.connectors.manager | Initialized Security Connector [Splunk Enterprise SIEM] (siem) - Status: simulated
+2026-10-19 00:30:35 | INFO     | src.connectors.manager | Initialized Security Connector [Microsoft Sentinel] (siem) - Status: simulated
+2026-10-19 00:30:35 | INFO     | src.connectors.manager | Initialized Security Connector [Microsoft Defender for Endpoint] (edr) - Status: simulated
+2026-10-19 00:30:35 | INFO     | src.connectors.manager | Initialized Security Connector [SentinelOne Singularity] (edr) - Status: simulated
+2026-10-19 00:30:35 | INFO     | src.connectors.manager | Initialized Security Connector [Palo Alto NGFW / Panorama] (firewall) - Status: simulated
+2026-10-19 00:30:35 | INFO     | src.connectors.manager | Initialized Security Connector [Fortinet FortiGate Firewall] (firewall) - Status: simulated
+2026-10-19 00:30:35 | INFO     | src.connectors.manager | Initialized Security Connector [Okta Identity Cloud] (iam) - Status: simulated
+2026-10-19 00:30:35 | INFO     | src.connectors.manager | Initialized Security Connector [Microsoft Entra ID] (iam) - Status: simulated
+2026-10-19 00:30:35 | INFO     | src.connectors.manager | Initialized Security Connector [VirusTotal v3 CTI] (threat_intel) - Status: simulated
+2026-10-19 00:30:35 | INFO     | src.connectors.manager | Initialized Security Connector [AbuseIPDB Threat Intel] (threat_intel) - Status: simulated
+2026-10-19 00:30:35 | INFO     | src.connectors.manager | Initialized Security Connector [TheHive SOAR & Case Management] (itsm) - Status: simulated
+2026-10-19 00:30:35 | INFO     | src.registry.tool_registry | Registered tool 'elastic_search_logs' (connector) providing skills: ['siem_search', 'log_query', 'telemetry_investigation']
+2026-10-19 00:30:35 | INFO     | src.registry.tool_registry | Registered tool 'elastic_lookup_ioc' (connector) providing skills: ['ioc_lookup', 'threat_hunting', 'telemetry_investigation']
+2026-10-19 00:30:35 | INFO     | src.registry.tool_registry | Registered tool 'crowdstrike_get_device' (connector) providing skills: ['edr_telemetry', 'host_investigation', 'endpoint_lookup']
+2026-10-19 00:30:35 | INFO     | src.registry.tool_registry | Registered tool 'crowdstrike_contain_host' (connector) providing skills: ['host_containment', 'endpoint_isolation', 'incident_mitigation']
+2026-10-19 00:30:35 | INFO     | src.registry.tool_registry | Registered tool 'crowdstrike_lift_containment' (connector) providing skills: ['host_remediation', 'lift_isolation']
+2026-10-19 00:30:35 | INFO     | src.registry.tool_registry | Registered tool 'splunk_search_spl' (connector) providing skills: ['siem_search', 'splunk_query', 'telemetry_investigation']
+2026-10-19 00:30:35 | INFO     | src.registry.tool_registry | Registered tool 'sentinel_query_kql' (connector) providing skills: ['siem_search', 'kql_query', 'cloud_threat_hunting']
+2026-10-19 00:30:35 | INFO     | src.registry.tool_registry | Registered tool 'defender_get_machine' (connector) providing skills: ['edr_telemetry', 'host_investigation', 'endpoint_lookup']
+2026-10-19 00:30:35 | INFO     | src.registry.tool_registry | Registered tool 'defender_isolate_machine' (connector) providing skills: ['host_containment', 'endpoint_isolation', 'incident_mitigation']
+2026-10-19 00:30:35 | INFO     | src.registry.tool_registry | Registered tool 'sentinelone_find_agent' (connector) providing skills: ['edr_telemetry', 'host_investigation', 'endpoint_lookup']
+2026-10-19 00:30:35 | INFO     | src.registry.tool_registry | Registered tool 'sentinelone_quarantine_agent' (connector) providing skills: ['host_containment', 'endpoint_isolation', 'incident_mitigation']
+2026-10-19 00:30:35 | INFO     | src.registry.tool_registry | Registered tool 'paloalto_register_ip_dag' (connector) providing skills: ['firewall_blocking', 'ip_containment', 'perimeter_defense']
+2026-10-19 00:30:35 | INFO     | src.registry.tool_registry | Registered tool 'paloalto_unregister_ip_dag' (connector) providing skills: ['firewall_remediation', 'unblock_ip']
+2026-10-19 00:30:35 | INFO     | src.registry.tool_registry | Registered tool 'fortigate_ban_ip' (connector) providing skills: ['firewall_blocking', 'ip_containment', 'perimeter_defense']
+2026-10-19 00:30:35 | INFO     | src.registry.tool_registry | Registered tool 'fortigate_unban_ip' (connector) providing skills: ['firewall_remediation', 'unblock_ip']
+2026-10-19 00:30:35 | INFO     | src.registry.tool_registry | Registered tool 'okta_get_user' (connector) providing skills: ['identity_lookup', 'iam_investigation', 'user_context']
+2026-10-19 00:30:35 | INFO     | src.registry.tool_registry | Registered tool 'okta_clear_user_sessions' (connector) providing skills: ['session_revocation', 'identity_containment', 'credential_invalidation']
+2026-10-19 00:30:35 | INFO     | src.registry.tool_registry | Registered tool 'okta_suspend_user' (connector) providing skills: ['account_suspension', 'identity_containment']
+2026-10-19 00:30:35 | INFO     | src.registry.tool_registry | Registered tool 'entraid_get_user' (connector) providing skills: ['identity_lookup', 'iam_investigation', 'user_context']
+2026-10-19 00:30:35 | INFO     | src.registry.tool_registry | Registered tool 'entraid_revoke_sessions' (connector) providing skills: ['session_revocation', 'identity_containment']
+2026-10-19 00:30:35 | INFO     | src.registry.tool_registry | Registered tool 'entraid_disable_account' (connector) providing skills: ['account_suspension', 'identity_containment']
+2026-10-19 00:30:35 | INFO     | src.registry.tool_registry | Registered tool 'virustotal_lookup_ip' (connector) providing skills: ['threat_intel', 'ioc_enrichment', 'ip_reputation']
+2026-10-19 00:30:35 | INFO     | src.registry.tool_registry | Registered tool 'virustotal_lookup_hash' (connector) providing skills: ['threat_intel', 'ioc_enrichment', 'malware_analysis']
+2026-10-19 00:30:35 | INFO     | src.registry.tool_registry | Registered tool 'abuseipdb_check_ip' (connector) providing skills: ['threat_intel', 'ioc_enrichment', 'ip_reputation']
+2026-10-19 00:30:35 | INFO     | src.registry.tool_registry | Registered tool 'thehive_create_case' (connector) providing skills: ['case_management', 'soar_incident', 'incident_ticketing']
+2026-10-19 00:30:35 | INFO     | src.registry.tool_registry | Registered tool 'thehive_add_observable' (connector) providing skills: ['case_management', 'soar_incident', 'attach_ioc']
+2026-10-19 00:30:35 | INFO     | src.connectors.manager | Registered 26 tools from enterprise security connectors
+2026-10-19 00:30:35 | INFO     | src.api.main | Enterprise Security Connectors initialized: 13 active
+2026-10-19 00:30:36 | INFO     | src.api.main | Connected to Temporal at localhost:7234
+2026-10-19 00:30:36 | INFO     | src.api.main | Connected to Temporal at localhost:7234 (activities handled by worker_runner)
+2026-10-19 00:30:36 | INFO     | src.orchestrator.cron_scheduler | Loaded 2 scheduled jobs from D:\projects\aiagent\data\schedules.json
+2026-10-19 00:30:36 | INFO     | src.orchestrator.cron_scheduler | CronScheduler background service started
+2026-10-19 00:30:36 | INFO     | src.api.main | UAOS API ready at http://0.0.0.0:8000
+2026-10-19 00:30:36 | INFO     | mcp.server.streamable_http_manager | StreamableHTTP session manager started
+INFO:     Application startup complete.
+INFO:     127.0.0.1:58370 - "GET /stream/uaos-f4314201a0dd HTTP/1.1" 200 OK
+INFO:     127.0.0.1:50272 - "GET /api/schedules HTTP/1.1" 200 OK
+2026-10-19 00:30:40 | INFO     | httpx | HTTP Request: GET http://10.7.75.103:1234/v1/models "HTTP/1.1 200 OK"
+INFO:     127.0.0.1:52861 - "GET /health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:52861 - "GET /api/schedules HTTP/1.1" 200 OK
+INFO:     127.0.0.1:52861 - "GET / HTTP/1.1" 200 OK
+INFO:     127.0.0.1:52861 - "GET /css/style.css HTTP/1.1" 200 OK
+INFO:     127.0.0.1:50272 - "GET /js/marked.min.js HTTP/1.1" 200 OK
+INFO:     127.0.0.1:65116 - "GET /js/dag_renderer.js HTTP/1.1" 200 OK
+INFO:     127.0.0.1:59742 - "GET /js/app.js?v=2.6.2 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:59742 - "GET /api/agents HTTP/1.1" 200 OK
+INFO:     127.0.0.1:52861 - "GET /api/schedules HTTP/1.1" 200 OK
+INFO:     127.0.0.1:65116 - "GET /tools HTTP/1.1" 200 OK
+INFO:     127.0.0.1:59742 - "GET /api/settings/llm HTTP/1.1" 200 OK
+INFO:     127.0.0.1:52861 - "GET /api/agents HTTP/1.1" 200 OK
+INFO:     127.0.0.1:58043 - "GET /api/resilience HTTP/1.1" 200 OK
+INFO:     127.0.0.1:62920 - "GET /api/workflows/templates HTTP/1.1" 200 OK
+INFO:     127.0.0.1:59742 - "GET /api/skills/distilled/pending HTTP/1.1" 200 OK
+INFO:     127.0.0.1:65116 - "GET /api/memory HTTP/1.1" 200 OK
+INFO:     127.0.0.1:52861 - "GET /api/skills/distilled/approved HTTP/1.1" 200 OK
+INFO:     127.0.0.1:58043 - "GET /favicon.ico HTTP/1.1" 404 Not Found
+2026-10-19 00:30:46 | INFO     | httpx | HTTP Request: GET http://10.7.75.103:1234/v1/models "HTTP/1.1 200 OK"
+INFO:     127.0.0.1:50272 - "GET /health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:50272 - "GET /api/schedules HTTP/1.1" 200 OK
+2026-10-19 00:30:54 | INFO     | src.api.main | Solving (async via Temporal): workflow=uaos-011ce969bf2a, query=Investigate critical security logs in D:\Security-logs-test\attack-cases-benchmark\case-1-apt-enterp, agent_id=default, custom_dag=no, resilience=standard
+INFO:     127.0.0.1:49609 - "POST /solve/async HTTP/1.1" 200 OK
+INFO:     127.0.0.1:49609 - "GET /stream/uaos-011ce969bf2a HTTP/1.1" 200 OK
+2026-10-19 00:30:56 | INFO     | httpx | HTTP Request: GET http://10.7.75.103:1234/v1/models "HTTP/1.1 200 OK"
+INFO:     127.0.0.1:60883 - "GET /health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:60883 - "GET /api/schedules HTTP/1.1" 200 OK
+INFO:     127.0.0.1:51978 - "GET /api/schedules HTTP/1.1" 200 OK
+2026-10-19 00:31:01 | INFO     | httpx | HTTP Request: GET http://10.7.75.103:1234/v1/models "HTTP/1.1 200 OK"
+INFO:     127.0.0.1:60883 - "GET /health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:60883 - "GET /api/schedules HTTP/1.1" 200 OK
+INFO:     127.0.0.1:50696 - "GET /status/uaos-011ce969bf2a HTTP/1.1" 200 OK
+INFO:     127.0.0.1:55265 - "GET /api/schedules HTTP/1.1" 200 OK
+2026-10-19 00:31:17 | INFO     | httpx | HTTP Request: GET http://10.7.75.103:1234/v1/models "HTTP/1.1 200 OK"
+INFO:     127.0.0.1:57971 - "GET /health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57971 - "GET /api/schedules HTTP/1.1" 200 OK
+INFO:     127.0.0.1:61168 - "HEAD /mcp/ HTTP/1.1" 200 OK
+INFO:     127.0.0.1:61169 - "POST /mcp/ HTTP/1.1" 200 OK
+2026-10-19 00:31:19 | INFO     | mcp.server.streamable_http | Terminating session: None
+INFO:     127.0.0.1:61169 - "POST /mcp/ HTTP/1.1" 202 Accepted
+2026-10-19 00:31:19 | INFO     | mcp.server.streamable_http | Terminating session: None
+2026-10-19 00:31:19 | INFO     | mcp.server.lowlevel.server | Processing request of type ListToolsRequest
+INFO:     127.0.0.1:61170 - "POST /mcp/ HTTP/1.1" 200 OK
+2026-10-19 00:31:19 | INFO     | mcp.server.streamable_http | Terminating session: None
+INFO:     127.0.0.1:60937 - "HEAD /mcp/ HTTP/1.1" 200 OK
+INFO:     127.0.0.1:60938 - "POST /mcp/ HTTP/1.1" 200 OK
+2026-10-19 00:31:20 | INFO     | mcp.server.streamable_http | Terminating session: None
+INFO:     127.0.0.1:60938 - "POST /mcp/ HTTP/1.1" 202 Accepted
+2026-10-19 00:31:20 | INFO     | mcp.server.streamable_http | Terminating session: None
+2026-10-19 00:31:20 | INFO     | mcp.server.lowlevel.server | Processing request of type ListToolsRequest
+INFO:     127.0.0.1:60939 - "POST /mcp/ HTTP/1.1" 200 OK
+2026-10-19 00:31:20 | INFO     | mcp.server.streamable_http | Terminating session: None
+INFO:     127.0.0.1:63063 - "HEAD /mcp/ HTTP/1.1" 200 OK
+INFO:     127.0.0.1:63064 - "POST /mcp/ HTTP/1.1" 200 OK
+2026-10-19 00:31:21 | INFO     | mcp.server.streamable_http | Terminating session: None
+INFO:     127.0.0.1:63064 - "POST /mcp/ HTTP/1.1" 202 Accepted
+2026-10-19 00:31:21 | INFO     | mcp.server.streamable_http | Terminating session: None
+2026-10-19 00:31:21 | INFO     | mcp.server.lowlevel.server | Processing request of type ListToolsRequest
+INFO:     127.0.0.1:63065 - "POST /mcp/ HTTP/1.1" 200 OK
+2026-10-19 00:31:21 | INFO     | mcp.server.streamable_http | Terminating session: None
+INFO:     127.0.0.1:63066 - "HEAD /mcp/ HTTP/1.1" 200 OK
+INFO:     127.0.0.1:63067 - "POST /mcp/ HTTP/1.1" 200 OK
+2026-10-19 00:31:22 | INFO     | mcp.server.streamable_http | Terminating session: None
+INFO:     127.0.0.1:63067 - "POST /mcp/ HTTP/1.1" 202 Accepted
+2026-10-19 00:31:22 | INFO     | mcp.server.streamable_http | Terminating session: None
+2026-10-19 00:31:22 | INFO     | mcp.server.lowlevel.server | Processing request of type ListToolsRequest
+INFO:     127.0.0.1:63068 - "POST /mcp/ HTTP/1.1" 200 OK
+2026-10-19 00:31:22 | INFO     | mcp.server.streamable_http | Terminating session: None
+INFO:     127.0.0.1:63069 - "HEAD /mcp/ HTTP/1.1" 200 OK
+INFO:     127.0.0.1:63070 - "POST /mcp/ HTTP/1.1" 200 OK
+2026-10-19 00:31:23 | INFO     | mcp.server.streamable_http | Terminating session: None
+INFO:     127.0.0.1:63070 - "POST /mcp/ HTTP/1.1" 202 Accepted
+2026-10-19 00:31:23 | INFO     | mcp.server.streamable_http | Terminating session: None
+2026-10-19 00:31:23 | INFO     | mcp.server.lowlevel.server | Processing request of type ListToolsRequest
+INFO:     127.0.0.1:63071 - "POST /mcp/ HTTP/1.1" 200 OK
+2026-10-19 00:31:23 | INFO     | mcp.server.streamable_http | Terminating session: None
+INFO:     127.0.0.1:63073 - "HEAD /mcp/ HTTP/1.1" 200 OK
+INFO:     127.0.0.1:63074 - "POST /mcp/ HTTP/1.1" 200 OK
+2026-10-19 00:31:24 | INFO     | mcp.server.streamable_http | Terminating session: None
+INFO:     127.0.0.1:63074 - "POST /mcp/ HTTP/1.1" 202 Accepted
+2026-10-19 00:31:24 | INFO     | mcp.server.streamable_http | Terminating session: None
+2026-10-19 00:31:24 | INFO     | mcp.server.lowlevel.server | Processing request of type ListToolsRequest
+INFO:     127.0.0.1:63075 - "POST /mcp/ HTTP/1.1" 200 OK
+2026-10-19 00:31:24 | INFO     | mcp.server.streamable_http | Terminating session: None
+INFO:     127.0.0.1:64263 - "HEAD /mcp/ HTTP/1.1" 200 OK
+INFO:     127.0.0.1:64264 - "POST /mcp/ HTTP/1.1" 200 OK
+2026-10-19 00:31:24 | INFO     | mcp.server.streamable_http | Terminating session: None
+INFO:     127.0.0.1:64264 - "POST /mcp/ HTTP/1.1" 202 Accepted
+2026-10-19 00:31:25 | INFO     | mcp.server.streamable_http | Terminating session: None
+2026-10-19 00:31:25 | INFO     | mcp.server.lowlevel.server | Processing request of type ListToolsRequest
+INFO:     127.0.0.1:64265 - "POST /mcp/ HTTP/1.1" 200 OK
+2026-10-19 00:31:25 | INFO     | mcp.server.streamable_http | Terminating session: None
+INFO:     127.0.0.1:49791 - "HEAD /mcp/ HTTP/1.1" 200 OK
+INFO:     127.0.0.1:49792 - "POST /mcp/ HTTP/1.1" 200 OK
+2026-10-19 00:31:26 | INFO     | mcp.server.streamable_http | Terminating session: None
+INFO:     127.0.0.1:49792 - "POST /mcp/ HTTP/1.1" 202 Accepted
+2026-10-19 00:31:26 | INFO     | mcp.server.streamable_http | Terminating session: None
+2026-10-19 00:31:26 | INFO     | mcp.server.lowlevel.server | Processing request of type ListToolsRequest
+INFO:     127.0.0.1:49793 - "POST /mcp/ HTTP/1.1" 200 OK
+2026-10-19 00:31:26 | INFO     | mcp.server.streamable_http | Terminating session: None
+INFO:     127.0.0.1:49795 - "HEAD /mcp/ HTTP/1.1" 200 OK
+INFO:     127.0.0.1:49796 - "POST /mcp/ HTTP/1.1" 200 OK
+2026-10-19 00:31:26 | INFO     | mcp.server.streamable_http | Terminating session: None
+INFO:     127.0.0.1:49796 - "POST /mcp/ HTTP/1.1" 202 Accepted
+2026-10-19 00:31:26 | INFO     | mcp.server.streamable_http | Terminating session: None
+2026-10-19 00:31:26 | INFO     | mcp.server.lowlevel.server | Processing request of type ListToolsRequest
+INFO:     127.0.0.1:49797 - "POST /mcp/ HTTP/1.1" 200 OK
+2026-10-19 00:31:26 | INFO     | mcp.server.streamable_http | Terminating session: None
+INFO:     127.0.0.1:49798 - "HEAD /mcp/ HTTP/1.1" 200 OK
+INFO:     127.0.0.1:49799 - "POST /mcp/ HTTP/1.1" 200 OK
+2026-10-19 00:31:27 | INFO     | mcp.server.streamable_http | Terminating session: None
+INFO:     127.0.0.1:49799 - "POST /mcp/ HTTP/1.1" 202 Accepted
+2026-10-19 00:31:27 | INFO     | mcp.server.streamable_http | Terminating session: None
+2026-10-19 00:31:27 | INFO     | mcp.server.lowlevel.server | Processing request of type ListToolsRequest
+INFO:     127.0.0.1:49800 - "POST /mcp/ HTTP/1.1" 200 OK
+2026-10-19 00:31:27 | INFO     | mcp.server.streamable_http | Terminating session: None
+INFO:     127.0.0.1:52740 - "HEAD /mcp/ HTTP/1.1" 200 OK
+INFO:     127.0.0.1:52739 - "GET /api/schedules HTTP/1.1" 200 OK
+2026-10-19 00:31:29 | INFO     | httpx | HTTP Request: GET http://10.7.75.103:1234/v1/models "HTTP/1.1 200 OK"
+INFO:     127.0.0.1:52742 - "POST /mcp/ HTTP/1.1" 200 OK
+2026-10-19 00:31:29 | INFO     | mcp.server.streamable_http | Terminating session: None
+INFO:     127.0.0.1:52742 - "POST /mcp/ HTTP/1.1" 202 Accepted
+2026-10-19 00:31:29 | INFO     | mcp.server.streamable_http | Terminating session: None
+2026-10-19 00:31:29 | INFO     | mcp.server.lowlevel.server | Processing request of type ListToolsRequest
+INFO:     127.0.0.1:52743 - "POST /mcp/ HTTP/1.1" 200 OK
+2026-10-19 00:31:29 | INFO     | mcp.server.streamable_http | Terminating session: None
+INFO:     127.0.0.1:53647 - "GET /health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:53647 - "GET /api/schedules HTTP/1.1" 200 OK
+INFO:     127.0.0.1:52745 - "HEAD /mcp/ HTTP/1.1" 200 OK
+INFO:     127.0.0.1:52746 - "POST /mcp/ HTTP/1.1" 200 OK
+2026-10-19 00:31:30 | INFO     | mcp.server.streamable_http | Terminating session: None
+INFO:     127.0.0.1:52746 - "POST /mcp/ HTTP/1.1" 202 Accepted
+2026-10-19 00:31:30 | INFO     | mcp.server.streamable_http | Terminating session: None
+2026-10-19 00:31:30 | INFO     | mcp.server.lowlevel.server | Processing request of type ListToolsRequest
+INFO:     127.0.0.1:52747 - "POST /mcp/ HTTP/1.1" 200 OK
+2026-10-19 00:31:30 | INFO     | mcp.server.streamable_http | Terminating session: None
+INFO:     127.0.0.1:52739 - "GET /api/schedules HTTP/1.1" 200 OK
+2026-10-19 00:31:31 | INFO     | httpx | HTTP Request: GET http://10.7.75.103:1234/v1/models "HTTP/1.1 200 OK"
+INFO:     127.0.0.1:53647 - "GET /health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:53647 - "GET /api/schedules HTTP/1.1" 200 OK
+INFO:     127.0.0.1:52749 - "HEAD /mcp/ HTTP/1.1" 200 OK
+INFO:     127.0.0.1:52750 - "POST /mcp/ HTTP/1.1" 200 OK
+2026-10-19 00:31:31 | INFO     | mcp.server.streamable_http | Terminating session: None
+INFO:     127.0.0.1:52750 - "POST /mcp/ HTTP/1.1" 202 Accepted
+2026-10-19 00:31:31 | INFO     | mcp.server.streamable_http | Terminating session: None
+2026-10-19 00:31:31 | INFO     | mcp.server.lowlevel.server | Processing request of type ListToolsRequest
+INFO:     127.0.0.1:52751 - "POST /mcp/ HTTP/1.1" 200 OK
+2026-10-19 00:31:31 | INFO     | mcp.server.streamable_http | Terminating session: None
+INFO:     127.0.0.1:52752 - "HEAD /mcp/ HTTP/1.1" 200 OK
+INFO:     127.0.0.1:52753 - "POST /mcp/ HTTP/1.1" 200 OK
+2026-10-19 00:31:32 | INFO     | mcp.server.streamable_http | Terminating session: None
+INFO:     127.0.0.1:52753 - "POST /mcp/ HTTP/1.1" 202 Accepted
+2026-10-19 00:31:32 | INFO     | mcp.server.streamable_http | Terminating session: None
+2026-10-19 00:31:32 | INFO     | mcp.server.lowlevel.server | Processing request of type ListToolsRequest
+INFO:     127.0.0.1:52754 - "POST /mcp/ HTTP/1.1" 200 OK
+2026-10-19 00:31:32 | INFO     | mcp.server.streamable_http | Terminating session: None
+INFO:     127.0.0.1:52755 - "POST /mcp/ HTTP/1.1" 200 OK
+2026-10-19 00:31:33 | INFO     | mcp.server.streamable_http | Terminating session: None
+INFO:     127.0.0.1:52755 - "POST /mcp/ HTTP/1.1" 202 Accepted
+2026-10-19 00:31:33 | INFO     | mcp.server.streamable_http | Terminating session: None
+2026-10-19 00:31:33 | INFO     | mcp.server.lowlevel.server | Processing request of type ListToolsRequest
+INFO:     127.0.0.1:52756 - "POST /mcp/ HTTP/1.1" 200 OK
+2026-10-19 00:31:33 | INFO     | mcp.server.streamable_http | Terminating session: None
+INFO:     127.0.0.1:52757 - "HEAD /mcp/ HTTP/1.1" 200 OK
+INFO:     127.0.0.1:52758 - "POST /mcp/ HTTP/1.1" 200 OK
+2026-10-19 00:31:34 | INFO     | mcp.server.streamable_http | Terminating session: None
+INFO:     127.0.0.1:52758 - "POST /mcp/ HTTP/1.1" 202 Accepted
+2026-10-19 00:31:34 | INFO     | mcp.server.streamable_http | Terminating session: None
+2026-10-19 00:31:34 | INFO     | mcp.server.lowlevel.server | Processing request of type ListToolsRequest
+INFO:     127.0.0.1:52759 - "POST /mcp/ HTTP/1.1" 200 OK
+2026-10-19 00:31:34 | INFO     | mcp.server.streamable_http | Terminating session: None
+INFO:     127.0.0.1:52761 - "HEAD /mcp/ HTTP/1.1" 200 OK
+INFO:     127.0.0.1:52762 - "POST /mcp/ HTTP/1.1" 200 OK
+2026-10-19 00:31:35 | INFO     | mcp.server.streamable_http | Terminating session: None
+INFO:     127.0.0.1:52762 - "POST /mcp/ HTTP/1.1" 202 Accepted
+2026-10-19 00:31:35 | INFO     | mcp.server.streamable_http | Terminating session: None
+2026-10-19 00:31:35 | INFO     | mcp.server.lowlevel.server | Processing request of type ListToolsRequest
+INFO:     127.0.0.1:52763 - "POST /mcp/ HTTP/1.1" 200 OK
+2026-10-19 00:31:35 | INFO     | mcp.server.streamable_http | Terminating session: None
+INFO:     127.0.0.1:52764 - "HEAD /mcp/ HTTP/1.1" 200 OK
+INFO:     127.0.0.1:52765 - "POST /mcp/ HTTP/1.1" 200 OK
+2026-10-19 00:31:35 | INFO     | mcp.server.streamable_http | Terminating session: None
+INFO:     127.0.0.1:52765 - "POST /mcp/ HTTP/1.1" 202 Accepted
+2026-10-19 00:31:35 | INFO     | mcp.server.streamable_http | Terminating session: None
+2026-10-19 00:31:35 | INFO     | mcp.server.lowlevel.server | Processing request of type ListToolsRequest
+INFO:     127.0.0.1:52766 - "POST /mcp/ HTTP/1.1" 200 OK
+2026-10-19 00:31:35 | INFO     | mcp.server.streamable_http | Terminating session: None
+INFO:     127.0.0.1:56010 - "GET /status/uaos-011ce969bf2a HTTP/1.1" 200 OK
+INFO:     127.0.0.1:56011 - "HEAD /mcp/ HTTP/1.1" 200 OK
+INFO:     127.0.0.1:56012 - "POST /mcp/ HTTP/1.1" 200 OK
+2026-10-19 00:31:36 | INFO     | mcp.server.streamable_http | Terminating session: None
+INFO:     127.0.0.1:56012 - "POST /mcp/ HTTP/1.1" 202 Accepted
+2026-10-19 00:31:36 | INFO     | mcp.server.streamable_http | Terminating session: None
+2026-10-19 00:31:36 | INFO     | mcp.server.lowlevel.server | Processing request of type ListToolsRequest
+INFO:     127.0.0.1:56013 - "POST /mcp/ HTTP/1.1" 200 OK
+2026-10-19 00:31:36 | INFO     | mcp.server.streamable_http | Terminating session: None
+INFO:     127.0.0.1:56016 - "HEAD /mcp/ HTTP/1.1" 200 OK
+INFO:     127.0.0.1:56017 - "POST /mcp/ HTTP/1.1" 200 OK
+2026-10-19 00:31:37 | INFO     | mcp.server.streamable_http | Terminating session: None
+INFO:     127.0.0.1:56017 - "POST /mcp/ HTTP/1.1" 202 Accepted
+2026-10-19 00:31:37 | INFO     | mcp.server.streamable_http | Terminating session: None
+2026-10-19 00:31:37 | INFO     | mcp.server.lowlevel.server | Processing request of type ListToolsRequest
+INFO:     127.0.0.1:56018 - "POST /mcp/ HTTP/1.1" 200 OK
+2026-10-19 00:31:37 | INFO     | mcp.server.streamable_http | Terminating session: None
+INFO:     127.0.0.1:56019 - "HEAD /mcp/ HTTP/1.1" 200 OK
+INFO:     127.0.0.1:56020 - "POST /mcp/ HTTP/1.1" 200 OK
+2026-10-19 00:31:39 | INFO     | mcp.server.streamable_http | Terminating session: None
+INFO:     127.0.0.1:56020 - "POST /mcp/ HTTP/1.1" 202 Accepted
+2026-10-19 00:31:39 | INFO     | mcp.server.streamable_http | Terminating session: None
+2026-10-19 00:31:39 | INFO     | mcp.server.lowlevel.server | Processing request of type ListToolsRequest
+INFO:     127.0.0.1:56021 - "POST /mcp/ HTTP/1.1" 200 OK
+2026-10-19 00:31:39 | INFO     | mcp.server.streamable_http | Terminating session: None
+INFO:     127.0.0.1:56022 - "HEAD /mcp/ HTTP/1.1" 200 OK
+INFO:     127.0.0.1:56023 - "POST /mcp/ HTTP/1.1" 200 OK
+2026-10-19 00:31:40 | INFO     | mcp.server.streamable_http | Terminating session: None
+INFO:     127.0.0.1:56023 - "POST /mcp/ HTTP/1.1" 202 Accepted
+2026-10-19 00:31:40 | INFO     | mcp.server.streamable_http | Terminating session: None
+2026-10-19 00:31:40 | INFO     | mcp.server.lowlevel.server | Processing request of type ListToolsRequest
+INFO:     127.0.0.1:56024 - "POST /mcp/ HTTP/1.1" 200 OK
+2026-10-19 00:31:40 | INFO     | mcp.server.streamable_http | Terminating session: None
+2026-10-19 00:31:41 | INFO     | httpx | HTTP Request: GET http://10.7.75.103:1234/v1/models "HTTP/1.1 200 OK"
+INFO:     127.0.0.1:56010 - "GET /health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:56010 - "GET /api/schedules HTTP/1.1" 200 OK
+INFO:     127.0.0.1:56010 - "GET /status/uaos-011ce969bf2a HTTP/1.1" 200 OK
+INFO:     127.0.0.1:64266 - "GET /status/uaos-011ce969bf2a HTTP/1.1" 200 OK
+2026-10-19 00:31:51 | INFO     | httpx | HTTP Request: GET http://10.7.75.103:1234/v1/models "HTTP/1.1 200 OK"
+INFO:     127.0.0.1:64266 - "GET /health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:64266 - "GET /api/schedules HTTP/1.1" 200 OK
+INFO:     127.0.0.1:64266 - "GET /status/uaos-011ce969bf2a HTTP/1.1" 200 OK
+INFO:     127.0.0.1:53104 - "GET /status/uaos-011ce969bf2a HTTP/1.1" 200 OK
+2026-10-19 00:32:01 | INFO     | httpx | HTTP Request: GET http://10.7.75.103:1234/v1/models "HTTP/1.1 200 OK"
+INFO:     127.0.0.1:53104 - "GET /health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:53104 - "GET /api/schedules HTTP/1.1" 200 OK
+INFO:     127.0.0.1:53104 - "GET /status/uaos-011ce969bf2a HTTP/1.1" 200 OK
+INFO:     127.0.0.1:53104 - "GET /status/uaos-011ce969bf2a HTTP/1.1" 200 OK
+2026-10-19 00:32:11 | INFO     | httpx | HTTP Request: GET http://10.7.75.103:1234/v1/models "HTTP/1.1 200 OK"
+INFO:     127.0.0.1:53104 - "GET /health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:53104 - "GET /api/schedules HTTP/1.1" 200 OK
+INFO:     127.0.0.1:53104 - "GET /status/uaos-011ce969bf2a HTTP/1.1" 200 OK
+INFO:     127.0.0.1:53104 - "GET /status/uaos-011ce969bf2a HTTP/1.1" 200 OK
+2026-10-19 00:32:21 | INFO     | httpx | HTTP Request: GET http://10.7.75.103:1234/v1/models "HTTP/1.1 200 OK"
+INFO:     127.0.0.1:53104 - "GET /health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:53104 - "GET /api/schedules HTTP/1.1" 200 OK
+INFO:     127.0.0.1:55484 - "HEAD /mcp/ HTTP/1.1" 200 OK
+INFO:     127.0.0.1:55485 - "POST /mcp/ HTTP/1.1" 200 OK
+2026-10-19 00:32:45 | INFO     | mcp.server.streamable_http | Terminating session: None
+INFO:     127.0.0.1:55485 - "POST /mcp/ HTTP/1.1" 202 Accepted
+2026-10-19 00:32:45 | INFO     | mcp.server.streamable_http | Terminating session: None
+2026-10-19 00:32:45 | INFO     | mcp.server.lowlevel.server | Processing request of type ListToolsRequest
+INFO:     127.0.0.1:55486 - "POST /mcp/ HTTP/1.1" 200 OK
+2026-10-19 00:32:45 | INFO     | mcp.server.streamable_http | Terminating session: None
+INFO:     127.0.0.1:55489 - "HEAD /mcp/ HTTP/1.1" 200 OK
+INFO:     127.0.0.1:55490 - "POST /mcp/ HTTP/1.1" 200 OK
+2026-10-19 00:32:46 | INFO     | mcp.server.streamable_http | Terminating session: None
+INFO:     127.0.0.1:55490 - "POST /mcp/ HTTP/1.1" 202 Accepted
+2026-10-19 00:32:46 | INFO     | mcp.server.streamable_http | Terminating session: None
+2026-10-19 00:32:46 | INFO     | mcp.server.lowlevel.server | Processing request of type ListToolsRequest
+INFO:     127.0.0.1:55491 - "POST /mcp/ HTTP/1.1" 200 OK
+2026-10-19 00:32:46 | INFO     | mcp.server.streamable_http | Terminating session: None
+INFO:     127.0.0.1:55492 - "HEAD /mcp/ HTTP/1.1" 200 OK
+INFO:     127.0.0.1:55493 - "POST /mcp/ HTTP/1.1" 200 OK
+2026-10-19 00:32:46 | INFO     | mcp.server.streamable_http | Terminating session: None
+INFO:     127.0.0.1:55493 - "POST /mcp/ HTTP/1.1" 202 Accepted
+2026-10-19 00:32:46 | INFO     | mcp.server.streamable_http | Terminating session: None
+2026-10-19 00:32:46 | INFO     | mcp.server.lowlevel.server | Processing request of type ListToolsRequest
+INFO:     127.0.0.1:55494 - "POST /mcp/ HTTP/1.1" 200 OK
+2026-10-19 00:32:46 | INFO     | mcp.server.streamable_http | Terminating session: None
+INFO:     127.0.0.1:55499 - "HEAD /mcp/ HTTP/1.1" 200 OK
+INFO:     127.0.0.1:55500 - "POST /mcp/ HTTP/1.1" 200 OK
+2026-10-19 00:32:47 | INFO     | mcp.server.streamable_http | Terminating session: None
+INFO:     127.0.0.1:55500 - "POST /mcp/ HTTP/1.1" 202 Accepted
+2026-10-19 00:32:47 | INFO     | mcp.server.streamable_http | Terminating session: None
+2026-10-19 00:32:47 | INFO     | mcp.server.lowlevel.server | Processing request of type ListToolsRequest
+INFO:     127.0.0.1:55501 - "POST /mcp/ HTTP/1.1" 200 OK
+2026-10-19 00:32:47 | INFO     | mcp.server.streamable_http | Terminating session: None
+INFO:     127.0.0.1:55503 - "HEAD /mcp/ HTTP/1.1" 200 OK
+INFO:     127.0.0.1:55504 - "POST /mcp/ HTTP/1.1" 200 OK
+2026-10-19 00:32:47 | INFO     | mcp.server.streamable_http | Terminating session: None
+INFO:     127.0.0.1:55504 - "POST /mcp/ HTTP/1.1" 202 Accepted
+2026-10-19 00:32:47 | INFO     | mcp.server.streamable_http | Terminating session: None
+2026-10-19 00:32:47 | INFO     | mcp.server.lowlevel.server | Processing request of type ListToolsRequest
+INFO:     127.0.0.1:55505 - "POST /mcp/ HTTP/1.1" 200 OK
+2026-10-19 00:32:47 | INFO     | mcp.server.streamable_http | Terminating session: None
+INFO:     127.0.0.1:55506 - "HEAD /mcp/ HTTP/1.1" 200 OK
+INFO:     127.0.0.1:55507 - "POST /mcp/ HTTP/1.1" 200 OK
+2026-10-19 00:32:48 | INFO     | mcp.server.streamable_http | Terminating session: None
+INFO:     127.0.0.1:55507 - "POST /mcp/ HTTP/1.1" 202 Accepted
+2026-10-19 00:32:48 | INFO     | mcp.server.streamable_http | Terminating session: None
+2026-10-19 00:32:48 | INFO     | mcp.server.lowlevel.server | Processing request of type ListToolsRequest
+INFO:     127.0.0.1:55508 - "POST /mcp/ HTTP/1.1" 200 OK
+2026-10-19 00:32:48 | INFO     | mcp.server.streamable_http | Terminating session: None
+INFO:     127.0.0.1:55509 - "HEAD /mcp/ HTTP/1.1" 200 OK
+INFO:     127.0.0.1:55510 - "POST /mcp/ HTTP/1.1" 200 OK
+2026-10-19 00:32:48 | INFO     | mcp.server.streamable_http | Terminating session: None
+INFO:     127.0.0.1:55510 - "POST /mcp/ HTTP/1.1" 202 Accepted
+2026-10-19 00:32:48 | INFO     | mcp.server.streamable_http | Terminating session: None
+2026-10-19 00:32:48 | INFO     | mcp.server.lowlevel.server | Processing request of type ListToolsRequest
+INFO:     127.0.0.1:55511 - "POST /mcp/ HTTP/1.1" 200 OK
+2026-10-19 00:32:48 | INFO     | mcp.server.streamable_http | Terminating session: None
+INFO:     127.0.0.1:55514 - "HEAD /mcp/ HTTP/1.1" 200 OK
+INFO:     127.0.0.1:55515 - "POST /mcp/ HTTP/1.1" 200 OK
+2026-10-19 00:32:49 | INFO     | mcp.server.streamable_http | Terminating session: None
+INFO:     127.0.0.1:55515 - "POST /mcp/ HTTP/1.1" 202 Accepted
+2026-10-19 00:32:49 | INFO     | mcp.server.streamable_http | Terminating session: None
+2026-10-19 00:32:49 | INFO     | mcp.server.lowlevel.server | Processing request of type ListToolsRequest
+INFO:     127.0.0.1:55516 - "POST /mcp/ HTTP/1.1" 200 OK
+2026-10-19 00:32:49 | INFO     | mcp.server.streamable_http | Terminating session: None
+INFO:     127.0.0.1:55517 - "HEAD /mcp/ HTTP/1.1" 200 OK
+INFO:     127.0.0.1:55518 - "POST /mcp/ HTTP/1.1" 200 OK
+2026-10-19 00:32:49 | INFO     | mcp.server.streamable_http | Terminating session: None
+INFO:     127.0.0.1:55518 - "POST /mcp/ HTTP/1.1" 202 Accepted
+2026-10-19 00:32:49 | INFO     | mcp.server.streamable_http | Terminating session: None
+2026-10-19 00:32:49 | INFO     | mcp.server.lowlevel.server | Processing request of type ListToolsRequest
+INFO:     127.0.0.1:55519 - "POST /mcp/ HTTP/1.1" 200 OK
+2026-10-19 00:32:49 | INFO     | mcp.server.streamable_http | Terminating session: None
+INFO:     127.0.0.1:55520 - "HEAD /mcp/ HTTP/1.1" 200 OK
+INFO:     127.0.0.1:55521 - "POST /mcp/ HTTP/1.1" 200 OK
+2026-10-19 00:32:50 | INFO     | mcp.server.streamable_http | Terminating session: None
+INFO:     127.0.0.1:55521 - "POST /mcp/ HTTP/1.1" 202 Accepted
+2026-10-19 00:32:50 | INFO     | mcp.server.streamable_http | Terminating session: None
+2026-10-19 00:32:50 | INFO     | mcp.server.lowlevel.server | Processing request of type ListToolsRequest
+INFO:     127.0.0.1:55522 - "POST /mcp/ HTTP/1.1" 200 OK
+2026-10-19 00:32:50 | INFO     | mcp.server.streamable_http | Terminating session: None
+INFO:     127.0.0.1:55524 - "HEAD /mcp/ HTTP/1.1" 200 OK
+INFO:     127.0.0.1:55525 - "POST /mcp/ HTTP/1.1" 200 OK
+2026-10-19 00:32:50 | INFO     | mcp.server.streamable_http | Terminating session: None
+INFO:     127.0.0.1:55525 - "POST /mcp/ HTTP/1.1" 202 Accepted
+2026-10-19 00:32:50 | INFO     | mcp.server.streamable_http | Terminating session: None
+2026-10-19 00:32:50 | INFO     | mcp.server.lowlevel.server | Processing request of type ListToolsRequest
+INFO:     127.0.0.1:55526 - "POST /mcp/ HTTP/1.1" 200 OK
+2026-10-19 00:32:50 | INFO     | mcp.server.streamable_http | Terminating session: None
+INFO:     127.0.0.1:55527 - "HEAD /mcp/ HTTP/1.1" 200 OK
+INFO:     127.0.0.1:55528 - "POST /mcp/ HTTP/1.1" 200 OK
+2026-10-19 00:32:50 | INFO     | mcp.server.streamable_http | Terminating session: None
+INFO:     127.0.0.1:55528 - "POST /mcp/ HTTP/1.1" 202 Accepted
+2026-10-19 00:32:50 | INFO     | mcp.server.streamable_http | Terminating session: None
+2026-10-19 00:32:50 | INFO     | mcp.server.lowlevel.server | Processing request of type ListToolsRequest
+INFO:     127.0.0.1:55529 - "POST /mcp/ HTTP/1.1" 200 OK
+2026-10-19 00:32:50 | INFO     | mcp.server.streamable_http | Terminating session: None
+INFO:     127.0.0.1:55530 - "HEAD /mcp/ HTTP/1.1" 200 OK
+INFO:     127.0.0.1:55531 - "POST /mcp/ HTTP/1.1" 200 OK
+2026-10-19 00:32:51 | INFO     | mcp.server.streamable_http | Terminating session: None
+INFO:     127.0.0.1:55531 - "POST /mcp/ HTTP/1.1" 202 Accepted
+2026-10-19 00:32:51 | INFO     | mcp.server.streamable_http | Terminating session: None
+2026-10-19 00:32:51 | INFO     | mcp.server.lowlevel.server | Processing request of type ListToolsRequest
+INFO:     127.0.0.1:55532 - "POST /mcp/ HTTP/1.1" 200 OK
+2026-10-19 00:32:51 | INFO     | mcp.server.streamable_http | Terminating session: None
+INFO:     127.0.0.1:55533 - "HEAD /mcp/ HTTP/1.1" 200 OK
+INFO:     127.0.0.1:55534 - "POST /mcp/ HTTP/1.1" 200 OK
+2026-10-19 00:32:51 | INFO     | mcp.server.streamable_http | Terminating session: None
+INFO:     127.0.0.1:55534 - "POST /mcp/ HTTP/1.1" 202 Accepted
+2026-10-19 00:32:51 | INFO     | mcp.server.streamable_http | Terminating session: None
+2026-10-19 00:32:51 | INFO     | mcp.server.lowlevel.server | Processing request of type ListToolsRequest
+INFO:     127.0.0.1:55535 - "POST /mcp/ HTTP/1.1" 200 OK
+2026-10-19 00:32:51 | INFO     | mcp.server.streamable_http | Terminating session: None
+INFO:     127.0.0.1:55536 - "HEAD /mcp/ HTTP/1.1" 200 OK
+INFO:     127.0.0.1:55537 - "POST /mcp/ HTTP/1.1" 200 OK
+2026-10-19 00:32:52 | INFO     | mcp.server.streamable_http | Terminating session: None
+INFO:     127.0.0.1:55537 - "POST /mcp/ HTTP/1.1" 202 Accepted
+2026-10-19 00:32:52 | INFO     | mcp.server.streamable_http | Terminating session: None
+2026-10-19 00:32:52 | INFO     | mcp.server.lowlevel.server | Processing request of type ListToolsRequest
+INFO:     127.0.0.1:55538 - "POST /mcp/ HTTP/1.1" 200 OK
+2026-10-19 00:32:52 | INFO     | mcp.server.streamable_http | Terminating session: None
+INFO:     127.0.0.1:55539 - "HEAD /mcp/ HTTP/1.1" 200 OK
+INFO:     127.0.0.1:55540 - "POST /mcp/ HTTP/1.1" 200 OK
+2026-10-19 00:32:52 | INFO     | mcp.server.streamable_http | Terminating session: None
+INFO:     127.0.0.1:55540 - "POST /mcp/ HTTP/1.1" 202 Accepted
+2026-10-19 00:32:52 | INFO     | mcp.server.streamable_http | Terminating session: None
+2026-10-19 00:32:52 | INFO     | mcp.server.lowlevel.server | Processing request of type ListToolsRequest
+INFO:     127.0.0.1:55541 - "POST /mcp/ HTTP/1.1" 200 OK
+2026-10-19 00:32:52 | INFO     | mcp.server.streamable_http | Terminating session: None
+INFO:     127.0.0.1:55544 - "HEAD /mcp/ HTTP/1.1" 200 OK
+INFO:     127.0.0.1:55545 - "POST /mcp/ HTTP/1.1" 200 OK
+2026-10-19 00:32:53 | INFO     | mcp.server.streamable_http | Terminating session: None
+INFO:     127.0.0.1:55545 - "POST /mcp/ HTTP/1.1" 202 Accepted
+2026-10-19 00:32:53 | INFO     | mcp.server.streamable_http | Terminating session: None
+2026-10-19 00:32:53 | INFO     | mcp.server.lowlevel.server | Processing request of type ListToolsRequest
+INFO:     127.0.0.1:55546 - "POST /mcp/ HTTP/1.1" 200 OK
+2026-10-19 00:32:53 | INFO     | mcp.server.streamable_http | Terminating session: None
+INFO:     127.0.0.1:55547 - "HEAD /mcp/ HTTP/1.1" 200 OK
+INFO:     127.0.0.1:55548 - "POST /mcp/ HTTP/1.1" 200 OK
+2026-10-19 00:32:53 | INFO     | mcp.server.streamable_http | Terminating session: None
+INFO:     127.0.0.1:55548 - "POST /mcp/ HTTP/1.1" 202 Accepted
+2026-10-19 00:32:53 | INFO     | mcp.server.streamable_http | Terminating session: None
+2026-10-19 00:32:53 | INFO     | mcp.server.lowlevel.server | Processing request of type ListToolsRequest
+INFO:     127.0.0.1:55549 - "POST /mcp/ HTTP/1.1" 200 OK
+2026-10-19 00:32:53 | INFO     | mcp.server.streamable_http | Terminating session: None
+INFO:     127.0.0.1:55550 - "HEAD /mcp/ HTTP/1.1" 200 OK
+INFO:     127.0.0.1:55551 - "POST /mcp/ HTTP/1.1" 200 OK
+2026-10-19 00:32:54 | INFO     | mcp.server.streamable_http | Terminating session: None
+INFO:     127.0.0.1:55551 - "POST /mcp/ HTTP/1.1" 202 Accepted
+2026-10-19 00:32:54 | INFO     | mcp.server.streamable_http | Terminating session: None
+2026-10-19 00:32:54 | INFO     | mcp.server.lowlevel.server | Processing request of type ListToolsRequest
+INFO:     127.0.0.1:55552 - "POST /mcp/ HTTP/1.1" 200 OK
+2026-10-19 00:32:54 | INFO     | mcp.server.streamable_http | Terminating session: None
+INFO:     127.0.0.1:55553 - "HEAD /mcp/ HTTP/1.1" 200 OK
+INFO:     127.0.0.1:55554 - "POST /mcp/ HTTP/1.1" 200 OK
+2026-10-19 00:32:54 | INFO     | mcp.server.streamable_http | Terminating session: None
+INFO:     127.0.0.1:55554 - "POST /mcp/ HTTP/1.1" 202 Accepted
+2026-10-19 00:32:54 | INFO     | mcp.server.streamable_http | Terminating session: None
+2026-10-19 00:32:54 | INFO     | mcp.server.lowlevel.server | Processing request of type ListToolsRequest
+INFO:     127.0.0.1:55555 - "POST /mcp/ HTTP/1.1" 200 OK
+2026-10-19 00:32:54 | INFO     | mcp.server.streamable_http | Terminating session: None
+INFO:     127.0.0.1:55556 - "HEAD /mcp/ HTTP/1.1" 200 OK
+INFO:     127.0.0.1:55557 - "POST /mcp/ HTTP/1.1" 200 OK
+2026-10-19 00:32:55 | INFO     | mcp.server.streamable_http | Terminating session: None
+INFO:     127.0.0.1:55557 - "POST /mcp/ HTTP/1.1" 202 Accepted
+2026-10-19 00:32:55 | INFO     | mcp.server.streamable_http | Terminating session: None
+2026-10-19 00:32:55 | INFO     | mcp.server.lowlevel.server | Processing request of type ListToolsRequest
+INFO:     127.0.0.1:55558 - "POST /mcp/ HTTP/1.1" 200 OK
+2026-10-19 00:32:55 | INFO     | mcp.server.streamable_http | Terminating session: None
+INFO:     127.0.0.1:55560 - "HEAD /mcp/ HTTP/1.1" 200 OK
+INFO:     127.0.0.1:55561 - "POST /mcp/ HTTP/1.1" 200 OK
+2026-10-19 00:32:55 | INFO     | mcp.server.streamable_http | Terminating session: None
+INFO:     127.0.0.1:55561 - "POST /mcp/ HTTP/1.1" 202 Accepted
+2026-10-19 00:32:55 | INFO     | mcp.server.streamable_http | Terminating session: None
+2026-10-19 00:32:55 | INFO     | mcp.server.lowlevel.server | Processing request of type ListToolsRequest
+INFO:     127.0.0.1:55562 - "POST /mcp/ HTTP/1.1" 200 OK
+2026-10-19 00:32:56 | INFO     | mcp.server.streamable_http | Terminating session: None
+2026-10-19 00:33:06 | INFO     | mcp.server.lowlevel.server | Processing request of type CallToolRequest
+2026-10-19 00:33:06 | INFO     | src.hermes.mcp_server | [MCP] Tool call received: profile=aiagent-dyn-e83a035c, tool=list_directory, args={'directory_path': 'D:\\Security-logs-test\\attack-cases-benchmark\\case-1-apt-enterprise-intrusion\\raw-logs', 'recursive': True, 'max_depth': 4, 'max_items': 150}
+2026-10-19 00:33:06 | INFO     | src.hermes.mcp_server | [MCP] Tool 'list_directory' executed successfully: result=# Directory Tree for 'D:\Security-logs-test\attack-cases-benchmark\case-1-apt-enterprise-intrusion\raw-logs' (recursive, max depth 4):
+\u251c\u2500\u2500 \U0001f4c4 consolida
+INFO:     127.0.0.1:55605 - "POST /mcp/ HTTP/1.1" 200 OK
+2026-10-19 00:33:06 | INFO     | mcp.server.streamable_http | Terminating session: None
+INFO:     127.0.0.1:55191 - "GET /api/schedules HTTP/1.1" 200 OK
+2026-10-19 00:33:14 | INFO     | httpx | HTTP Request: GET http://10.7.75.103:1234/v1/models "HTTP/1.1 200 OK"
+INFO:     127.0.0.1:52855 - "GET /health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:52855 - "GET /api/schedules HTTP/1.1" 200 OK
+INFO:     127.0.0.1:50560 - "GET /status/uaos-011ce969bf2a HTTP/1.1" 200 OK
+INFO:     127.0.0.1:52855 - "GET /api/schedules HTTP/1.1" 200 OK
+2026-10-19 00:33:18 | INFO     | httpx | HTTP Request: GET http://10.7.75.103:1234/v1/models "HTTP/1.1 200 OK"
+INFO:     127.0.0.1:50560 - "GET /health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:50560 - "GET /api/schedules HTTP/1.1" 200 OK
+INFO:     127.0.0.1:50560 - "GET /status/uaos-011ce969bf2a HTTP/1.1" 200 OK
+2026-10-19 00:33:28 | INFO     | httpx | HTTP Request: GET http://10.7.75.103:1234/v1/models "HTTP/1.1 200 OK"
+INFO:     127.0.0.1:50560 - "GET /health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:50560 - "GET /api/schedules HTTP/1.1" 200 OK
+INFO:     127.0.0.1:50560 - "GET /status/uaos-011ce969bf2a HTTP/1.1" 200 OK
+2026-10-19 00:33:38 | INFO     | httpx | HTTP Request: GET http://10.7.75.103:1234/v1/models "HTTP/1.1 200 OK"
+INFO:     127.0.0.1:50560 - "GET /health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:50560 - "GET /api/schedules HTTP/1.1" 200 OK
+2026-10-19 00:33:38 | INFO     | mcp.server.lowlevel.server | Processing request of type CallToolRequest
+2026-10-19 00:33:38 | INFO     | src.hermes.mcp_server | [MCP] Tool call received: profile=aiagent-dyn-4d43acbd, tool=gather_log_evidence, args={'target_path': 'D:\\Security-logs-test\\attack-cases-benchmark\\case-1-apt-enterprise-intrusion\\raw-logs'}
+2026-10-19 00:33:38 | INFO     | src.hermes.mcp_server | [MCP] Tool 'gather_log_evidence' executed successfully: result==== [EVIDENCE COLLECTION: D:\Security-logs-test\attack-cases-benchmark\case-1-apt-enterprise-intrusion\raw-logs] ===
+=== [UNIVERSAL FORENSIC LOG AUDIT
+INFO:     127.0.0.1:49370 - "POST /mcp/ HTTP/1.1" 200 OK
+2026-10-19 00:33:38 | INFO     | mcp.server.streamable_http | Terminating session: None
+INFO:     127.0.0.1:50560 - "GET /status/uaos-011ce969bf2a HTTP/1.1" 200 OK
+2026-10-19 00:33:40 | INFO     | mcp.server.lowlevel.server | Processing request of type CallToolRequest
+2026-10-19 00:33:40 | INFO     | src.hermes.mcp_server | [MCP] Tool call received: profile=aiagent-dyn-4d43acbd, tool=triage_security_alert, args={'target_path': 'D:\\Security-logs-test\\attack-cases-benchmark\\case-1-apt-enterprise-intrusion\\raw-logs\\email_gateway.log'}
+2026-10-19 00:33:40 | INFO     | src.registry.tools.soc_tools | Materialized 1 evidence file(s) from 'D:\Security-logs-test\attack-cases-benchmark\case-1-apt-enterprise-intrusion\raw-logs\email_gateway.log' for text analysis
+2026-10-19 00:33:40 | INFO     | src.hermes.mcp_server | [MCP] Tool 'triage_security_alert' executed successfully: result==== [UNIVERSAL SOC TRIAGE REPORT] ===
+=== [SOC TRIAGE REPORT] ===
+Assigned Severity : CRITICAL (Threat Score: 100/100)
+Threat Class      : Spearphishi
+INFO:     127.0.0.1:49370 - "POST /mcp/ HTTP/1.1" 200 OK
+2026-10-19 00:33:40 | INFO     | mcp.server.streamable_http | Terminating session: None
+2026-10-19 00:33:41 | INFO     | mcp.server.lowlevel.server | Processing request of type CallToolRequest
+2026-10-19 00:33:41 | INFO     | src.hermes.mcp_server | [MCP] Tool call received: profile=aiagent-dyn-4d43acbd, tool=triage_security_alert, args={'target_path': 'D:\\Security-logs-test\\attack-cases-benchmark\\case-1-apt-enterprise-intrusion\\raw-logs\\firewall_traffic.log'}
+2026-10-19 00:33:41 | INFO     | src.registry.tools.soc_tools | Materialized 1 evidence file(s) from 'D:\Security-logs-test\attack-cases-benchmark\case-1-apt-enterprise-intrusion\raw-logs\firewall_traffic.log' for text analysis
+2026-10-19 00:33:41 | INFO     | src.hermes.mcp_server | [MCP] Tool 'triage_security_alert' executed successfully: result==== [UNIVERSAL SOC TRIAGE REPORT] ===
+=== [SOC TRIAGE REPORT] ===
+Assigned Severity : CRITICAL (Threat Score: 100/100)
+Threat Class      : Endpoint / 
+INFO:     127.0.0.1:49370 - "POST /mcp/ HTTP/1.1" 200 OK
+2026-10-19 00:33:41 | INFO     | mcp.server.streamable_http | Terminating session: None
+INFO:     127.0.0.1:50717 - "GET /status/uaos-011ce969bf2a HTTP/1.1" 200 OK
+2026-10-19 00:33:45 | INFO     | mcp.server.lowlevel.server | Processing request of type CallToolRequest
+2026-10-19 00:33:45 | INFO     | src.hermes.mcp_server | [MCP] Tool call received: profile=aiagent-dyn-4d43acbd, tool=read_file, args={'file_path': 'D:\\Security-logs-test\\attack-cases-benchmark\\case-1-apt-enterprise-intrusion\\raw-logs\\consolidated_logs.csv'}
+2026-10-19 00:33:45 | INFO     | src.hermes.mcp_server | [MCP] Tool 'read_file' executed successfully: result=timestamp,source_ip,event_type,severity
+,,,
+,,,
+
+INFO:     127.0.0.1:49370 - "POST /mcp/ HTTP/1.1" 200 OK
+2026-10-19 00:33:45 | INFO     | mcp.server.streamable_http | Terminating session: None
+2026-10-19 00:33:48 | INFO     | httpx | HTTP Request: GET http://10.7.75.103:1234/v1/models "HTTP/1.1 200 OK"
+INFO:     127.0.0.1:50717 - "GET /health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:50717 - "GET /api/schedules HTTP/1.1" 200 OK
+INFO:     127.0.0.1:50717 - "GET /status/uaos-011ce969bf2a HTTP/1.1" 200 OK
+2026-10-19 00:33:54 | INFO     | mcp.server.lowlevel.server | Processing request of type CallToolRequest
+2026-10-19 00:33:54 | INFO     | src.hermes.mcp_server | [MCP] Tool call received: profile=aiagent-dyn-4d43acbd, tool=read_file, args={'file_path': 'D:\\Security-logs-test\\attack-cases-benchmark\\case-1-apt-enterprise-intrusion\\raw-logs\\email_gateway.log'}
+2026-10-19 00:33:54 | INFO     | src.hermes.mcp_server | [MCP] Tool 'read_file' executed successfully: result=# Cisco Secure Email Gateway (IronPort AsyncOS 14.2) Syslog
+# Facility: mail, Severity: info
+# Log Format: Cisco AsyncOS Standard Text Mail Log
+# Date
+INFO:     127.0.0.1:50723 - "POST /mcp/ HTTP/1.1" 200 OK
+2026-10-19 00:33:54 | INFO     | mcp.server.streamable_http | Terminating session: None
+INFO:     127.0.0.1:57777 - "GET /status/uaos-011ce969bf2a HTTP/1.1" 200 OK
+2026-10-19 00:33:58 | INFO     | httpx | HTTP Request: GET http://10.7.75.103:1234/v1/models "HTTP/1.1 200 OK"
+INFO:     127.0.0.1:57777 - "GET /health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57777 - "GET /api/schedules HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57777 - "GET /status/uaos-011ce969bf2a HTTP/1.1" 200 OK
+2026-10-19 00:34:08 | INFO     | httpx | HTTP Request: GET http://10.7.75.103:1234/v1/models "HTTP/1.1 200 OK"
+INFO:     127.0.0.1:50828 - "GET /health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:50828 - "GET /api/schedules HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57777 - "GET /status/uaos-011ce969bf2a HTTP/1.1" 200 OK
+2026-10-19 00:34:18 | INFO     | httpx | HTTP Request: GET http://10.7.75.103:1234/v1/models "HTTP/1.1 200 OK"
+INFO:     127.0.0.1:62591 - "GET /health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:62591 - "GET /api/schedules HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57777 - "GET /status/uaos-011ce969bf2a HTTP/1.1" 200 OK
+2026-10-19 00:34:28 | INFO     | httpx | HTTP Request: GET http://10.7.75.103:1234/v1/models "HTTP/1.1 200 OK"
+INFO:     127.0.0.1:49234 - "GET /health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:49234 - "GET /api/schedules HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57777 - "GET /status/uaos-011ce969bf2a HTTP/1.1" 200 OK
+2026-10-19 00:34:33 | INFO     | mcp.server.lowlevel.server | Processing request of type CallToolRequest
+2026-10-19 00:34:33 | INFO     | src.hermes.mcp_server | [MCP] Tool call received: profile=aiagent-dyn-3b9ca5bd, tool=triage_security_alert, args={'target_path': 'D:\\Security-logs-test\\attack-cases-benchmark\\case-1-apt-enterprise-intrusion\\raw-logs'}
+2026-10-19 00:34:33 | INFO     | src.registry.tools.soc_tools | Materialized 6 evidence file(s) from 'D:\Security-logs-test\attack-cases-benchmark\case-1-apt-enterprise-intrusion\raw-logs' for text analysis
+2026-10-19 00:34:33 | INFO     | src.hermes.mcp_server | [MCP] Tool 'triage_security_alert' executed successfully: result==== [UNIVERSAL SOC TRIAGE REPORT] ===
+=== [SOC TRIAGE REPORT] ===
+Assigned Severity : CRITICAL (Threat Score: 100/100)
+Threat Class      : Endpoint / 
+INFO:     127.0.0.1:49251 - "POST /mcp/ HTTP/1.1" 200 OK
+2026-10-19 00:34:33 | INFO     | mcp.server.streamable_http | Terminating session: None
+INFO:     127.0.0.1:57777 - "GET /status/uaos-011ce969bf2a HTTP/1.1" 200 OK
+2026-10-19 00:34:38 | INFO     | httpx | HTTP Request: GET http://10.7.75.103:1234/v1/models "HTTP/1.1 200 OK"
+INFO:     127.0.0.1:57777 - "GET /health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57777 - "GET /api/schedules HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57777 - "GET /status/uaos-011ce969bf2a HTTP/1.1" 200 OK
+2026-10-19 00:34:48 | INFO     | httpx | HTTP Request: GET http://10.7.75.103:1234/v1/models "HTTP/1.1 200 OK"
+INFO:     127.0.0.1:55522 - "GET /health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:55522 - "GET /api/schedules HTTP/1.1" 200 OK
+INFO:     127.0.0.1:62750 - "GET /status/uaos-011ce969bf2a HTTP/1.1" 200 OK
+2026-10-19 00:34:58 | INFO     | httpx | HTTP Request: GET http://10.7.75.103:1234/v1/models "HTTP/1.1 200 OK"
+INFO:     127.0.0.1:49927 - "GET /health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:49927 - "GET /api/schedules HTTP/1.1" 200 OK
+INFO:     127.0.0.1:54364 - "GET /status/uaos-011ce969bf2a HTTP/1.1" 200 OK
+2026-10-19 00:35:08 | INFO     | httpx | HTTP Request: GET http://10.7.75.103:1234/v1/models "HTTP/1.1 200 OK"
+INFO:     127.0.0.1:64306 - "GET /health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:64306 - "GET /api/schedules HTTP/1.1" 200 OK
+INFO:     127.0.0.1:54364 - "GET /status/uaos-011ce969bf2a HTTP/1.1" 200 OK
+INFO:     127.0.0.1:54364 - "GET /status/uaos-011ce969bf2a HTTP/1.1" 200 OK
+2026-10-19 00:35:14 | INFO     | mcp.server.lowlevel.server | Processing request of type CallToolRequest
+2026-10-19 00:35:14 | INFO     | src.hermes.mcp_server | [MCP] Tool call received: profile=aiagent-dyn-e2388612, tool=analyze_incident_impact, args={'evidence_summary': 'High-confidence alerts from t3 indicate external IPs 185.220.101.45, 203.0.113.119, 198.51.100.240 and internal LAN IPs 10.20.10.45, 10.20.10.62 involved in lateral movement. Domains overdue-invoices-center.org and vendorportal.com flagged as spearphishing. File hashes unknown. Overall incident critical with potential data exfiltration via psexec/mimikatz.', 'target_scope': 'D:\\Security-logs-test\\attack-cases-benchmark\\case-1-apt-enterprise-intrusion\\raw-logs'}
+2026-10-19 00:35:14 | INFO     | src.hermes.mcp_server | [MCP] Tool 'analyze_incident_impact' executed successfully: result==== [ENTERPRISE BLAST RADIUS & IMPACT ASSESSMENT REPORT] ===
+Incident Severity Rating   : CRITICAL
+
+1. IMPACTED INFRASTRUCTURE & TARGETED ASSETS:
+  • 
+INFO:     127.0.0.1:61907 - "POST /mcp/ HTTP/1.1" 200 OK
+2026-10-19 00:35:14 | INFO     | mcp.server.streamable_http | Terminating session: None
+2026-10-19 00:35:14 | INFO     | mcp.server.lowlevel.server | Processing request of type CallToolRequest
+2026-10-19 00:35:14 | INFO     | src.hermes.mcp_server | [MCP] Tool call received: profile=aiagent-dyn-e2388612, tool=compress_security_timeline, args={'raw_evidence_text': 'D:\\Security-logs-test\\attack-cases-benchmark\\case-1-apt-enterprise-intrusion\\raw-logs', 'max_timeline_events': 5}
+2026-10-19 00:35:14 | INFO     | src.registry.tools.soc_tools | Materialized 6 evidence file(s) from 'D:\Security-logs-test\attack-cases-benchmark\case-1-apt-enterprise-intrusion\raw-logs' for text analysis
+2026-10-19 00:35:14 | INFO     | src.hermes.mcp_server | [MCP] Tool 'compress_security_timeline' executed successfully: result==== [COMPRESSED INCIDENT TIMELINE] === [CHRONOLOGICAL INCIDENT TIMELINE & ATTACK SEQUENCE]
+Original Evidence Context: 719 records analyzed -> Synthesi
+INFO:     127.0.0.1:61907 - "POST /mcp/ HTTP/1.1" 200 OK
+2026-10-19 00:35:14 | INFO     | mcp.server.streamable_http | Terminating session: None
+2026-10-19 00:35:18 | INFO     | httpx | HTTP Request: GET http://10.7.75.103:1234/v1/models "HTTP/1.1 200 OK"
+INFO:     127.0.0.1:54364 - "GET /health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:54364 - "GET /api/schedules HTTP/1.1" 200 OK
+INFO:     127.0.0.1:54364 - "GET /status/uaos-011ce969bf2a HTTP/1.1" 200 OK
+2026-10-19 00:35:28 | INFO     | httpx | HTTP Request: GET http://10.7.75.103:1234/v1/models "HTTP/1.1 200 OK"
+INFO:     127.0.0.1:54364 - "GET /health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:54364 - "GET /api/schedules HTTP/1.1" 200 OK
+INFO:     127.0.0.1:54364 - "GET /status/uaos-011ce969bf2a HTTP/1.1" 200 OK
+2026-10-19 00:35:38 | INFO     | httpx | HTTP Request: GET http://10.7.75.103:1234/v1/models "HTTP/1.1 200 OK"
+INFO:     127.0.0.1:54364 - "GET /health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:54364 - "GET /api/schedules HTTP/1.1" 200 OK
+INFO:     127.0.0.1:54364 - "GET /status/uaos-011ce969bf2a HTTP/1.1" 200 OK
+2026-10-19 00:35:45 | INFO     | mcp.server.lowlevel.server | Processing request of type PingRequest
+INFO:     127.0.0.1:61925 - "POST /mcp/ HTTP/1.1" 200 OK
+2026-10-19 00:35:45 | INFO     | mcp.server.streamable_http | Terminating session: None
+2026-10-19 00:35:46 | INFO     | mcp.server.lowlevel.server | Processing request of type PingRequest
+INFO:     127.0.0.1:61928 - "POST /mcp/ HTTP/1.1" 200 OK
+2026-10-19 00:35:46 | INFO     | mcp.server.streamable_http | Terminating session: None
+2026-10-19 00:35:46 | INFO     | mcp.server.lowlevel.server | Processing request of type PingRequest
+INFO:     127.0.0.1:61934 - "POST /mcp/ HTTP/1.1" 200 OK
+2026-10-19 00:35:46 | INFO     | mcp.server.streamable_http | Terminating session: None
+2026-10-19 00:35:47 | INFO     | mcp.server.lowlevel.server | Processing request of type PingRequest
+INFO:     127.0.0.1:61936 - "POST /mcp/ HTTP/1.1" 200 OK
+2026-10-19 00:35:47 | INFO     | mcp.server.streamable_http | Terminating session: None
+2026-10-19 00:35:48 | INFO     | mcp.server.lowlevel.server | Processing request of type PingRequest
+INFO:     127.0.0.1:61940 - "POST /mcp/ HTTP/1.1" 200 OK
+2026-10-19 00:35:48 | INFO     | mcp.server.streamable_http | Terminating session: None
+2026-10-19 00:35:48 | INFO     | httpx | HTTP Request: GET http://10.7.75.103:1234/v1/models "HTTP/1.1 200 OK"
+INFO:     127.0.0.1:54364 - "GET /health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:54364 - "GET /api/schedules HTTP/1.1" 200 OK
+2026-10-19 00:35:48 | INFO     | mcp.server.lowlevel.server | Processing request of type PingRequest
+INFO:     127.0.0.1:61942 - "POST /mcp/ HTTP/1.1" 200 OK
+2026-10-19 00:35:48 | INFO     | mcp.server.streamable_http | Terminating session: None
+INFO:     127.0.0.1:54364 - "GET /status/uaos-011ce969bf2a HTTP/1.1" 200 OK
+2026-10-19 00:35:48 | INFO     | mcp.server.lowlevel.server | Processing request of type PingRequest
+INFO:     127.0.0.1:61944 - "POST /mcp/ HTTP/1.1" 200 OK
+2026-10-19 00:35:48 | INFO     | mcp.server.streamable_http | Terminating session: None
+2026-10-19 00:35:49 | INFO     | mcp.server.lowlevel.server | Processing request of type PingRequest
+INFO:     127.0.0.1:61947 - "POST /mcp/ HTTP/1.1" 200 OK
+2026-10-19 00:35:49 | INFO     | mcp.server.streamable_http | Terminating session: None
+2026-10-19 00:35:49 | INFO     | mcp.server.lowlevel.server | Processing request of type CallToolRequest
+2026-10-19 00:35:49 | INFO     | src.hermes.mcp_server | [MCP] Tool call received: profile=aiagent-dyn-45d974d5, tool=propose_containment_response, args={'target_entity': '185.220.101.45', 'action_type': 'block_ip', 'justification': 'Malicious IP identified in firewall and Sysmon logs; low false\u2011positive likelihood; involved in spear\u2011phishing and exfiltration.', 'dry_run': True}
+2026-10-19 00:35:49 | INFO     | src.hermes.mcp_server | [MCP] Tool 'propose_containment_response' executed successfully: result==== [UNIVERSAL INCIDENT CONTAINMENT PLAYBOOK] === [INCIDENT CONTAINMENT PLAN] [PROPOSED - AWAITING OPERATOR REVIEW] ===
+Target Entity  : 185.220.101.4
+INFO:     127.0.0.1:61948 - "POST /mcp/ HTTP/1.1" 200 OK
+2026-10-19 00:35:49 | INFO     | mcp.server.streamable_http | Terminating session: None
+2026-10-19 00:35:49 | INFO     | mcp.server.lowlevel.server | Processing request of type PingRequest
+INFO:     127.0.0.1:61949 - "POST /mcp/ HTTP/1.1" 200 OK
+2026-10-19 00:35:49 | INFO     | mcp.server.streamable_http | Terminating session: None
+2026-10-19 00:35:50 | INFO     | mcp.server.lowlevel.server | Processing request of type PingRequest
+INFO:     127.0.0.1:61950 - "POST /mcp/ HTTP/1.1" 200 OK
+2026-10-19 00:35:50 | INFO     | mcp.server.streamable_http | Terminating session: None
+2026-10-19 00:35:50 | INFO     | mcp.server.lowlevel.server | Processing request of type PingRequest
+INFO:     127.0.0.1:61948 - "POST /mcp/ HTTP/1.1" 200 OK
+2026-10-19 00:35:50 | INFO     | mcp.server.streamable_http | Terminating session: None
+2026-10-19 00:35:50 | INFO     | mcp.server.lowlevel.server | Processing request of type PingRequest
+INFO:     127.0.0.1:61951 - "POST /mcp/ HTTP/1.1" 200 OK
+2026-10-19 00:35:50 | INFO     | mcp.server.streamable_http | Terminating session: None
+2026-10-19 00:35:51 | INFO     | mcp.server.lowlevel.server | Processing request of type PingRequest
+INFO:     127.0.0.1:61952 - "POST /mcp/ HTTP/1.1" 200 OK
+2026-10-19 00:35:51 | INFO     | mcp.server.streamable_http | Terminating session: None
+2026-10-19 00:35:51 | INFO     | mcp.server.lowlevel.server | Processing request of type PingRequest
+INFO:     127.0.0.1:61953 - "POST /mcp/ HTTP/1.1" 200 OK
+2026-10-19 00:35:51 | INFO     | mcp.server.streamable_http | Terminating session: None
+2026-10-19 00:35:52 | INFO     | mcp.server.lowlevel.server | Processing request of type PingRequest
+INFO:     127.0.0.1:61955 - "POST /mcp/ HTTP/1.1" 200 OK
+2026-10-19 00:35:52 | INFO     | mcp.server.streamable_http | Terminating session: None
+2026-10-19 00:35:52 | INFO     | mcp.server.lowlevel.server | Processing request of type CallToolRequest
+2026-10-19 00:35:52 | INFO     | src.hermes.mcp_server | [MCP] Tool call received: profile=aiagent-dyn-45d974d5, tool=propose_containment_response, args={'action_type': 'block_ip', 'dry_run': True}
+2026-10-19 00:35:52 | INFO     | src.hermes.mcp_server | [MCP] Tool 'propose_containment_response' executed successfully: result==== [UNIVERSAL INCIDENT CONTAINMENT PLAYBOOK] === [INCIDENT CONTAINMENT PLAN] [PROPOSED - AWAITING OPERATOR REVIEW] ===
+Target Entity  : None
+Target E
+INFO:     127.0.0.1:61948 - "POST /mcp/ HTTP/1.1" 200 OK
+2026-10-19 00:35:52 | INFO     | mcp.server.streamable_http | Terminating session: None
+2026-10-19 00:35:52 | INFO     | mcp.server.lowlevel.server | Processing request of type PingRequest
+INFO:     127.0.0.1:61957 - "POST /mcp/ HTTP/1.1" 200 OK
+2026-10-19 00:35:52 | INFO     | mcp.server.streamable_http | Terminating session: None
+2026-10-19 00:35:53 | INFO     | mcp.server.lowlevel.server | Processing request of type PingRequest
+INFO:     127.0.0.1:61958 - "POST /mcp/ HTTP/1.1" 200 OK
+2026-10-19 00:35:53 | INFO     | mcp.server.streamable_http | Terminating session: None
+2026-10-19 00:35:53 | INFO     | mcp.server.lowlevel.server | Processing request of type PingRequest
+INFO:     127.0.0.1:61959 - "POST /mcp/ HTTP/1.1" 200 OK
+2026-10-19 00:35:53 | INFO     | mcp.server.streamable_http | Terminating session: None
+INFO:     127.0.0.1:54364 - "GET /status/uaos-011ce969bf2a HTTP/1.1" 200 OK
+2026-10-19 00:35:54 | INFO     | mcp.server.lowlevel.server | Processing request of type PingRequest
+INFO:     127.0.0.1:61960 - "POST /mcp/ HTTP/1.1" 200 OK
+2026-10-19 00:35:54 | INFO     | mcp.server.streamable_http | Terminating session: None
+2026-10-19 00:35:54 | INFO     | mcp.server.lowlevel.server | Processing request of type PingRequest
+INFO:     127.0.0.1:61961 - "POST /mcp/ HTTP/1.1" 200 OK
+2026-10-19 00:35:54 | INFO     | mcp.server.streamable_http | Terminating session: None
+2026-10-19 00:35:55 | INFO     | mcp.server.lowlevel.server | Processing request of type PingRequest
+INFO:     127.0.0.1:61962 - "POST /mcp/ HTTP/1.1" 200 OK
+2026-10-19 00:35:55 | INFO     | mcp.server.streamable_http | Terminating session: None
+2026-10-19 00:35:56 | INFO     | mcp.server.lowlevel.server | Processing request of type PingRequest
+INFO:     127.0.0.1:61963 - "POST /mcp/ HTTP/1.1" 200 OK
+2026-10-19 00:35:56 | INFO     | mcp.server.streamable_http | Terminating session: None
+2026-10-19 00:35:58 | INFO     | httpx | HTTP Request: GET http://10.7.75.103:1234/v1/models "HTTP/1.1 200 OK"
+INFO:     127.0.0.1:54364 - "GET /health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:54364 - "GET /api/schedules HTTP/1.1" 200 OK
+2026-10-19 00:35:58 | INFO     | mcp.server.lowlevel.server | Processing request of type CallToolRequest
+2026-10-19 00:35:58 | INFO     | src.hermes.mcp_server | [MCP] Tool call received: profile=aiagent-dyn-45d974d5, tool=propose_containment_response, args={'target_entity': '185.220.101.45', 'action_type': 'block_ip', 'justification': 'External IP appears in both firewall and Sysmon logs; low false\u2011positive likelihood; involved in spear\u2011phishing and exfiltration.', 'dry_run': True}
+2026-10-19 00:35:58 | INFO     | src.hermes.mcp_server | [MCP] Tool 'propose_containment_response' executed successfully: result==== [UNIVERSAL INCIDENT CONTAINMENT PLAYBOOK] === [INCIDENT CONTAINMENT PLAN] [PROPOSED - AWAITING OPERATOR REVIEW] ===
+Target Entity  : 185.220.101.4
+INFO:     127.0.0.1:61965 - "POST /mcp/ HTTP/1.1" 200 OK
+2026-10-19 00:35:58 | INFO     | mcp.server.streamable_http | Terminating session: None
+INFO:     127.0.0.1:54364 - "GET /status/uaos-011ce969bf2a HTTP/1.1" 200 OK
+2026-10-19 00:36:02 | INFO     | mcp.server.lowlevel.server | Processing request of type CallToolRequest
+2026-10-19 00:36:02 | INFO     | src.hermes.mcp_server | [MCP] Tool call received: profile=aiagent-dyn-45d974d5, tool=propose_containment_response, args={'action_type': 'block_ip', 'dry_run': True}
+2026-10-19 00:36:02 | INFO     | src.hermes.mcp_server | [MCP] Tool 'propose_containment_response' executed successfully: result==== [UNIVERSAL INCIDENT CONTAINMENT PLAYBOOK] === [INCIDENT CONTAINMENT PLAN] [PROPOSED - AWAITING OPERATOR REVIEW] ===
+Target Entity  : None
+Target E
+INFO:     127.0.0.1:61965 - "POST /mcp/ HTTP/1.1" 200 OK
+2026-10-19 00:36:02 | INFO     | mcp.server.streamable_http | Terminating session: None
+INFO:     127.0.0.1:54364 - "GET /status/uaos-011ce969bf2a HTTP/1.1" 200 OK
+2026-10-19 00:36:07 | INFO     | mcp.server.lowlevel.server | Processing request of type CallToolRequest
+2026-10-19 00:36:07 | INFO     | src.hermes.mcp_server | [MCP] Tool call received: profile=aiagent-dyn-45d974d5, tool=propose_containment_response, args={'target_entity': '185.220.101.45', 'action_type': 'block_ip', 'dry_run': True}
+2026-10-19 00:36:07 | INFO     | src.hermes.mcp_server | [MCP] Tool 'propose_containment_response' executed successfully: result==== [UNIVERSAL INCIDENT CONTAINMENT PLAYBOOK] === [INCIDENT CONTAINMENT PLAN] [PROPOSED - AWAITING OPERATOR REVIEW] ===
+Target Entity  : 185.220.101.4
+INFO:     127.0.0.1:61965 - "POST /mcp/ HTTP/1.1" 200 OK
+2026-10-19 00:36:07 | INFO     | mcp.server.streamable_http | Terminating session: None
+2026-10-19 00:36:08 | INFO     | httpx | HTTP Request: GET http://10.7.75.103:1234/v1/models "HTTP/1.1 200 OK"
+INFO:     127.0.0.1:54364 - "GET /health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:54364 - "GET /api/schedules HTTP/1.1" 200 OK
+INFO:     127.0.0.1:54364 - "GET /status/uaos-011ce969bf2a HTTP/1.1" 200 OK
+2026-10-19 00:36:18 | INFO     | httpx | HTTP Request: GET http://10.7.75.103:1234/v1/models "HTTP/1.1 200 OK"
+INFO:     127.0.0.1:50803 - "GET /health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:50803 - "GET /api/schedules HTTP/1.1" 200 OK
+INFO:     127.0.0.1:62349 - "GET /status/uaos-011ce969bf2a HTTP/1.1" 200 OK
+2026-10-19 00:36:28 | INFO     | httpx | HTTP Request: GET http://10.7.75.103:1234/v1/models "HTTP/1.1 200 OK"
+INFO:     127.0.0.1:57257 - "GET /health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57257 - "GET /api/schedules HTTP/1.1" 200 OK
+INFO:     127.0.0.1:53061 - "GET /status/uaos-011ce969bf2a HTTP/1.1" 200 OK
+2026-10-19 00:36:38 | INFO     | httpx | HTTP Request: GET http://10.7.75.103:1234/v1/models "HTTP/1.1 200 OK"
+INFO:     127.0.0.1:62546 - "GET /health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:62546 - "GET /api/schedules HTTP/1.1" 200 OK
+INFO:     127.0.0.1:53061 - "GET /status/uaos-011ce969bf2a HTTP/1.1" 200 OK
+INFO:     127.0.0.1:53061 - "GET /status/uaos-011ce969bf2a HTTP/1.1" 200 OK
+2026-10-19 00:36:48 | INFO     | httpx | HTTP Request: GET http://10.7.75.103:1234/v1/models "HTTP/1.1 200 OK"
+INFO:     127.0.0.1:53061 - "GET /health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:53061 - "GET /api/schedules HTTP/1.1" 200 OK
+INFO:     127.0.0.1:53061 - "GET /status/uaos-011ce969bf2a HTTP/1.1" 200 OK
+INFO:     127.0.0.1:60765 - "GET /status/uaos-011ce969bf2a HTTP/1.1" 200 OK
+INFO:     127.0.0.1:60780 - "GET /api/schedules HTTP/1.1" 200 OK
+2026-10-19 00:37:05 | INFO     | httpx | HTTP Request: GET http://10.7.75.103:1234/v1/models "HTTP/1.1 200 OK"
+INFO:     127.0.0.1:55154 - "GET /health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:55154 - "GET /api/schedules HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57976 - "GET /status/uaos-011ce969bf2a HTTP/1.1" 200 OK
+2026-10-19 00:37:15 | INFO     | httpx | HTTP Request: GET http://10.7.75.103:1234/v1/models "HTTP/1.1 200 OK"
+INFO:     127.0.0.1:57976 - "GET /health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57976 - "GET /api/schedules HTTP/1.1" 200 OK
+2026-10-19 00:37:25 | INFO     | httpx | HTTP Request: GET http://10.7.75.103:1234/v1/models "HTTP/1.1 200 OK"
+INFO:     127.0.0.1:55554 - "GET /health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:55554 - "GET /api/schedules HTTP/1.1" 200 OK
+2026-10-19 00:37:35 | INFO     | httpx | HTTP Request: GET http://10.7.75.103:1234/v1/models "HTTP/1.1 200 OK"
+INFO:     127.0.0.1:52239 - "GET /health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:52239 - "GET /api/schedules HTTP/1.1" 200 OK
+2026-10-19 00:37:45 | INFO     | httpx | HTTP Request: GET http://10.7.75.103:1234/v1/models "HTTP/1.1 200 OK"
+INFO:     127.0.0.1:61923 - "GET /health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:61923 - "GET /api/schedules HTTP/1.1" 200 OK
+2026-10-19 00:37:55 | INFO     | httpx | HTTP Request: GET http://10.7.75.103:1234/v1/models "HTTP/1.1 200 OK"
+INFO:     127.0.0.1:50279 - "GET /health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:50279 - "GET /api/schedules HTTP/1.1" 200 OK
+2026-10-19 00:38:05 | INFO     | httpx | HTTP Request: GET http://10.7.75.103:1234/v1/models "HTTP/1.1 200 OK"
+INFO:     127.0.0.1:53906 - "GET /health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:53906 - "GET /api/schedules HTTP/1.1" 200 OK
+2026-10-19 00:38:15 | INFO     | httpx | HTTP Request: GET http://10.7.75.103:1234/v1/models "HTTP/1.1 200 OK"
+INFO:     127.0.0.1:58747 - "GET /health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:58747 - "GET /api/schedules HTTP/1.1" 200 OK
+2026-10-19 00:38:25 | INFO     | httpx | HTTP Request: GET http://10.7.75.103:1234/v1/models "HTTP/1.1 200 OK"
+INFO:     127.0.0.1:59821 - "GET /health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:59821 - "GET /api/schedules HTTP/1.1" 200 OK
+2026-10-19 00:38:35 | INFO     | httpx | HTTP Request: GET http://10.7.75.103:1234/v1/models "HTTP/1.1 200 OK"
+INFO:     127.0.0.1:61613 - "GET /health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:61613 - "GET /api/schedules HTTP/1.1" 200 OK
+2026-10-19 00:38:45 | INFO     | httpx | HTTP Request: GET http://10.7.75.103:1234/v1/models "HTTP/1.1 200 OK"
+INFO:     127.0.0.1:60677 - "GET /health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:60677 - "GET /api/schedules HTTP/1.1" 200 OK
+2026-10-19 00:38:45 | INFO     | mcp.server.lowlevel.server | Processing request of type PingRequest
+INFO:     127.0.0.1:60685 - "POST /mcp/ HTTP/1.1" 200 OK
+2026-10-19 00:38:45 | INFO     | mcp.server.streamable_http | Terminating session: None
+2026-10-19 00:38:46 | INFO     | mcp.server.lowlevel.server | Processing request of type PingRequest
+INFO:     127.0.0.1:60686 - "POST /mcp/ HTTP/1.1" 200 OK
+2026-10-19 00:38:46 | INFO     | mcp.server.streamable_http | Terminating session: None
+2026-10-19 00:38:46 | INFO     | mcp.server.lowlevel.server | Processing request of type PingRequest
+INFO:     127.0.0.1:60687 - "POST /mcp/ HTTP/1.1" 200 OK
+2026-10-19 00:38:46 | INFO     | mcp.server.streamable_http | Terminating session: None
+2026-10-19 00:38:47 | INFO     | mcp.server.lowlevel.server | Processing request of type PingRequest
+INFO:     127.0.0.1:60688 - "POST /mcp/ HTTP/1.1" 200 OK
+2026-10-19 00:38:47 | INFO     | mcp.server.streamable_http | Terminating session: None
+2026-10-19 00:38:48 | INFO     | mcp.server.lowlevel.server | Processing request of type PingRequest
+INFO:     127.0.0.1:60689 - "POST /mcp/ HTTP/1.1" 200 OK
+2026-10-19 00:38:48 | INFO     | mcp.server.streamable_http | Terminating session: None
+2026-10-19 00:38:48 | INFO     | mcp.server.lowlevel.server | Processing request of type PingRequest
+INFO:     127.0.0.1:60690 - "POST /mcp/ HTTP/1.1" 200 OK
+2026-10-19 00:38:48 | INFO     | mcp.server.streamable_http | Terminating session: None
+2026-10-19 00:38:48 | INFO     | mcp.server.lowlevel.server | Processing request of type PingRequest
+INFO:     127.0.0.1:60691 - "POST /mcp/ HTTP/1.1" 200 OK
+2026-10-19 00:38:48 | INFO     | mcp.server.streamable_http | Terminating session: None
+2026-10-19 00:38:49 | INFO     | mcp.server.lowlevel.server | Processing request of type PingRequest
+INFO:     127.0.0.1:60692 - "POST /mcp/ HTTP/1.1" 200 OK
+2026-10-19 00:38:49 | INFO     | mcp.server.streamable_http | Terminating session: None
+2026-10-19 00:38:49 | INFO     | mcp.server.lowlevel.server | Processing request of type PingRequest
+INFO:     127.0.0.1:60695 - "POST /mcp/ HTTP/1.1" 200 OK
+2026-10-19 00:38:49 | INFO     | mcp.server.streamable_http | Terminating session: None
+2026-10-19 00:38:50 | INFO     | mcp.server.lowlevel.server | Processing request of type PingRequest
+INFO:     127.0.0.1:60696 - "POST /mcp/ HTTP/1.1" 200 OK
+2026-10-19 00:38:50 | INFO     | mcp.server.streamable_http | Terminating session: None
+2026-10-19 00:38:50 | INFO     | mcp.server.lowlevel.server | Processing request of type PingRequest
+INFO:     127.0.0.1:60697 - "POST /mcp/ HTTP/1.1" 200 OK
+2026-10-19 00:38:50 | INFO     | mcp.server.streamable_http | Terminating session: None
+2026-10-19 00:38:51 | INFO     | mcp.server.lowlevel.server | Processing request of type PingRequest
+INFO:     127.0.0.1:60699 - "POST /mcp/ HTTP/1.1" 200 OK
+2026-10-19 00:38:51 | INFO     | mcp.server.streamable_http | Terminating session: None
+2026-10-19 00:38:51 | INFO     | mcp.server.lowlevel.server | Processing request of type PingRequest
+INFO:     127.0.0.1:60700 - "POST /mcp/ HTTP/1.1" 200 OK
+2026-10-19 00:38:51 | INFO     | mcp.server.streamable_http | Terminating session: None
+2026-10-19 00:38:51 | INFO     | mcp.server.lowlevel.server | Processing request of type PingRequest
+INFO:     127.0.0.1:60701 - "POST /mcp/ HTTP/1.1" 200 OK
+2026-10-19 00:38:51 | INFO     | mcp.server.streamable_http | Terminating session: None
+2026-10-19 00:38:52 | INFO     | mcp.server.lowlevel.server | Processing request of type PingRequest
+INFO:     127.0.0.1:60702 - "POST /mcp/ HTTP/1.1" 200 OK
+2026-10-19 00:38:52 | INFO     | mcp.server.streamable_http | Terminating session: None
+2026-10-19 00:38:52 | INFO     | mcp.server.lowlevel.server | Processing request of type PingRequest
+INFO:     127.0.0.1:60703 - "POST /mcp/ HTTP/1.1" 200 OK
+2026-10-19 00:38:52 | INFO     | mcp.server.streamable_http | Terminating session: None
+2026-10-19 00:38:53 | INFO     | mcp.server.lowlevel.server | Processing request of type PingRequest
+INFO:     127.0.0.1:60704 - "POST /mcp/ HTTP/1.1" 200 OK
+2026-10-19 00:38:53 | INFO     | mcp.server.streamable_http | Terminating session: None
+2026-10-19 00:38:53 | INFO     | mcp.server.lowlevel.server | Processing request of type PingRequest
+INFO:     127.0.0.1:60705 - "POST /mcp/ HTTP/1.1" 200 OK
+2026-10-19 00:38:53 | INFO     | mcp.server.streamable_http | Terminating session: None
+2026-10-19 00:38:54 | INFO     | mcp.server.lowlevel.server | Processing request of type PingRequest
+INFO:     127.0.0.1:60706 - "POST /mcp/ HTTP/1.1" 200 OK
+2026-10-19 00:38:54 | INFO     | mcp.server.streamable_http | Terminating session: None
+2026-10-19 00:38:55 | INFO     | mcp.server.lowlevel.server | Processing request of type PingRequest
+INFO:     127.0.0.1:60243 - "POST /mcp/ HTTP/1.1" 200 OK
+2026-10-19 00:38:55 | INFO     | mcp.server.streamable_http | Terminating session: None
+2026-10-19 00:38:55 | INFO     | httpx | HTTP Request: GET http://10.7.75.103:1234/v1/models "HTTP/1.1 200 OK"
+INFO:     127.0.0.1:60242 - "GET /health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:60242 - "GET /api/schedules HTTP/1.1" 200 OK
+2026-10-19 00:38:55 | INFO     | mcp.server.lowlevel.server | Processing request of type PingRequest
+INFO:     127.0.0.1:60245 - "POST /mcp/ HTTP/1.1" 200 OK
+2026-10-19 00:38:55 | INFO     | mcp.server.streamable_http | Terminating session: None
+2026-10-19 00:38:56 | INFO     | mcp.server.lowlevel.server | Processing request of type PingRequest
+INFO:     127.0.0.1:60246 - "POST /mcp/ HTTP/1.1" 200 OK
+2026-10-19 00:38:56 | INFO     | mcp.server.streamable_http | Terminating session: None
+2026-10-19 00:39:05 | INFO     | httpx | HTTP Request: GET http://10.7.75.103:1234/v1/models "HTTP/1.1 200 OK"
+INFO:     127.0.0.1:54446 - "GET /health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:54446 - "GET /api/schedules HTTP/1.1" 200 OK
+2026-10-19 00:39:15 | INFO     | httpx | HTTP Request: GET http://10.7.75.103:1234/v1/models "HTTP/1.1 200 OK"
+INFO:     127.0.0.1:65387 - "GET /health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:65387 - "GET /api/schedules HTTP/1.1" 200 OK
+2026-10-19 00:39:25 | INFO     | httpx | HTTP Request: GET http://10.7.75.103:1234/v1/models "HTTP/1.1 200 OK"
+INFO:     127.0.0.1:63956 - "GET /health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:63956 - "GET /api/schedules HTTP/1.1" 200 OK
+2026-10-19 00:39:35 | INFO     | httpx | HTTP Request: GET http://10.7.75.103:1234/v1/models "HTTP/1.1 200 OK"
+INFO:     127.0.0.1:58349 - "GET /health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:58349 - "GET /api/schedules HTTP/1.1" 200 OK
