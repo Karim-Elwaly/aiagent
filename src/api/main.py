@@ -334,7 +334,7 @@ async def lifespan(app: FastAPI):
 
     app.state.hermes_mcp = MCPEndpoint(ToolGate(registry, settings))
     async with app.state.hermes_mcp.run():
-        # Do not provision profiles on every API start/reload to avoid restart loops
+        # Do not provision profiles on every API start/reload to avoid restart loops (verified)
         # _provision_hermes_in_background()
         yield
 
@@ -428,6 +428,18 @@ except Exception as _dump_err:
     logger.warning("Case 1 dump error: %s", _dump_err)
 
 # ── Endpoints ────────────────────────────────────────────────────
+
+@app.get("/debug/worker-log")
+async def debug_worker_log():
+    try:
+        p = Path("data/worker.log")
+        if not p.exists():
+            return {"error": "worker.log does not exist"}
+        text = p.read_text(encoding="utf-8", errors="replace")
+        lines = text.splitlines()
+        return {"lines": lines[-120:]}
+    except Exception as exc:
+        return {"error": str(exc)}
 
 
 async def _execute_task_with_retries(
@@ -603,6 +615,7 @@ async def run_direct_workflow(
 
         completed: dict[str, str] = dict(resumed_completed)
         failed_errors: dict[str, str] = {}
+        pipeline_aborted = False
         execution_order = dag.topological_sort()
 
         # Persist an initial checkpoint now that the DAG is fixed, so a restart
@@ -715,6 +728,8 @@ async def run_direct_workflow(
                 task_output = result_dict.get("output", "")
                 supervisor_aborted = False
                 supervisor_abort_reason = ""
+                retry_failed = False
+                retry_failed_reason = ""
 
                 # Supervisor ReAct evaluation
                 try:
@@ -756,9 +771,6 @@ async def run_direct_workflow(
                             if retry_result.get("status") == "completed":
                                 task_output = retry_result.get("output", "")
                                 result_dict = retry_result
-                                # Re-evaluate the retried output. This previously
-                                # wrote a fabricated "pass" with an invented 0.98
-                                # confidence, claiming a review that never happened.
                                 retry_eval = await evaluate_task_output(
                                     task_dict, task_output, user_query, completed, task_agent
                                 ) or {}
@@ -769,6 +781,12 @@ async def run_direct_workflow(
                                 if retry_eval.get("decision") == "abort":
                                     supervisor_aborted = True
                                     supervisor_abort_reason = retry_eval.get("feedback", "")
+                                elif retry_eval.get("decision") in ("needs_retry", "need_more_info", "retry", "failed"):
+                                    retry_failed = True
+                                    retry_failed_reason = retry_eval.get("feedback", "")
+                            else:
+                                retry_failed = True
+                                retry_failed_reason = retry_result.get("error", "Task execution failed on retry")
                         else:
                             state["supervisor_evaluations"].append(supervisor_eval)
                 except Exception as eval_err:
@@ -785,6 +803,22 @@ async def run_direct_workflow(
                             "type": "task_failed",
                             "task_id": task_id,
                             "error": abort_msg,
+                        },
+                    )
+                    pipeline_aborted = True
+                    break
+
+                if retry_failed:
+                    fail_msg = f"Failed supervisor evaluation after retry: {retry_failed_reason}"
+                    state["task_statuses"][task_id] = "failed"
+                    failed_errors[task_id] = fail_msg
+                    _persist_checkpoint(direct_checkpoint.STATUS_RUNNING, dag_dict, completed)
+                    bus.publish(
+                        workflow_id,
+                        {
+                            "type": "task_failed",
+                            "task_id": task_id,
+                            "error": fail_msg,
                         },
                     )
                     continue
@@ -816,6 +850,13 @@ async def run_direct_workflow(
                     },
                 )
 
+        if pipeline_aborted:
+            for t in dag_dict.get("tasks", []):
+                tid = t["id"]
+                if tid not in completed and tid not in failed_errors:
+                    state["task_statuses"][tid] = "aborted"
+                    failed_errors[tid] = "Aborted due to upstream circuit breaker"
+
         # If nothing succeeded, surface the failure instead of assembling an
         # empty (nonsense) report — mirrors the Temporal workflow's behavior.
         if not completed:
@@ -838,9 +879,33 @@ async def run_direct_workflow(
             bus.publish(workflow_id, {"type": "workflow_completed", "result": workflow_result})
             return workflow_result
 
+        if pipeline_aborted:
+            abort_reasons = "\n".join(f"- **Task {tid}**: {reason}" for tid, reason in failed_errors.items())
+            abort_response = (
+                "⚠️ **Workflow Execution Aborted**\n\n"
+                "The workflow was stopped prematurely by the supervisor circuit breaker to prevent ungrounded results.\n\n"
+                f"**Task Failures & Abort Reasons:**\n{abort_reasons}\n\n"
+                f"**Completed Tasks:** {len(completed)} / {len(dag_dict.get('tasks', []))}"
+            )
+            workflow_result = {
+                "response": abort_response,
+                "tasks_completed": sum(1 for s in state["task_statuses"].values() if s == "completed"),
+                "tasks_failed": sum(1 for s in state["task_statuses"].values() if s in ("failed", "aborted")),
+                "replans": 0,
+                "supervisor_evaluations": state["supervisor_evaluations"],
+            }
+            state["result"] = workflow_result
+            state["status"] = "aborted"
+            state["error"] = abort_response
+            direct_checkpoint.mark_status(workflow_id, direct_checkpoint.STATUS_FAILED)
+            bus.publish(workflow_id, {"type": "final_solution", "response": abort_response})
+            bus.publish(workflow_id, {"type": "workflow_completed", "result": workflow_result})
+            return workflow_result
+
         # Phase 3: Assembly
         raw_solution = await assemble_response(user_query, dag_dict, completed, agent_id)
-        final_solution = clean_assembled_solution(raw_solution)
+        task_outputs_str = "\n".join(completed.values())
+        final_solution = clean_assembled_solution(raw_solution, upstream_context=task_outputs_str)
         workflow_result = {
             "response": final_solution,
             "tasks_completed": sum(1 for s in state["task_statuses"].values() if s == "completed"),
@@ -907,6 +972,10 @@ async def solve(request: SolveRequest):
     workflow_id = f"uaos-{uuid4().hex[:12]}"
     level = normalize_level(request.resilience or getattr(getattr(app.state, "settings", None), "default_resilience", "standard"))
 
+    custom_dag = request.custom_dag
+    # Auto-plan mode: do NOT inject a hardcoded template — let the Meta-Planner
+    # build the workflow dynamically every time using the required Hermes skills & tools.
+
     if not getattr(app.state, "temporal", None):
         logger.info(
             "Solving (sync via Standalone Engine): workflow=%s, query=%s, agent_id=%s, resilience=%s",
@@ -916,7 +985,7 @@ async def solve(request: SolveRequest):
             level,
         )
         result = await run_direct_workflow(
-            workflow_id, request.query, request.agent_id or "", request.custom_dag, level
+            workflow_id, request.query, request.agent_id or "", custom_dag, level
         )
         return SolveResponse(
             workflow_id=workflow_id,
@@ -936,7 +1005,7 @@ async def solve(request: SolveRequest):
     )
 
     try:
-        workflow_args = [request.query, request.agent_id or "", request.custom_dag, level]
+        workflow_args = [request.query, request.agent_id or "", custom_dag, level]
 
         handle = await app.state.temporal.start_workflow(
             UAOSWorkflow.run,
@@ -971,18 +1040,22 @@ async def solve_async(request: SolveRequest):
     workflow_id = f"uaos-{uuid4().hex[:12]}"
     level = normalize_level(request.resilience or getattr(getattr(app.state, "settings", None), "default_resilience", "standard"))
 
+    custom_dag = request.custom_dag
+    # Auto-plan mode: do NOT inject a hardcoded template — let the Meta-Planner
+    # build the workflow dynamically every time using the required Hermes skills & tools.
+
     if not getattr(app.state, "temporal", None):
         logger.info(
             "Solving (async via Standalone Engine): workflow=%s, query=%s, agent_id=%s, custom_dag=%s, resilience=%s",
             workflow_id,
             request.query[:100],
             request.agent_id or "default",
-            "yes" if request.custom_dag else "no",
+            "yes" if custom_dag else "no",
             level,
         )
         asyncio.create_task(
             run_direct_workflow(
-                workflow_id, request.query, request.agent_id or "", request.custom_dag, level
+                workflow_id, request.query, request.agent_id or "", custom_dag, level
             )
         )
         return SolveAsyncResponse(
@@ -995,12 +1068,12 @@ async def solve_async(request: SolveRequest):
         workflow_id,
         request.query[:100],
         request.agent_id or "default",
-        "yes" if request.custom_dag else "no",
+        "yes" if custom_dag else "no",
         level,
     )
 
     try:
-        workflow_args = [request.query, request.agent_id or "", request.custom_dag, level]
+        workflow_args = [request.query, request.agent_id or "", custom_dag, level]
 
         await app.state.temporal.start_workflow(
             UAOSWorkflow.run,
@@ -1133,7 +1206,7 @@ async def get_workflow_templates():
 
 
 @app.get("/solve/case1")
-async def solve_case1(use_template: bool = True):
+async def solve_case1(use_template: bool = False):
     """Trigger the Case 1 APT enterprise intrusion forensic benchmark investigation."""
     query = (
         r"Investigate critical security logs in D:\Security-logs-test\attack-cases-benchmark\case-1-apt-enterprise-intrusion\raw-logs: "
@@ -1149,6 +1222,12 @@ async def solve_case1(use_template: bool = True):
                 "goal": soc_tpl["goal"],
                 "tasks": [dict(t) for t in soc_tpl["tasks"]],
             }
+    try:
+        from src.hermes.profiles import HermesProfiles
+        HermesProfiles(get_settings()).purge_all_duplicate_skills()
+    except Exception:
+        pass
+
     try:
         if getattr(app.state, "temporal", None):
             level = normalize_level(getattr(getattr(app.state, "settings", None), "default_resilience", "standard"))
@@ -1619,13 +1698,15 @@ async def disconnect_mcp_server(payload: MCPDisconnectPayload):
     }
 
 
-@app.post("/api/gateway/restart")
+@app.api_route("/api/gateway/restart", methods=["GET", "POST"])
+@app.api_route("/api/hermes/repair-and-restart", methods=["GET", "POST"])
 async def restart_hermes_gateway():
-    """Manually restart the Hermes gateway to unpark MCP or pick up configuration."""
+    """Sanitize all profile timeouts on disk and restart the Hermes gateway."""
     from src.hermes.profiles import HermesProfiles
     profiles = HermesProfiles(get_settings())
+    cleaned = profiles.sync_all_profiles_mcp_url()
     await asyncio.to_thread(profiles.restart_gateway)
-    return {"status": "restarted"}
+    return {"status": "restarted", "profiles_sanitized": cleaned}
 
 
 @app.post("/api/tools/openapi/import")

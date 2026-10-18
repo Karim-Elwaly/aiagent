@@ -6,6 +6,6 @@
   "llm_timeout_seconds": 300.0,
   "worker_llm_model": null,
   "worker_engine": "hermes",
-  "api_port": 8001,
-  "hermes_mcp_url": "http://127.0.0.1:8001/mcp/"
-}
+  "api_port": 8000,
+  "hermes_mcp_url": "http://127.0.0.1:8000/mcp/"
+}

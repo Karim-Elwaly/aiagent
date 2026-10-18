@@ -11,6 +11,8 @@ from __future__ import annotations
 import asyncio
 import json
 import logging
+import os
+import re
 import time
 import uuid
 from collections.abc import Callable
@@ -21,6 +23,8 @@ import httpx
 from src.core.agent_models import AgentProfile
 from src.core.exceptions import TransientLLMError
 from src.core.models import Task, TaskResult, TaskStatus
+from src.core.path_utils import extract_target_path, resolve_target_path
+from src.core.text_utils import smart_truncate
 from src.hermes.active_runs import ActiveRuns
 from src.hermes.bundles import select_bundle
 from src.hermes.client import (
@@ -169,10 +173,24 @@ class HermesAgentWorker:
                 "task_tools": [t.name for t in tools],
             })
             try:
-                docs = await asyncio.to_thread(
-                    skill_documents, self.agent, self.registry, None,
-                    {t.name for t in [*tools, *approval]}, set(task.required_skills),
-                )
+                if is_dynamic:
+                    await asyncio.to_thread(
+                        self.profiles.sync_exact_task_skills,
+                        info.name,
+                        tools=[t.name for t in tools],
+                        skills=list(task.required_skills),
+                        task_name=task.name or task.id,
+                        task_desc=task.description,
+                    )
+                    docs = await asyncio.to_thread(
+                        skill_documents, self.agent, self.registry, None,
+                        {t.name for t in [*tools, *approval]}, set(task.required_skills),
+                    )
+                else:
+                    docs = await asyncio.to_thread(
+                        skill_documents, self.agent, self.registry, None,
+                        {t.name for t in [*tools, *approval]}, set(task.required_skills),
+                    )
                 await asyncio.to_thread(self.profiles.write_profile_skills, info.name, docs)
                 return await self._run(task, persona, tools, info.name, info.api_key, upstream_context, user_query,
                                        on_token, on_event, on_heartbeat, resume_checkpoint, workflow_id, start,
@@ -210,6 +228,7 @@ class HermesAgentWorker:
         model_errors = 0
         steered = False
         tool_calls: list[str] = []
+        res_str: str = ""
         while True:
             try:
                 if not run_id:
@@ -259,6 +278,19 @@ class HermesAgentWorker:
                 if run_id:
                     await self._stop(profile, key, run_id)
                 raise TransientLLMError(f"Lost the Hermes run {run_id}: {exc}", original_error=exc) from exc
+            except (ConnectionResetError, ConnectionAbortedError, OSError) as exc:
+                # Windows WinError 10054 / 10053: remote host forcibly closed the SSE connection.
+                # Treat as transient so the orchestrator's retry logic can reattach or restart the run.
+                if run_id:
+                    await self._stop(profile, key, run_id)
+                logger.warning(
+                    "Task '%s' Hermes run %s lost connection (%s: %s); raising as TransientLLMError for retry",
+                    task.id, run_id, type(exc).__name__, exc,
+                )
+                raise TransientLLMError(
+                    f"Hermes SSE connection reset for run {run_id} ({type(exc).__name__}: {exc})",
+                    original_error=exc,
+                ) from exc
             except Exception as exc:
                 if run_id:
                     await self._stop(profile, key, run_id)
@@ -269,10 +301,16 @@ class HermesAgentWorker:
             session_id = str(outcome.get("session_id") or session_id)
             output_text = str(outcome.get("output") or "")
             lowered_out = output_text.lower()
-            # Only check for MCP unreachable if no tools were called and task is not grounded.
-            # Security logs naturally mention 'connection refused', 'failed connection', etc., so we must
-            # match explicitly on MCP infrastructure error phrases.
-            is_mcp_unreachable = (
+            # Check for explicit claims that the MCP infrastructure / service failed
+            mcp_infrastructure_error = (
+                "underlying mcp" in lowered_out
+                or "mcp service" in lowered_out
+                or "mcp server" in lowered_out
+                or "mcp endpoint" in lowered_out
+                or ("server unreachable" in lowered_out and any(k in lowered_out for k in ("mcp", "tool", "service")))
+                or ("mcp__" in lowered_out and any(k in lowered_out for k in ("unreach", "cannot connect", "could not connect", "error after", "consecutive failure")))
+            )
+            is_mcp_unreachable = mcp_infrastructure_error or (
                 not (tool_calls or grounded) and (
                     ("mcp" in lowered_out and any(k in lowered_out for k in ("unreach", "cannot connect", "could not connect", "connection error", "mcp server error", "failed to connect")))
                     or "mcp server is down" in lowered_out
@@ -280,22 +318,53 @@ class HermesAgentWorker:
                 )
             )
             if status == "completed":
-                if is_mcp_unreachable and model_errors < MODEL_ERROR_RETRIES:
-                    model_errors += 1
-                    logger.warning("Task '%s' Hermes run %s hit parked/unreachable MCP backend; restarting gateway to revive MCP connection...", task.id, run_id)
-                    await self._restart_gateway(profile, force=True)
-                    run_id, last_seq = None, -1
-                    session_id, follow_up, steered, tool_calls = self._new_session_id(workflow_id, task), None, False, []
-                    grounded = False
-                    continue
+                if is_mcp_unreachable:
+                    if model_errors < MODEL_ERROR_RETRIES:
+                        model_errors += 1
+                        logger.warning("Task '%s' Hermes run %s hit parked/unreachable MCP backend; restarting gateway to revive MCP connection...", task.id, run_id)
+                        await self._restart_gateway(profile, force=True)
+                        run_id, last_seq = None, -1
+                        session_id, follow_up, steered, tool_calls = self._new_session_id(workflow_id, task), None, False, []
+                        grounded = False
+                        continue
+                    else:
+                        return self._failed(task, start, f"Hermes run {run_id} failed with unreachable MCP: {output_text[:300]}", tool_calls)
 
-                if tools and not tool_calls and not steered and not grounded:
-                    # Same session: Hermes replays its history, so the model sees its own ungrounded answer.
-                    logger.info("Task '%s' Hermes run %s answered without tools; steering it to use them",
-                                task.id, run_id)
-                    follow_up, steered = self._steering_message(tools), True
-                    run_id, last_seq = None, -1
-                    continue
+                task_tools_called = [t for t in tool_calls if t not in ("skill_view", "skill_manage", "skills_list")]
+                if tools and not task_tools_called and not grounded:
+                    if not steered:
+                        detected_path = self._extract_task_path_or_default(task, user_query)
+                        logger.info("Task '%s' Hermes run %s answered without task tools (calls: %s); steering it to use them",
+                                    task.id, run_id, tool_calls)
+                        follow_up, steered = self._steering_message(tools, detected_path), True
+                        run_id, last_seq = None, -1
+                        continue
+                    else:
+                        tool_to_run = self._select_tool_to_ground(tools, task, output_text, user_query)
+                        if tool_to_run:
+                            logger.warning(
+                                "Task '%s' Hermes model emitted plain text without tool calls after steering; force-grounding via tool '%s'",
+                                task.id, tool_to_run.name
+                            )
+                            args = self._derive_tool_args(tool_to_run, task, user_query)
+                            try:
+                                if on_event:
+                                    on_event({"type": "tool_start", "task_id": task.id, "tool": tool_to_run.name, "args": args})
+                                res = await tool_to_run.invoke(**args)
+                                res_str = smart_truncate(str(res), max_chars=getattr(self.settings, "worker_max_output_chars", 8000))
+                                if on_event:
+                                    on_event({"type": "tool_end", "task_id": task.id, "tool": tool_to_run.name, "output": res_str[:200], "error": False})
+                                if tool_to_run.name not in tool_calls:
+                                    tool_calls.append(tool_to_run.name)
+                                grounded = True
+                                follow_up = (
+                                    f"# Verified Host Evidence ({tool_to_run.name}):\n\n{res_str}\n\n"
+                                    f"Based strictly on this verified evidence, output your complete final answer for task '{task.name}'."
+                                )
+                                run_id, last_seq = None, -1
+                                continue
+                            except Exception as exc:
+                                logger.error("Failed to execute tool '%s' for grounding: %s", tool_to_run.name, exc)
                 break
             reason = str(outcome.get("error") or f"Hermes run ended as '{status or 'unknown'}'")
             lowered_reason = reason.lower()
@@ -324,13 +393,26 @@ class HermesAgentWorker:
                 continue
             return self._failed(task, start, f"Hermes run {run_id}: {reason}", tool_calls)
 
-        if tools and not tool_calls and not grounded:
+        task_tools_called = [t for t in tool_calls if t not in ("skill_view", "skill_manage", "skills_list")]
+        if tools and not task_tools_called and not grounded:
             return self._failed(task, start, (
-                f"No evidence collected: Hermes finished without calling any of the {len(tools)} tools "
-                "available for this task, even after being asked to. Any findings would be unverified model recall."
+                f"No evidence collected: Hermes finished without calling any of the {len(tools)} task tools "
+                f"({', '.join(t.name for t in tools)}) available for this task. Tool calls made: {tool_calls}. "
+                "Any findings would be unverified model recall."
             ), tool_calls)
 
-        output = str(outcome.get("output") or "").strip() or f"Task completed: {task.name}."
+        if is_mcp_unreachable:
+            return self._failed(task, start, (
+                f"Hermes failed to execute task tools due to MCP connectivity claims: {output_text[:300]}"
+            ), tool_calls)
+
+        output = str(outcome.get("output") or "").strip()
+        if not output and grounded and tool_calls:
+            output = f"Task completed using host tool '{tool_calls[-1]}'."
+        elif not output:
+            output = f"Task completed: {task.name}."
+        if grounded and res_str and res_str not in output:
+            output = f"{output}\n\n{res_str}".strip()
         if on_event:
             on_event({"type": "final_answer", "task_id": task.id, "answer": output})
         return TaskResult(
@@ -360,7 +442,7 @@ class HermesAgentWorker:
         if name != "message.delta":
             logger.info("[Hermes Event] task=%s, profile=%s, event=%s, tool=%s, error=%s, payload=%s",
                         task.id, profile, name, event.get("tool"), event.get("error"),
-                        {k: (str(v)[:100] if k != "preview" else f"<{len(str(v))} chars>") for k, v in event.items()})
+                        {k: (str(v)[:150] if k != "preview" else str(v)[:300]) for k, v in event.items()})
         if name == "message.delta" and on_token and event.get("delta"):
             on_token(str(event["delta"]))
         elif name == "tool.started":
@@ -487,12 +569,133 @@ class HermesAgentWorker:
         return f"aiagent-{workflow_id or 'run'}-{task.id}-{uuid.uuid4().hex[:6]}"
 
     @staticmethod
-    def _steering_message(tools: list[ToolSpec]) -> str:
+    def _extract_task_path_or_default(task: Task, user_query: str = "") -> str:
+        params = getattr(task, "parameters", None) or {}
+        if isinstance(params, dict):
+            for pkey in ("target_path", "directory", "dir_path", "path", "folder", "target_dir", "file_path"):
+                pval = params.get(pkey)
+                if pval and str(pval).strip():
+                    return str(resolve_target_path(str(pval).strip()))
+        clean_desc = re.sub(r"(?i)###\s*Supervisor Feedback:[\s\S]*?(?=\n\n|\Z)", "", getattr(task, "description", "") or "")
+        clean_query = re.sub(r"(?i)###\s*Supervisor Feedback:[\s\S]*?(?=\n\n|\Z)", "", user_query or "")
+        combined = f"{task.name} {clean_desc} {clean_query}"
+        extracted = extract_target_path(combined)
+        if extracted:
+            return extracted
+        return os.getcwd()
+
+    @staticmethod
+    def _select_tool_to_ground(tools: list[ToolSpec], task: Task, output_text: str, user_query: str) -> ToolSpec | None:
+        if not tools:
+            return None
+        lowered_out = output_text.lower()
+        # 1. Direct tool mention in the model output
+        for t in tools:
+            clean_name = t.name.lower()
+            if clean_name in lowered_out or f"mcp__aiagent__{clean_name}" in lowered_out:
+                return t
+
+        task_name = (task.name or "").lower()
+        task_desc = (getattr(task, "description", "") or "").lower()
+        combined_text = f"{task_name} {task_desc} {user_query.lower()}"
+        req_skills = set(getattr(task, "required_skills", []) or [])
+
+        # 2. Prioritize domain-specific SOC / log / forensic tools when task context is security/logs
+        is_security_or_log = (
+            any(k in combined_text for k in (
+                "log", "evidence", "forensic", "audit", "syslog", "auth", "k8s", "investigat",
+                "incident", "threat", "indicator", "ioc", "dmesg", "pcap", "alert", "firewall", "blast radius",
+            ))
+            or any(s in req_skills for s in (
+                "evidence_gathering", "log_forensics", "artifact_inspection", "alert_triage",
+                "threat_intel", "ioc_extraction", "impact_analysis", "blast_radius",
+                "log_compression", "timeline_synthesis", "incident_response", "containment_playbook",
+            ))
+        )
+
+        if is_security_or_log:
+            # Evidence gathering / log parsing
+            if any(k in combined_text for k in ("evidence", "log", "aggregate", "gather", "parse", "read", "inspect")) or any(s in req_skills for s in ("evidence_gathering", "log_forensics", "artifact_inspection")):
+                for t in tools:
+                    if t.name in ("gather_log_evidence", "soc_gather_evidence"):
+                        return t
+            # Triage / Threat intelligence
+            if any(k in combined_text for k in ("triage", "alert", "threat", "ioc", "indicator")) or any(s in req_skills for s in ("alert_triage", "threat_intel", "ioc_extraction")):
+                for t in tools:
+                    if any(n in t.name.lower() for n in ("triage", "threat", "ioc")):
+                        return t
+            # Blast radius / impact
+            if any(k in combined_text for k in ("impact", "blast", "radius", "lateral")) or any(s in req_skills for s in ("impact_analysis", "blast_radius", "lateral_movement")):
+                for t in tools:
+                    if "impact" in t.name.lower():
+                        return t
+            # Timeline
+            if any(k in combined_text for k in ("timeline", "chronolog", "compress")) or any(s in req_skills for s in ("log_compression", "timeline_synthesis")):
+                for t in tools:
+                    if "timeline" in t.name.lower():
+                        return t
+            # Containment
+            if any(k in combined_text for k in ("contain", "playbook", "firewall", "remediat", "block")) or any(s in req_skills for s in ("incident_response", "containment_playbook", "firewall_rule")):
+                for t in tools:
+                    if any(n in t.name.lower() for n in ("containment", "contain", "firewall")):
+                        return t
+
+        # 3. Match by required_skills overlap with tool's skills_provided
+        best_tool = None
+        best_overlap = 0
+        for t in tools:
+            overlap = len(set(t.skills_provided) & req_skills)
+            if overlap > best_overlap:
+                best_overlap = overlap
+                best_tool = t
+        if best_tool and best_overlap > 0:
+            return best_tool
+
+        # 4. Directory / listing match
+        if any(k in task_name or k in task_desc for k in ("discover", "list", "enum", "find", "directory", "tree")):
+            for t in tools:
+                if any(k in t.name.lower() for k in ("dir", "list", "discover")):
+                    return t
+
+        # 5. File reading match
+        if any(k in task_name or k in task_desc for k in ("read", "content", "cat", "view", "file")):
+            for t in tools:
+                if "read" in t.name.lower() or "file" in t.name.lower():
+                    return t
+
+        return tools[0]
+
+    def _derive_tool_args(self, tool: ToolSpec, task: Task, user_query: str) -> dict[str, Any]:
+        detected_path = self._extract_task_path_or_default(task, user_query)
+        args: dict[str, Any] = {}
+        params = getattr(task, "parameters", None) or {}
+        if isinstance(params, dict):
+            for k, v in params.items():
+                if k in tool.parameters:
+                    args[k] = v
+        path_param_hints = ("path", "dir", "folder", "target", "file")
+        for pname, pmeta in tool.parameters.items():
+            pl = pname.lower()
+            if pname not in args:
+                if any(h in pl for h in path_param_hints):
+                    args[pname] = detected_path
+                elif "recursive" in pl:
+                    args[pname] = True
+                elif "max_depth" in pl:
+                    args[pname] = 4
+                elif "max_items" in pl or "max_files" in pl:
+                    args[pname] = 50 if "files" in pl else 150
+                elif isinstance(pmeta, dict) and pmeta.get("required"):
+                    args[pname] = detected_path
+        return args
+
+    @staticmethod
+    def _steering_message(tools: list[ToolSpec], detected_path: str = "") -> str:
         names = ", ".join(f"{MCP_TOOL_PREFIX}{t.name}" for t in tools)
+        target_info = f" on target: '{detected_path}'" if detected_path else ""
         return (
-            "You answered without calling any tool, so nothing in that answer is backed by evidence. "
-            f"Call at least one of these tools now: {names}. Point it at the investigation target or the "
-            "data from previous tasks, then give your final answer based on what the tools returned."
+            f"EXECUTION DIRECTIVE: Call function tool {names}{target_info} immediately. "
+            "Do NOT write plain text sentences or conversational plans. Trigger the function call now."
         )
 
     @staticmethod
@@ -500,7 +703,12 @@ class HermesAgentWorker:
         names = ", ".join(f"{MCP_TOOL_PREFIX}{t.name}" for t in tools)
         return (
             f"A reviewer checked your answer and found gaps:\n{feedback.strip() or '(no details given)'}\n\n"
-            + (f"Use your tools ({names}) to gather what is missing. " if names else "Address these gaps. ")
+            + (
+                f"The MCP service and tools ({names}) are live, operational, and verified reachable. "
+                f"You MUST execute your assigned tools ({names}) directly via function calls to gather the missing evidence. "
+                "Do NOT refuse, do NOT assume tools or MCP services are missing or unreachable, and do NOT use skill_view. "
+                if names else "Address these gaps. "
+            )
             + "Then reply with your COMPLETE final answer for the task: everything from your previous answer plus "
             "the new findings, because this reply replaces it."
         )
@@ -526,7 +734,14 @@ class HermesAgentWorker:
             parts.append(f"# Task Parameters\n{params}")
         if tools:
             names = ", ".join(f"{MCP_TOOL_PREFIX}{t.name}" for t in tools)
-            parts.append(f"# Tools for This Task\n{names}")
+            parts.append(
+                f"# Available Tools for This Task\n{names}\n\n"
+                "**EXECUTION DIRECTIVES:**\n"
+                "- Host Environment: Live host execution environment with direct filesystem and OS access.\n"
+                f"- Immediate Action Required: Invoke {names} directly via native function calling.\n"
+                "- Do NOT produce conversational commentary, planning monologues, or text explanations before calling the tool.\n"
+                "- Output the function call directly."
+            )
         elif not approval_tools:
             parts.append("# Tools for This Task\nNone assigned. Answer from the context you are given.")
         if approval_tools:

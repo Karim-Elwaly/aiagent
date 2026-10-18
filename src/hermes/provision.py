@@ -145,7 +145,7 @@ def provision_dag_profiles(
     prefix = getattr(settings, "hermes_profile_prefix_dynamic", DYNAMIC_PROFILE_PREFIX)
     max_dynamic = getattr(settings, "hermes_max_dynamic_profiles", 15)
 
-    needed_profiles: dict[str, list[str]] = {}
+    needed_profiles: dict[str, dict[str, Any]] = {}
 
     for task in dag_dict.get("tasks", []):
         # Tasks with an explicit custom agent retain that agent's own profile
@@ -165,29 +165,44 @@ def provision_dag_profiles(
         pname = f"{prefix}{thash}"
         task["_hermes_profile"] = pname
         task["hermes_profile"] = pname
-        needed_profiles[pname] = tool_names
+        if pname not in needed_profiles:
+            needed_profiles[pname] = {
+                "tools": tool_names,
+                "skills": set(skills),
+                "task_names": [task.get("name") or task.get("id") or ""],
+                "task_descs": [task.get("description") or ""],
+            }
+        else:
+            needed_profiles[pname]["skills"].update(skills)
+            needed_profiles[pname]["task_names"].append(task.get("name") or task.get("id") or "")
+            needed_profiles[pname]["task_descs"].append(task.get("description") or "")
 
     if not needed_profiles:
         return dag_dict, False
 
-    # Purge generic Hermes built-in skills and repair any model-less dynamic profiles first
+    # Prune generic unneeded skills and repair any model-less dynamic profiles first
     profiles.purge_all_dynamic_cloned_skills()
     repaired = profiles.repair_all_dynamic_profiles()
     if repaired:
         logger.info("Repaired/evicted %d dynamic profiles missing model settings", repaired)
     profiles.purge_orphan_profiles()
-    profiles.sync_all_profiles_mcp_url()
+    updated_urls = profiles.sync_all_profiles_mcp_url()
 
     missing_profiles = {}
-    for pname, tools in needed_profiles.items():
+    target_url = getattr(settings, "hermes_mcp_url", "")
+    for pname, pinfo in needed_profiles.items():
+        tools = pinfo["tools"]
         entry = profiles.state.get(pname)
         pdir = profiles.home / "profiles" / pname
         has_config = (pdir / "config.yaml").is_file()
+        target_timeout = int(getattr(settings, "hermes_run_timeout_seconds", 600))
+        url_matches = (not target_url) or (entry.get("mcp_url") == target_url)
+        timeout_matches = entry.get("mcp_timeout") == target_timeout
         has_model = profiles.profile_has_model(pname)
-        if not pdir.is_dir() or not has_config or entry.get("bundle") != tools or not profiles.state.mcp_connected(pname) or not has_model:
+        if not pdir.is_dir() or not has_config or entry.get("bundle") != tools or not has_model or not url_matches or not timeout_matches:
             missing_profiles[pname] = tools
 
-    if not missing_profiles:
+    if not missing_profiles and not updated_urls:
         logger.info("All %d dynamic bespoke task profiles already active and configured; skipping gateway restart", len(needed_profiles))
         return dag_dict, False
 
@@ -205,7 +220,11 @@ def provision_dag_profiles(
     from src.hermes.skills import skill_documents
 
     # Provision missing profiles and sync exact task skills for all needed profiles
-    for pname, tools in needed_profiles.items():
+    for pname, pinfo in needed_profiles.items():
+        tools = pinfo["tools"]
+        skills = list(pinfo["skills"])
+        task_name = " ".join(pinfo["task_names"])
+        task_desc = " ".join(pinfo["task_descs"])
         try:
             pdir = profiles.home / "profiles" / pname
             needs_ensure = pname in missing_profiles or not pdir.is_dir() or not (pdir / "config.yaml").is_file()
@@ -214,13 +233,18 @@ def provision_dag_profiles(
                 logger.info("Provisioned bespoke dynamic profile '%s' with %d tools: %s", pname, len(tools), tools)
             else:
                 profiles.sync_model_from_default(pname)
+            # Sync exact task skills so profile acquires between 0 and 65 skills
+            matched = profiles.sync_exact_task_skills(
+                pname, tools=tools, skills=skills, task_name=task_name, task_desc=task_desc
+            )
             # Ensure exact task skills are written to skills.external_dirs
-            docs = skill_documents(None, registry, focus_tools=set(tools))
+            docs = skill_documents(None, registry, focus_tools=set(tools), focus_skills=set(skills))
             profiles.write_profile_skills(pname, docs)
+            logger.info("Dynamic profile '%s' acquired %d exact skills: %s", pname, len(matched), sorted(matched))
         except HermesError as exc:
             logger.warning("Could not provision dynamic profile '%s': %s", pname, exc)
 
-    # Immediately purge cloned generic skills from all newly provisioned profiles
+    # Prune unneeded skills while retaining matched skills
     profiles.purge_all_dynamic_cloned_skills()
 
     # Concurrency check: If another workflow is actively running, skip gateway restart

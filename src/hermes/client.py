@@ -118,17 +118,23 @@ class HermesClient:
                     await resp.aread()
                     self._check(resp, "run events")
                 data_lines: list[str] = []
-                async for line in resp.aiter_lines():
-                    if line.startswith(":"):
-                        continue
-                    if line.startswith("data:"):
-                        data_lines.append(line[5:].lstrip())
-                        continue
-                    if line == "" and data_lines:
-                        try:
-                            event = json.loads("\n".join(data_lines))
-                        except ValueError:
-                            event = None
-                        data_lines = []
-                        if isinstance(event, dict):
-                            yield event
+                try:
+                    async for line in resp.aiter_lines():
+                        if line.startswith(":"):
+                            continue
+                        if line.startswith("data:"):
+                            data_lines.append(line[5:].lstrip())
+                            continue
+                        if line == "" and data_lines:
+                            try:
+                                event = json.loads("\n".join(data_lines))
+                            except ValueError:
+                                event = None
+                            data_lines = []
+                            if isinstance(event, dict):
+                                yield event
+                except (ConnectionResetError, ConnectionAbortedError, OSError,
+                        httpx.RemoteProtocolError, httpx.ReadError) as exc:
+                    # Windows WinError 10054/10053 or httpx transport error on SSE close.
+                    # Re-raise so the worker's retry/TransientLLMError handler can recover.
+                    raise ConnectionResetError(f"SSE stream for run {run_id} closed unexpectedly: {exc}") from exc

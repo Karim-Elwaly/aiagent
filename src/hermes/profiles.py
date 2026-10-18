@@ -244,8 +244,6 @@ def purge_cloned_skills(profile_dir: Path, allowed_skills: set[str] | None = Non
                     elif item.is_file():
                         item.unlink(missing_ok=True)
             else:
-                if item.name.startswith("aiagent-"):
-                    continue
                 if item.is_dir():
                     shutil.rmtree(item, ignore_errors=True)
                 elif item.is_file():
@@ -267,6 +265,11 @@ class HermesProfiles:
         self.state = state or ProfileState()
         self.skills_root = skills_root or self.state.path.parent / "skills"
         self._run = runner or self._cli
+        try:
+            self.purge_all_duplicate_skills()
+            self.sync_all_existing_dynamic_profiles()
+        except Exception:
+            pass
 
     def _cli(self, args: list[str]) -> str:
         cmd = [hermes_bin(self.settings), *args]
@@ -285,13 +288,21 @@ class HermesProfiles:
 
     def wanted_toolsets(self, name: str, agent_toolsets: list[str]) -> list[str]:
         extra = self.state.get(name).get("extra_toolsets", []) if name == DEFAULT_PROFILE else agent_toolsets
-        wanted = set(self.settings.hermes_default_toolsets) | set(REQUIRED_TOOLSETS) | set(extra or [])
+        # Dynamic bespoke profiles run task-specific MCP tools and should not include the built-in 'skills' toolset
+        # unless explicitly requested, preventing models from looping on skill_view instead of executing MCP tools.
+        if name.startswith(DYNAMIC_PROFILE_PREFIX):
+            wanted = set(agent_toolsets or [])
+        else:
+            wanted = set(self.settings.hermes_default_toolsets) | set(REQUIRED_TOOLSETS) | set(extra or [])
         return sorted(t for t in wanted if t in BUILTIN_TOOLSETS)
 
     def profile_config(self, name: str, tools: list[str] | None = None) -> dict[str, str]:
         config = {
             "tools.tool_search.enabled": "off",
             "skills.external_dirs": json.dumps([(self.skills_root / name).resolve().as_posix()]),
+            # Force JSON tool-calling so local models (e.g. gpt-oss-20b) that do not support
+            # Hermes's peg-native protocol can still call tools via the OpenAI-compatible format.
+            "tool_format": "json",
         }
         if tools is not None:
             # Hermes registers only these tools of the aiagent server for this profile.
@@ -349,7 +360,10 @@ class HermesProfiles:
                 changed = True
 
         if is_dynamic or name == ORCHESTRATOR_PROFILE or bundle:
-            purge_cloned_skills(pdir)
+            if name == ORCHESTRATOR_PROFILE:
+                purge_cloned_skills(pdir, allowed_skills=set())
+            elif is_dynamic or bundle:
+                self.sync_exact_task_skills(name, tools=tools)
             if self.sync_model_from_default(name):
                 changed = True
 
@@ -388,12 +402,18 @@ class HermesProfiles:
         if skill_docs is not None:
             if write_skills(self.skills_root / name, skill_docs):
                 logger.info("Synced %d aiagent skills to Hermes profile '%s'", len(skill_docs), name)
-            if name != DEFAULT_PROFILE:
-                write_skills(pdir / "skills", skill_docs)
+            p_skills = pdir / "skills"
+            if p_skills.is_dir():
+                for item in list(p_skills.iterdir()):
+                    if item.name.startswith("aiagent-"):
+                        if item.is_dir():
+                            shutil.rmtree(item, ignore_errors=True)
+                        elif item.is_file():
+                            item.unlink(missing_ok=True)
         (self.skills_root / name).mkdir(parents=True, exist_ok=True)
         config = self.profile_config(name, tools)
         applied_config = applied.get("config", {})
-        config_to_set: dict[str, str] = {}
+        config_to_set: dict[str, Any] = {}
         for key, value in config.items():
             prev_val = applied_config.get(key)
             if key.endswith(".tools.include") and prev_val is not None:
@@ -408,12 +428,13 @@ class HermesProfiles:
                     changed = True  # Hermes lists the tools again only after a gateway restart
 
         mcp_url = self.settings.hermes_mcp_url
-        if applied.get("mcp_url") != mcp_url:
+        target_timeout = int(getattr(self.settings, "hermes_run_timeout_seconds", 600))
+        if applied.get("mcp_url") != mcp_url or applied.get("mcp_timeout") != target_timeout:
             config_to_set[f"mcp_servers.{MCP_SERVER_NAME}.url"] = mcp_url
             config_to_set[f"mcp_servers.{MCP_SERVER_NAME}.headers.Authorization"] = "Bearer ${" + TOKEN_ENV + "}"
-            config_to_set[f"mcp_servers.{MCP_SERVER_NAME}.timeout"] = str(self.settings.hermes_run_timeout_seconds)
+            config_to_set[f"mcp_servers.{MCP_SERVER_NAME}.timeout"] = target_timeout
             changed = True
-            if applied.get("mcp_url"):
+            if applied.get("mcp_url") and applied.get("mcp_url") != mcp_url:
                 # The running gateway keeps the old URL for new runs until it restarts (no MCP reload command).
                 logger.info("aiagent's MCP URL moved %s -> %s", applied["mcp_url"], mcp_url)
                 restarted_at = time.time()
@@ -428,6 +449,7 @@ class HermesProfiles:
             "token_sha256": token_hash(token),
             "toolsets": wanted,
             "mcp_url": mcp_url,
+            "mcp_timeout": target_timeout,
             "config": config,
             **({"bundle": tools} if tools is not None else {}),
             **({"is_dynamic": True, "created_at": applied.get("created_at", now), "last_used_at": now} if is_dynamic else {}),
@@ -578,8 +600,321 @@ class HermesProfiles:
         })
         return ProfileInfo(name=name, api_key=api_key, changed=created)
 
+    def get_skills_library_dir(self) -> Path | None:
+        """Locates the master library of Hermes skills (e.g. 65 skills in aiagent-default or default)."""
+        candidates = [
+            self.home / "profiles" / DEFAULT_PROFILE / "skills",
+            self.home / "profiles" / "default" / "skills",
+            self.home / "skills",
+            ROOT_DIR / "data" / "hermes_skills",
+        ]
+        for c in candidates:
+            if c.is_dir() and any(c.iterdir()):
+                return c
+        return None
+
+    def list_available_library_skills(self) -> dict[str, dict[str, Any]]:
+        """Maps skill_name -> metadata dict with path, description, tags, and text content."""
+        skills_meta: dict[str, dict[str, Any]] = {}
+
+        def _index_dir(dir_path: Path) -> None:
+            if not dir_path.is_dir():
+                return
+            for item in dir_path.iterdir():
+                if item.name.startswith(".") or item.name.startswith("aiagent-"):
+                    continue
+                # If directory does not contain SKILL.md, check if it's a category folder with nested skills
+                candidates = [item]
+                if item.is_dir() and not (item / "SKILL.md").is_file():
+                    sub_dirs = [sub for sub in item.iterdir() if sub.is_dir() and (sub / "SKILL.md").is_file()]
+                    if sub_dirs:
+                        candidates = sub_dirs
+                    else:
+                        continue
+
+                for cand in candidates:
+                    sname = cand.stem if cand.is_file() else cand.name
+                    if sname.startswith(".") or sname.startswith("aiagent-"):
+                        continue
+                    content = ""
+                    desc = ""
+                    tags: list[str] = []
+                    if cand.is_dir():
+                        sfile = cand / "SKILL.md"
+                        if sfile.is_file():
+                            try:
+                                content = sfile.read_text(encoding="utf-8", errors="replace")
+                            except Exception:
+                                pass
+                    elif cand.is_file() and cand.suffix == ".md" and cand.name != "DESCRIPTION.md":
+                        try:
+                            content = cand.read_text(encoding="utf-8", errors="replace")
+                        except Exception:
+                            pass
+                    if content:
+                        if content.startswith("---"):
+                            parts = content.split("---", 2)
+                            if len(parts) >= 3:
+                                try:
+                                    import yaml
+                                    meta = yaml.safe_load(parts[1])
+                                    if isinstance(meta, dict):
+                                        desc = str(meta.get("description", ""))
+                                        m_meta = meta.get("metadata", {})
+                                        if isinstance(m_meta, dict):
+                                            for key in ("skills", "category", "tags"):
+                                                val = m_meta.get(key)
+                                                if isinstance(val, list):
+                                                    tags.extend(val)
+                                                elif isinstance(val, str):
+                                                    tags.append(val)
+                                            h_meta = m_meta.get("hermes", {})
+                                            if isinstance(h_meta, dict):
+                                                h_tags = h_meta.get("tags")
+                                                if isinstance(h_tags, list):
+                                                    tags.extend(h_tags)
+                                except Exception:
+                                    pass
+                        if not desc:
+                            first_line = content.split("\n", 1)[0].strip("# -")
+                            desc = first_line[:200]
+                    skills_meta[sname] = {
+                        "path": cand,
+                        "description": desc,
+                        "tags": [t.lower() for t in tags if isinstance(t, str)],
+                        "content": content[:2000].lower(),
+                    }
+
+        lib_dir = self.get_skills_library_dir()
+        if lib_dir:
+            _index_dir(lib_dir)
+
+        # Augment with data/hermes_skills
+        _index_dir(ROOT_DIR / "data" / "hermes_skills")
+        return skills_meta
+
+    def match_skills_for_task(
+        self,
+        tools: list[str] | None = None,
+        skills: list[str] | None = None,
+        task_name: str | None = None,
+        task_desc: str | None = None,
+    ) -> set[str]:
+        """Matches the exact Hermes skills an agent needs to achieve the given task.
+        
+        Guarantees that each dynamic agent acquires between 0 and 65 skills (never all 65,
+        and avoids polluting prompts with irrelevant skills).
+        """
+        tools_list = list(tools or [])
+        skills_list = list(skills or [])
+        if not tools_list and not skills_list:
+            return set()
+
+        available = self.list_available_library_skills()
+        if not available:
+            return set()
+
+        # Domain mapping for standard tools to confirmed valid skills
+        tool_domain_map: dict[str, list[str]] = {
+            "gather_log_evidence": ["oss_forensics", "oss-forensics"],
+            "lookup_threat_indicators": ["oss_forensics", "oss-forensics"],
+            "analyze_incident_impact": ["oss_forensics", "oss-forensics", "docker_ops"],
+            "compress_security_timeline": ["oss_forensics", "oss-forensics"],
+            "propose_containment_response": ["oss_forensics", "oss-forensics", "docker_ops"],
+            "triage_security_alert": ["oss_forensics", "oss-forensics"],
+            "read_file": ["simplify_code", "file_ops"],
+            "write_file": ["simplify_code", "file_ops"],
+            "list_directory": ["file_ops", "simplify_code", "computer_use"],
+            "get_disk_usage": ["computer_use", "system_diagnostics"],
+            "delete_file": ["file_ops", "computer_use"],
+            "execute_command": ["computer_use", "docker_ops"],
+            "execute_python": ["computer_use", "instructor_mlops"],
+            "python_session": ["computer_use", "instructor_mlops"],
+            "get_system_info": ["computer_use", "docker_ops"],
+            "web_search": ["arxiv_research", "web_search"],
+            "web_extract": ["arxiv_research", "web_search"],
+            "gitnexus_explorer": ["gitnexus_explorer", "github_workflow", "simplify_code"],
+        }
+
+        # Normalize explicit inquiry tokens (use full phrase to avoid substring word collisions)
+        tokens: set[str] = set()
+        for t in tools_list:
+            clean_t = t.lower().replace("-", "_")
+            tokens.add(clean_t)
+        for s in skills_list:
+            clean_s = s.lower().replace("-", "_")
+            tokens.add(clean_s)
+
+        full_context = f"{task_name or ''} {task_desc or ''}".lower()
+        has_k8s = any(k in full_context for k in ("k8s", "kubernetes", "pod", "container", "cluster", "node", "docker"))
+        has_security = any(k in full_context for k in ("threat", "rootkit", "malware", "compromise", "attacker", "exfiltration", "reverse shell", "audit", "rbac", "security", "forensic"))
+        has_code = any(k in full_context for k in ("refactor", "codebase", "pull request", "syntax error"))
+        has_git = any(k in full_context for k in ("git", "github", "commit", "repo", "branch"))
+        has_db = any(k in full_context for k in ("database", "sql query", "postgres", "mysql", "slow query"))
+
+        # Blacklist of consumer/specialist skills that should NEVER be injected into security/system operations
+        unrelated_blacklist = {
+            "drug_discovery", "fitness_nutrition", "apple_notes", "apple_reminders",
+            "ascii_art", "home_assistant", "stripe_payments", "airtable_crm", "discord_notifier",
+        }
+
+        scores: dict[str, int] = {}
+        for sname, smeta in available.items():
+            sname_clean = sname.lower().replace("-", "_")
+            if sname_clean in unrelated_blacklist:
+                continue
+
+            score = 0
+
+            # 1. Direct exact skill name match
+            if sname_clean in tokens or sname.lower() in [s.lower() for s in skills_list]:
+                score += 15
+
+            # 2. Tag matches (exact tag match)
+            skill_tags = set(smeta.get("tags", []))
+            if skill_tags & tokens:
+                score += 8
+
+            # 3. Tool domain mapping matches
+            for tool_name in tools_list:
+                mapped_skills = tool_domain_map.get(tool_name, [])
+                for ms in mapped_skills:
+                    if ms == sname_clean or ms in skill_tags:
+                        score += 6
+
+            # 4. Context matches
+            if has_k8s and sname_clean in ("docker_ops", "container_management", "devops_troubleshooting"):
+                score += 8
+            if has_security and (sname_clean in ("oss_forensics", "oss-forensics") or "security" in skill_tags):
+                score += 8
+            if has_code and sname_clean in ("simplify_code", "computer_use"):
+                score += 5
+            if has_git and sname_clean in ("github_workflow", "gitnexus_explorer"):
+                score += 8
+            if has_db and sname_clean in ("database_optimizer", "sql"):
+                score += 8
+
+            # Description keyword overlap (only for significant domain words)
+            desc = smeta.get("description", "").lower()
+            for tok in tokens:
+                if len(tok) >= 5 and tok in desc and tok not in ("tools", "using", "check", "system", "command", "order"):
+                    score += 2
+
+            if score > 0:
+                scores[sname] = score
+
+        # Rank candidates
+        ranked = sorted(scores.items(), key=lambda x: x[1], reverse=True)
+        matched = {name for name, sc in ranked if sc >= 6}
+
+        # Fallback only to top mapped tool skill if none matched
+        if not matched and ranked and ranked[0][1] >= 5:
+            matched = {ranked[0][0]}
+
+        # Bounded subset: between 0 and 65 (cap at top 4 to prevent prompt bloat)
+        if len(matched) > 4:
+            top_names = [name for name, _ in ranked[:4]]
+            matched = set(top_names)
+
+        return matched
+
+    def sync_exact_task_skills(
+        self,
+        name: str,
+        tools: list[str] | None = None,
+        skills: list[str] | None = None,
+        task_name: str | None = None,
+        task_desc: str | None = None,
+    ) -> set[str]:
+        """Ensures the profile on disk acquires the exact skills it needs (between 0 and 65).
+        
+        Writes matched skill folders to both ``self.profile_dir(name) / 'skills'``
+        and ``self.skills_root / name``, and removes any unneeded skills.
+        """
+        if name == ORCHESTRATOR_PROFILE:
+            purge_cloned_skills(self.profile_dir(name), allowed_skills=set())
+            return set()
+        if name == DEFAULT_PROFILE:
+            return set()
+
+        matched = self.match_skills_for_task(
+            tools=tools, skills=skills, task_name=task_name, task_desc=task_desc
+        )
+        lib = self.list_available_library_skills()
+
+        # 1. Update native profile skills dir (pdir / "skills")
+        p_skills = self.profile_dir(name) / "skills"
+        p_skills.mkdir(parents=True, exist_ok=True)
+
+        for item in list(p_skills.iterdir()):
+            if item.name not in matched:
+                if item.is_dir():
+                    shutil.rmtree(item, ignore_errors=True)
+                elif item.is_file():
+                    item.unlink(missing_ok=True)
+
+        for sname in matched:
+            target = p_skills / sname
+            if target.is_dir() and (target / "SKILL.md").is_file():
+                continue
+            meta = lib.get(sname)
+            if not meta:
+                continue
+            src = meta["path"]
+            if src.is_dir():
+                shutil.copytree(src, target, dirs_exist_ok=True)
+            elif src.is_file():
+                target.mkdir(parents=True, exist_ok=True)
+                shutil.copy2(src, target / "SKILL.md")
+
+        # 2. Update external skills root (self.skills_root / name)
+        ext_skills = self.skills_root / name
+        ext_skills.mkdir(parents=True, exist_ok=True)
+        for item in list(ext_skills.iterdir()):
+            if item.name not in matched:
+                if item.is_dir():
+                    shutil.rmtree(item, ignore_errors=True)
+                elif item.is_file():
+                    item.unlink(missing_ok=True)
+        for sname in matched:
+            target = ext_skills / sname
+            if target.is_dir() and (target / "SKILL.md").is_file():
+                continue
+            meta = lib.get(sname)
+            if not meta:
+                continue
+            src = meta["path"]
+            if src.is_dir():
+                shutil.copytree(src, target, dirs_exist_ok=True)
+            elif src.is_file():
+                target.mkdir(parents=True, exist_ok=True)
+                shutil.copy2(src, target / "SKILL.md")
+
+        self.state.update(name, {
+            "task_skills": sorted(matched),
+            "skills_count": len(matched),
+        })
+        logger.info("Profile '%s' acquired %d exact skills: %s", name, len(matched), sorted(matched))
+        return matched
+
+    def sync_all_existing_dynamic_profiles(self) -> int:
+        """Syncs exact task skills for all dynamic profiles currently on disk/state."""
+        p_root = self.home / "profiles"
+        if not p_root.is_dir():
+            return 0
+        updated = 0
+        for p in list(p_root.iterdir()):
+            if p.is_dir() and p.name.startswith(DYNAMIC_PROFILE_PREFIX):
+                entry = self.state.get(p.name)
+                tools = entry.get("bundle", [])
+                skills = entry.get("task_skills")
+                self.sync_exact_task_skills(p.name, tools=tools, skills=skills)
+                updated += 1
+        return updated
+
     def purge_all_dynamic_cloned_skills(self) -> None:
-        """Purge generic Hermes built-in skills from all dynamic profiles, bundles, and orchestrator."""
+        """Prunes generic unneeded Hermes built-in skills from all dynamic profiles,
+        retaining only the exact task-matched skills (between 0 and 65)."""
         p_root = self.home / "profiles"
         if not p_root.is_dir():
             return
@@ -587,36 +922,15 @@ class HermesProfiles:
             p.name for p in p_root.iterdir()
             if p.is_dir() and (p.name.startswith(DYNAMIC_PROFILE_PREFIX) or p.name.startswith("aiagent-bundle-"))
         ]
-        from src.hermes.skills import SKILL_FILE
-
         for name in targets:
             pdir = p_root / name
             if name == ORCHESTRATOR_PROFILE:
                 purge_cloned_skills(pdir, allowed_skills=set())
             else:
-                s_src = self.skills_root / name
-                bundle_tools_set = set(self.state.get(name).get("bundle") or [])
-                if name.startswith(DYNAMIC_PROFILE_PREFIX) and bundle_tools_set:
-                    expected_skills = {f"aiagent-{t.replace('_', '-')}" for t in bundle_tools_set}
-                    if s_src.is_dir():
-                        for item in list(s_src.iterdir()):
-                            if item.is_dir() and item.name not in expected_skills:
-                                shutil.rmtree(item, ignore_errors=True)
-                allowed: set[str] = set()
-                if s_src.is_dir():
-                    allowed = {
-                        item.name for item in s_src.iterdir()
-                        if item.is_dir() and (item / SKILL_FILE).is_file()
-                    }
-                purge_cloned_skills(pdir, allowed_skills=allowed)
-                if allowed:
-                    p_skills = pdir / "skills"
-                    p_skills.mkdir(parents=True, exist_ok=True)
-                    for item in s_src.iterdir():
-                        if item.name in allowed:
-                            dst = p_skills / item.name
-                            if not dst.exists():
-                                shutil.copytree(item, dst)
+                entry = self.state.get(name)
+                tools = entry.get("bundle", [])
+                task_skills = entry.get("task_skills")
+                self.sync_exact_task_skills(name, tools=tools, skills=task_skills)
 
     def _find_reference_model_config(self) -> tuple[dict[str, Any], dict[str, str]]:
         """Finds a valid (config_dict, env_dict) holding model/provider settings to propagate to profiles."""
@@ -717,6 +1031,12 @@ class HermesProfiles:
                 target_data[k] = ref_config[k]
                 updated = True
 
+        # Always enforce JSON tool-calling format for aiagent-managed profiles so that
+        # local models that don't support peg-native can still invoke tools correctly.
+        if target_data.get("tool_format") != "json":
+            target_data["tool_format"] = "json"
+            updated = True
+
         if updated:
             try:
                 target_yaml.write_text(
@@ -764,7 +1084,28 @@ class HermesProfiles:
                     self.sync_model_from_default(p.name)
         return repaired
 
-    def write_profile_config(self, name: str, entries: dict[str, str]) -> None:
+    def purge_all_duplicate_skills(self) -> int:
+        """Purge any aiagent-* skills found in any profile's local skills/ dir to prevent duplicate skill errors."""
+        p_root = self.home / "profiles"
+        if not p_root.is_dir():
+            return 0
+        cleaned = 0
+        for p in list(p_root.iterdir()):
+            if p.is_dir():
+                s_dir = p / "skills"
+                if s_dir.is_dir():
+                    for item in list(s_dir.iterdir()):
+                        if item.name.startswith("aiagent-"):
+                            if item.is_dir():
+                                shutil.rmtree(item, ignore_errors=True)
+                            elif item.is_file():
+                                item.unlink(missing_ok=True)
+                            cleaned += 1
+        if cleaned:
+            logger.info("Purged %d duplicate aiagent-* skills from local profile directories", cleaned)
+        return cleaned
+
+    def write_profile_config(self, name: str, entries: dict[str, Any]) -> None:
         """Update profile config keys directly in config.yaml for speed, falling back to CLI."""
         pdir = self.home / "profiles" / name
         yaml_path = pdir / "config.yaml"
@@ -798,7 +1139,30 @@ class HermesProfiles:
                             val = True
                         elif s.lower() in ("false", "no", "off"):
                             val = False
+                        elif s.isdigit():
+                            val = int(s)
+                        else:
+                            try:
+                                val = float(s)
+                            except ValueError:
+                                pass
                     curr[parts[-1]] = val
+
+                # Ensure any mcp_servers timeout is always numeric (int/float), never a string
+                mcp_servers = data.get("mcp_servers", {})
+                if isinstance(mcp_servers, dict):
+                    for sname, sdata in mcp_servers.items():
+                        if isinstance(sdata, dict) and "timeout" in sdata:
+                            t_val = sdata["timeout"]
+                            if isinstance(t_val, str):
+                                try:
+                                    sdata["timeout"] = int(t_val)
+                                except ValueError:
+                                    try:
+                                        sdata["timeout"] = float(t_val)
+                                    except ValueError:
+                                        sdata["timeout"] = int(getattr(self.settings, "hermes_run_timeout_seconds", 600))
+
                 yaml_path.write_text(yaml.safe_dump(data, sort_keys=False, default_flow_style=False), encoding="utf-8")
                 updated_directly = True
             except Exception as exc:
@@ -812,10 +1176,14 @@ class HermesProfiles:
     def write_profile_skills(self, name: str, docs: dict[str, str]) -> None:
         if write_skills(self.skills_root / name, docs):
             logger.info("Synced %d aiagent skills to Hermes profile '%s'", len(docs), name)
-        if name != DEFAULT_PROFILE:
-            p_skills = self.profile_dir(name) / "skills"
-            if p_skills.parent.is_dir():
-                write_skills(p_skills, docs)
+        p_skills = self.profile_dir(name) / "skills"
+        if p_skills.is_dir():
+            for item in list(p_skills.iterdir()):
+                if item.name.startswith("aiagent-"):
+                    if item.is_dir():
+                        shutil.rmtree(item, ignore_errors=True)
+                    elif item.is_file():
+                        item.unlink(missing_ok=True)
 
     def bundle_ready(self, bundle: str) -> bool:
         """The group's profile exists with the group's tool filter, and Hermes has connected its tools."""
@@ -825,8 +1193,9 @@ class HermesProfiles:
         return self.state.get(name).get("bundle") == bundle_tools(bundle) and self.state.mcp_connected(name)
 
     def sync_all_profiles_mcp_url(self) -> int:
-        """Ensure every profile on disk and in state points to the current hermes_mcp_url."""
+        """Ensure every profile on disk and in state points to the current hermes_mcp_url with numeric timeout."""
         target_url = self.settings.hermes_mcp_url
+        target_timeout = int(getattr(self.settings, "hermes_run_timeout_seconds", 600))
         updated = 0
         p_root = self.home / "profiles"
         if p_root.is_dir():
@@ -843,17 +1212,28 @@ class HermesProfiles:
                     aiagent_mcp = mcp_servers.get(MCP_SERVER_NAME)
                     if isinstance(aiagent_mcp, dict):
                         curr_url = aiagent_mcp.get("url")
+                        curr_timeout = aiagent_mcp.get("timeout")
+                        modified = False
                         if curr_url and curr_url != target_url:
                             aiagent_mcp["url"] = target_url
-                            cyaml.write_text(yaml.safe_dump(data, sort_keys=False, default_flow_style=False), encoding="utf-8")
+                            modified = True
                             logger.info("Fixed stale MCP URL in %s: %s -> %s", pdir.name, curr_url, target_url)
+                        if curr_timeout is not None and not isinstance(curr_timeout, (int, float)):
+                            try:
+                                aiagent_mcp["timeout"] = int(curr_timeout)
+                            except (ValueError, TypeError):
+                                aiagent_mcp["timeout"] = target_timeout
+                            modified = True
+                            logger.info("Fixed string timeout in %s: %r -> %d", pdir.name, curr_timeout, aiagent_mcp["timeout"])
+                        if modified:
+                            cyaml.write_text(yaml.safe_dump(data, sort_keys=False, default_flow_style=False), encoding="utf-8")
                             updated += 1
                 except Exception as exc:
-                    logger.debug("Could not inspect/update MCP URL in %s: %s", pdir.name, exc)
+                    logger.debug("Could not inspect/update MCP config in %s: %s", pdir.name, exc)
 
         for name, entry in list(self.state.load().items()):
             if entry.get("mcp_url") and entry.get("mcp_url") != target_url:
-                self.state.update(name, {"mcp_url": target_url})
+                self.state.update(name, {"mcp_url": target_url, "mcp_timeout": target_timeout})
                 updated += 1
 
         return updated

@@ -257,3 +257,109 @@ def test_purge_orphan_profiles(tmp_path):
     assert not orphan_dir.exists()
     assert state.get("case-orchestrator") == {}
 
+
+def test_mcp_servers_timeout_is_int_and_sanitized(tmp_path):
+    import yaml
+    home = tmp_path / "hermes"
+    state = ProfileState(tmp_path / "profiles.json")
+    profiles = HermesProfiles(_settings(hermes_home=str(home), hermes_run_timeout_seconds=600), runner=lambda _: "", state=state)
+
+    # 1. Test profile ensure writes int timeout
+    info = profiles.ensure(None, dynamic_tools=["list_directory"], profile_name_override="aiagent-dyn-test1")
+    cfg_file = home / "profiles" / "aiagent-dyn-test1" / "config.yaml"
+    assert cfg_file.is_file()
+    data = yaml.safe_load(cfg_file.read_text(encoding="utf-8"))
+    timeout_val = data["mcp_servers"]["aiagent"]["timeout"]
+    assert isinstance(timeout_val, int)
+    assert timeout_val == 600
+
+    # 2. Test sync_all_profiles_mcp_url sanitizes existing profile with string timeout
+    pdir = home / "profiles" / "aiagent-dyn-test2"
+    pdir.mkdir(parents=True)
+    bad_cfg = {
+        "mcp_servers": {
+            "aiagent": {
+                "url": "http://old-url:8000/mcp/",
+                "timeout": "1800",
+            }
+        }
+    }
+    (pdir / "config.yaml").write_text(yaml.safe_dump(bad_cfg), encoding="utf-8")
+
+    updated = profiles.sync_all_profiles_mcp_url()
+    assert updated > 0
+    fixed_data = yaml.safe_load((pdir / "config.yaml").read_text(encoding="utf-8"))
+    assert fixed_data["mcp_servers"]["aiagent"]["url"] == "http://127.0.0.1:8000/mcp/"
+    fixed_timeout = fixed_data["mcp_servers"]["aiagent"]["timeout"]
+    assert isinstance(fixed_timeout, int)
+    assert fixed_timeout == 1800
+
+
+def test_dynamic_profile_acquires_exact_skills_subset(tmp_path):
+    """Dynamic profiles acquire the exact skills they need (0 < count < 65), nothing more or less."""
+    home = tmp_path / "hermes"
+    state = ProfileState(tmp_path / "profiles.json")
+    profiles = HermesProfiles(_settings(hermes_home=str(home)), runner=lambda _: "", state=state)
+
+    # Setup mock library in aiagent-default with 65 skills
+    default_skills = home / "profiles" / DEFAULT_PROFILE / "skills"
+    default_skills.mkdir(parents=True)
+    for i in range(65):
+        s_name = f"skill_{i:02d}"
+        if i == 0:
+            s_name = "oss_forensics"
+        elif i == 1:
+            s_name = "docker_ops"
+        elif i == 2:
+            s_name = "simplify_code"
+        elif i == 3:
+            s_name = "github_workflow"
+        s_dir = default_skills / s_name
+        s_dir.mkdir()
+        (s_dir / "SKILL.md").write_text(f"---\nname: {s_name}\ndescription: Test skill {s_name}\n---\nBody", encoding="utf-8")
+
+    assert len(list(default_skills.iterdir())) == 65
+
+    # 1. Orchestrator gets 0 skills
+    orch_matched = profiles.sync_exact_task_skills(ORCHESTRATOR_PROFILE)
+    assert len(orch_matched) == 0
+    orch_skills_dir = home / "profiles" / ORCHESTRATOR_PROFILE / "skills"
+    assert not orch_skills_dir.exists() or len(list(orch_skills_dir.iterdir())) == 0
+
+    # 2. Dynamic profile for security forensics gets exact subset (e.g. 2-4 skills)
+    dyn_sec = f"{DYNAMIC_PROFILE_PREFIX}sec1"
+    matched = profiles.sync_exact_task_skills(
+        dyn_sec,
+        tools=["gather_log_evidence", "lookup_threat_indicators"],
+        skills=["threat_hunting", "malware_analysis"],
+        task_name="Kubernetes rootkit audit",
+        task_desc="Examine k8s pod for diamorphine kernel module and reverse shell",
+    )
+
+    # Number of skills is strictly between 0 and 65
+    assert 0 < len(matched) < 65
+    assert "oss_forensics" in matched
+    assert "docker_ops" in matched  # matched due to k8s / pod / container context
+
+    # Check on disk in profile's skills directory
+    p_skills = home / "profiles" / dyn_sec / "skills"
+    assert p_skills.is_dir()
+    disk_skills = {p.name for p in p_skills.iterdir() if p.is_dir()}
+    assert disk_skills == matched
+    assert 0 < len(disk_skills) < 65
+
+    # 3. Dynamic profile for simple file inspection gets its own exact subset
+    dyn_file = f"{DYNAMIC_PROFILE_PREFIX}file1"
+    file_matched = profiles.sync_exact_task_skills(
+        dyn_file,
+        tools=["list_directory", "read_file"],
+        skills=["file_reading"],
+        task_name="List directory contents",
+        task_desc="Check files in current directory",
+    )
+    assert 0 < len(file_matched) < 65
+    assert "simplify_code" in file_matched
+    assert "oss_forensics" not in file_matched  # security skill not acquired for simple file task
+
+
+

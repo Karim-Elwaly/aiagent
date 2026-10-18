@@ -163,6 +163,13 @@ class Settings(BaseSettings):
     def _default_hermes_mcp_url(self) -> "Settings":
         if not self.hermes_mcp_url:
             self.hermes_mcp_url = f"http://127.0.0.1:{self.api_port}/mcp/"
+        else:
+            import re
+            self.hermes_mcp_url = re.sub(
+                r"(https?://(?:127\.0\.0\.1|localhost)):(\d+)(/mcp/?)",
+                rf"\g<1>:{self.api_port}\g<3>",
+                self.hermes_mcp_url,
+            )
         return self
 
 
@@ -188,6 +195,24 @@ def get_settings() -> Settings:
         # Ignore sandbox restriction if called from within a Temporal workflow
         if "Cannot access" not in str(e):
             logger.warning("Failed to load runtime settings from %s: %s", CONFIG_FILE, e)
+
+    # Environment variables take precedence for active execution ports
+    if "API_PORT" in os.environ:
+        try:
+            _settings.api_port = int(os.environ["API_PORT"])
+        except ValueError:
+            pass
+
+    # Ensure hermes_mcp_url stays synchronized with the active api_port
+    if _settings.hermes_mcp_url:
+        import re
+        _settings.hermes_mcp_url = re.sub(
+            r"(https?://(?:127\.0\.0\.1|localhost)):(\d+)(/mcp/?)",
+            rf"\g<1>:{_settings.api_port}\g<3>",
+            _settings.hermes_mcp_url,
+        )
+    else:
+        _settings.hermes_mcp_url = f"http://127.0.0.1:{_settings.api_port}/mcp/"
 
     return _settings
 

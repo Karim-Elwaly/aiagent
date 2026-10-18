@@ -23,13 +23,14 @@ from src.registry.tool_registry import ToolSpec
 logger = logging.getLogger(__name__)
 
 HERMES_PROTOCOL_BLOCK = """# Tool Use
-You run inside Hermes Agent. aiagent's tools appear to you as mcp__aiagent__<name>; this section overrides any earlier tool-call format instructions.
-1. Always call tools first to gather real data. The tools have direct filesystem access on the host (C:, D:); never claim lack of access. Start with the tools listed under "Tools for This Task".
-2. After each tool result, decide whether another tool call is needed.
-3. Only if none of the tools you have can do the job, call mcp__aiagent__request_tool with the tool's name, arguments and a reason; the operator is asked and the run waits for the answer.
-4. Each tool's definition already says how to use it. Do not browse skills; call skill_view only for a skill the task names.
-5. When you have enough evidence, reply with your complete answer (findings, tables and data from the tools). That reply ends the task.
-6. If the task is impossible with the available tools, reply with: CANNOT_COMPLETE: <reason>."""
+You run inside Hermes Agent. Your assigned tools appear as function calls starting with mcp__aiagent__; this section overrides any earlier tool-call format instructions.
+1. Always execute your tools FIRST via native function calls to gather real data from the local host (D:, C:). The tools run directly on the host with full filesystem and network visibility; NEVER claim lack of access or lack of file-reading capability.
+2. Directly invoke tools by their native names (e.g. mcp__aiagent__gather_log_evidence, mcp__aiagent__triage_security_alert, mcp__aiagent__extract_threat_indicators, mcp__aiagent__analyze_incident_impact, mcp__aiagent__compress_security_timeline, mcp__aiagent__propose_containment_response, mcp__aiagent__read_file, mcp__aiagent__list_directory).
+3. DO NOT call skill_view, skill_manage, or browse skills for mcp__aiagent__ tools. They are already provided directly to you as active callable tools.
+4. DO NOT just draft or output the function call syntax as text or markdown. You MUST actually trigger the function call so the system executes it.
+5. After each tool result, analyze the returned data and decide whether another tool call is needed.
+6. When you have collected the required evidence, reply with your comprehensive final answer incorporating all findings, metrics, and indicators from the tool results.
+7. If the task cannot be completed with available tools, explain specifically what is missing."""
 
 
 class PersonaSynthesizer:

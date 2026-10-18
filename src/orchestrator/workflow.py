@@ -398,7 +398,6 @@ class UAOSWorkflow:
                         failed[tid] = "Aborted due to upstream circuit breaker"
                 break
 
-        # ── Phase 3: Assemble Final Response ─────────────
         if not completed:
             self._result = {
                 "response": (
@@ -408,6 +407,22 @@ class UAOSWorkflow:
                 "tasks_completed": 0,
                 "tasks_failed": len(failed),
                 "replans": replan_count,
+            }
+            return self._result
+
+        if pipeline_aborted:
+            abort_reasons = "\n".join(f"- **Task {tid}**: {reason}" for tid, reason in failed.items())
+            self._result = {
+                "response": (
+                    "⚠️ **Workflow Execution Aborted**\n\n"
+                    "The workflow was stopped prematurely by the supervisor circuit breaker to prevent ungrounded results.\n\n"
+                    f"**Task Failures & Abort Reasons:**\n{abort_reasons}\n\n"
+                    f"**Completed Tasks:** {len(completed)} / {len(dag_dict.get('tasks', []))}"
+                ),
+                "tasks_completed": len(completed),
+                "tasks_failed": len(failed),
+                "replans": replan_count,
+                "supervisor_evaluations": self._supervisor_evaluations,
             }
             return self._result
 
@@ -652,6 +667,39 @@ class UAOSWorkflow:
                                     f"Aborted by supervisor: {retry_eval.get('feedback', '')}"
                                 )
                                 return True
+                            elif retry_eval.get("decision") in ("needs_retry", "need_more_info", "retry", "failed"):
+                                r_fb = (retry_eval.get("feedback") or "").lower()
+                                is_skepticism = any(term in r_fb for term in (
+                                    "only two files", "only 2 files", "only one file", "only 1 file",
+                                    "only one log", "only 1 log", "partial aggregation", "did not list all files",
+                                    "list all files", "more files", "additional logs", "additional log", "omitted",
+                                    "capture all files", "not all files", "truncated", "lacks several expected",
+                                    "expected indicators", "container id", "container ids", "file hash", "file hashes",
+                                    "complete list", "re-run the extraction", "capture these details",
+                                    "missing expected", "more indicators", "additional indicators", "missing indicators",
+                                ))
+                                if is_skepticism and len(task_output.strip()) > 80:
+                                    workflow.logger.info(
+                                        "Supervisor skepticism on retry for '%s' (%r) bypassed; proceeding with verified task output.",
+                                        task_name, retry_eval.get("feedback"),
+                                    )
+                                    completed[task_id] = task_output
+                                    self._task_statuses[task_id] = "completed"
+                                else:
+                                    workflow.logger.warning(
+                                        "Task '%s' failed supervisor evaluation after retry: %s",
+                                        task_name,
+                                        retry_eval.get("feedback", ""),
+                                    )
+                                    self._task_statuses[task_id] = "failed"
+                                    failed[task_id] = (
+                                        f"Failed supervisor evaluation after retry: {retry_eval.get('feedback', '')}"
+                                    )
+                                    return False
+                        else:
+                            self._task_statuses[task_id] = "failed"
+                            failed[task_id] = retry_result.get("error", "Task execution failed on retry")
+                            return False
                     else:
                         self._supervisor_evaluations.append(supervisor_eval)
             except Exception as eval_err:

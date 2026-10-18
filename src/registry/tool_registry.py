@@ -213,9 +213,9 @@ class ToolRegistry:
                             tool_ids.append(tid)
 
             if tool_ids:
-                best_id = tool_ids[0]
-                if best_id not in resolved:
-                    resolved[best_id] = self._tools[best_id]
+                for tid in tool_ids:
+                    if tid not in resolved:
+                        resolved[tid] = self._tools[tid]
             else:
                 unresolved.append(skill)
 

@@ -56,7 +56,29 @@ async def read_file(
 
     if not target.is_file():
         if target.is_dir():
-            logger.info("read_file called on directory '%s'; delegating to list_directory", clean_path)
+            logger.info("read_file called on directory '%s'; reading directory files", clean_path)
+            try:
+                files = [p for p in target.iterdir() if p.is_file()]
+            except Exception as e:
+                logger.error("Failed to list files in directory '%s': %s", clean_path, e)
+                files = []
+            if files:
+                contents = []
+                remaining_chars = MAX_READ_CHARS
+                for f in sorted(files, key=lambda x: x.name):
+                    try:
+                        text = f.read_text(encoding="utf-8", errors="replace")
+                        if len(text) > remaining_chars:
+                            text = text[:remaining_chars] + f"\n\n[...truncated {f.name}. File has {len(text)} chars total]"
+                            contents.append(f"=== File: {f.name} ===\n{text}")
+                            break
+                        contents.append(f"=== File: {f.name} ===\n{text}")
+                        remaining_chars -= len(text)
+                        if remaining_chars <= 0:
+                            break
+                    except Exception as err:
+                        contents.append(f"=== File: {f.name} (error reading: {err}) ===")
+                return "\n\n".join(contents)
             return await list_directory(directory_path=clean_path)
         return f"Error: Path is not a file: {clean_path}"
 

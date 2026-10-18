@@ -416,6 +416,9 @@ document.addEventListener("DOMContentLoaded", () => {
     runCase1NowBtn.addEventListener("click", () => {
       promptInput.value = "Investigate critical security logs in D:\\Security-logs-test\\attack-cases-benchmark\\case-1-apt-enterprise-intrusion\\raw-logs: Triage alert false-positive likelihood, gather evidence on threat indicators, discover impact, compress timeline, and propose containment firewall rules.";
       window._case1Approved = false;
+      if (typeof loadWorkflowTemplate === "function") {
+        try { loadWorkflowTemplate("soc-5-phase-investigation"); } catch (_) {}
+      }
       solveBtn.click();
     });
   }

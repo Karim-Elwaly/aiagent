@@ -283,13 +283,13 @@ def build_server(gate: ToolGate) -> Server:
         return tools
 
     @server.call_tool(validate_input=False)
-    async def call_tool(name: str, arguments: dict[str, Any] | None) -> list[types.TextContent]:
+    async def call_tool(name: str, arguments: dict[str, Any] | None) -> types.CallToolResult:
         try:
             text = await gate.call(current_entry(), name, arguments or {})
-            return [types.TextContent(type="text", text=text)]
+            return types.CallToolResult(content=[types.TextContent(type="text", text=text)], isError=False)
         except Exception as exc:
             logger.error("[MCP] call_tool error on '%s': %s", name, exc, exc_info=True)
-            return [types.TextContent(type="text", text=f"Error executing tool '{name}': {exc}")]
+            return types.CallToolResult(content=[types.TextContent(type="text", text=f"Error executing tool '{name}': {exc}")], isError=True)
 
     return server
 
@@ -321,7 +321,51 @@ class MCPEndpoint:
         if not self.allow_remote and client[0] not in _LOOPBACK:
             await self._reply(send, 403, "aiagent's MCP endpoint accepts loopback callers only")
             return
+
+        method = scope.get("method", "GET").upper()
+
+        # Handle HEAD requests (used by Hermes / HTTP clients to probe endpoint availability)
+        if method == "HEAD":
+            await send({
+                "type": "http.response.start",
+                "status": 200,
+                "headers": [
+                    (b"content-type", b"application/json"),
+                    (b"content-length", b"0"),
+                ],
+            })
+            await send({"type": "http.response.body", "body": b""})
+            return
+
+        # Handle OPTIONS requests for CORS / preflight
+        if method == "OPTIONS":
+            await send({
+                "type": "http.response.start",
+                "status": 200,
+                "headers": [
+                    (b"allow", b"GET, POST, HEAD, OPTIONS"),
+                    (b"content-length", b"0"),
+                ],
+            })
+            await send({"type": "http.response.body", "body": b""})
+            return
+
         headers = {k.decode("latin-1").lower(): v.decode("latin-1") for k, v in scope.get("headers", [])}
+
+        # Handle health check / discovery GET requests that are not asking for SSE (text/event-stream)
+        if method == "GET" and "text/event-stream" not in headers.get("accept", ""):
+            body = json.dumps({"status": "ok", "mcp": "aiagent", "version": "1.0"}).encode()
+            await send({
+                "type": "http.response.start",
+                "status": 200,
+                "headers": [
+                    (b"content-type", b"application/json"),
+                    (b"content-length", str(len(body)).encode()),
+                ],
+            })
+            await send({"type": "http.response.body", "body": body})
+            return
+
         auth = headers.get("authorization", "")
         token = auth[7:].strip() if auth.lower().startswith("bearer ") else ""
         entry = self.gate.entry_for_token(token)
@@ -331,6 +375,24 @@ class MCPEndpoint:
         if self.manager is None:
             await self._reply(send, 503, "MCP server not started")
             return
+
+        # Ensure Accept header satisfies StreamableHTTPSessionManager to prevent 406 Not Acceptable
+        raw_headers = list(scope.get("headers", []))
+        has_accept = False
+        new_headers = []
+        for k, v in raw_headers:
+            if k.lower() == b"accept":
+                has_accept = True
+                val = v.decode("latin-1")
+                if "application/json" not in val or "text/event-stream" not in val:
+                    val = f"{val}, application/json, text/event-stream"
+                new_headers.append((k, val.encode("latin-1")))
+            else:
+                new_headers.append((k, v))
+        if not has_accept:
+            new_headers.append((b"accept", b"application/json, text/event-stream, */*"))
+        scope["headers"] = new_headers
+
         scope["aiagent_profile"] = entry
         await self.manager.handle_request(scope, receive, send)
 
