@@ -906,6 +906,7 @@ async def evaluate_task_output(
             wf_id = "default"
 
     llm = get_orchestration_llm(agent_id)
+    settings = get_settings()
 
     prior_summary = "\n".join(
         f"- Task {tid}: {out[:150]}..."
