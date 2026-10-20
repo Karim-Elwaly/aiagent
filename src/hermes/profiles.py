@@ -288,18 +288,24 @@ class HermesProfiles:
 
     def wanted_toolsets(self, name: str, agent_toolsets: list[str]) -> list[str]:
         extra = self.state.get(name).get("extra_toolsets", []) if name == DEFAULT_PROFILE else agent_toolsets
-        # Dynamic bespoke profiles run task-specific MCP tools and should not include the built-in 'skills' toolset
-        # unless explicitly requested, preventing models from looping on skill_view instead of executing MCP tools.
-        if name.startswith(DYNAMIC_PROFILE_PREFIX):
+        default_toolsets = set(getattr(self.settings, "hermes_default_toolsets", []) or ["file", "terminal", "skills", "web", "code_execution"])
+        if getattr(self.settings, "hermes_enable_native_toolsets", True):
+            # Hermes runs with its full native toolsets (terminal, file, skills, web, code_execution)
+            wanted = default_toolsets | set(REQUIRED_TOOLSETS) | set(extra or []) | set(agent_toolsets or [])
+        elif name.startswith(DYNAMIC_PROFILE_PREFIX):
             wanted = set(agent_toolsets or [])
         else:
-            wanted = set(self.settings.hermes_default_toolsets) | set(REQUIRED_TOOLSETS) | set(extra or [])
+            wanted = default_toolsets | set(REQUIRED_TOOLSETS) | set(extra or [])
         return sorted(t for t in wanted if t in BUILTIN_TOOLSETS)
 
     def profile_config(self, name: str, tools: list[str] | None = None) -> dict[str, str]:
+        ext_dirs = [(self.skills_root / name).resolve().as_posix()]
+        lib_dir = self.get_skills_library_dir()
+        if lib_dir and lib_dir.resolve().as_posix() not in ext_dirs:
+            ext_dirs.append(lib_dir.resolve().as_posix())
         config = {
             "tools.tool_search.enabled": "off",
-            "skills.external_dirs": json.dumps([(self.skills_root / name).resolve().as_posix()]),
+            "skills.external_dirs": json.dumps(ext_dirs),
             # Force JSON tool-calling so local models (e.g. gpt-oss-20b) that do not support
             # Hermes's peg-native protocol can still call tools via the OpenAI-compatible format.
             "tool_format": "json",
@@ -722,8 +728,8 @@ class HermesProfiles:
             "compress_security_timeline": ["oss_forensics", "oss-forensics"],
             "propose_containment_response": ["oss_forensics", "oss-forensics", "docker_ops"],
             "triage_security_alert": ["oss_forensics", "oss-forensics"],
-            "read_file": ["simplify_code", "file_ops"],
-            "write_file": ["simplify_code", "file_ops"],
+            "read_file": ["simplify_code", "file_ops", "docx"],
+            "write_file": ["simplify_code", "file_ops", "docx"],
             "list_directory": ["file_ops", "simplify_code", "computer_use"],
             "get_disk_usage": ["computer_use", "system_diagnostics"],
             "delete_file": ["file_ops", "computer_use"],
@@ -753,6 +759,7 @@ class HermesProfiles:
         has_code = any(k in full_context for k in ("refactor", "codebase", "pull request", "syntax error"))
         has_git = any(k in full_context for k in ("git", "github", "commit", "repo", "branch"))
         has_db = any(k in full_context for k in ("database", "sql query", "postgres", "mysql", "slow query"))
+        has_docs = any(k in full_context for k in ("docx", "doc", "word", "proposal", "rfp", "report", "document", "contract", "template", "pdf"))
 
         # Blacklist of consumer/specialist skills that should NEVER be injected into security/system operations
         unrelated_blacklist = {
@@ -786,6 +793,8 @@ class HermesProfiles:
                         score += 6
 
             # 4. Granular context matches
+            if has_docs and sname_clean in ("docx", "file_ops"):
+                score += 12
             if has_k8s and sname_clean in ("docker_ops", "container_management", "devops_troubleshooting"):
                 score += 10
             if has_security and sname_clean in ("oss_forensics", "oss-forensics"):
@@ -859,12 +868,21 @@ class HermesProfiles:
         p_skills = self.profile_dir(name) / "skills"
         p_skills.mkdir(parents=True, exist_ok=True)
 
+        preserve_native = getattr(self.settings, "hermes_enable_native_toolsets", True)
         for item in list(p_skills.iterdir()):
-            if item.name not in matched:
-                if item.is_dir():
-                    shutil.rmtree(item, ignore_errors=True)
-                elif item.is_file():
-                    item.unlink(missing_ok=True)
+            if preserve_native:
+                # Preserve native Hermes skills (docx, pdf, git, etc.); only clean up obsolete synthetic aiagent-* skills
+                if item.name.startswith("aiagent-") and item.name not in matched:
+                    if item.is_dir():
+                        shutil.rmtree(item, ignore_errors=True)
+                    elif item.is_file():
+                        item.unlink(missing_ok=True)
+            else:
+                if item.name not in matched:
+                    if item.is_dir():
+                        shutil.rmtree(item, ignore_errors=True)
+                    elif item.is_file():
+                        item.unlink(missing_ok=True)
 
         for sname in matched:
             target = p_skills / sname
@@ -884,11 +902,18 @@ class HermesProfiles:
         ext_skills = self.skills_root / name
         ext_skills.mkdir(parents=True, exist_ok=True)
         for item in list(ext_skills.iterdir()):
-            if item.name not in matched:
-                if item.is_dir():
-                    shutil.rmtree(item, ignore_errors=True)
-                elif item.is_file():
-                    item.unlink(missing_ok=True)
+            if preserve_native:
+                if item.name.startswith("aiagent-") and item.name not in matched:
+                    if item.is_dir():
+                        shutil.rmtree(item, ignore_errors=True)
+                    elif item.is_file():
+                        item.unlink(missing_ok=True)
+            else:
+                if item.name not in matched:
+                    if item.is_dir():
+                        shutil.rmtree(item, ignore_errors=True)
+                    elif item.is_file():
+                        item.unlink(missing_ok=True)
         for sname in matched:
             target = ext_skills / sname
             if target.is_dir() and (target / "SKILL.md").is_file():

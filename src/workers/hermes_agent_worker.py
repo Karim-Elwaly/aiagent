@@ -694,8 +694,8 @@ class HermesAgentWorker:
         names = ", ".join(f"{MCP_TOOL_PREFIX}{t.name}" for t in tools)
         target_info = f" on target: '{detected_path}'" if detected_path else ""
         return (
-            f"EXECUTION DIRECTIVE: Call function tool {names}{target_info} immediately. "
-            "Do NOT write plain text sentences or conversational plans. Trigger the function call now."
+            f"EXECUTION DIRECTIVE: Execute your assigned tools ({names}){target_info} or appropriate native tools/skills now. "
+            "Do NOT reply with placeholder text or conversational chatter without inspecting the target and taking action."
         )
 
     @staticmethod
@@ -704,10 +704,10 @@ class HermesAgentWorker:
         return (
             f"A reviewer checked your answer and found gaps:\n{feedback.strip() or '(no details given)'}\n\n"
             + (
-                f"The MCP service and tools ({names}) are live, operational, and verified reachable. "
-                f"You MUST execute your assigned tools ({names}) directly via function calls to gather the missing evidence. "
-                "Do NOT refuse, do NOT assume tools or MCP services are missing or unreachable, and do NOT use skill_view. "
-                if names else "Address these gaps. "
+                f"Specialized AgentHub tools ({names}) are live and verified reachable. "
+                f"You may execute tools ({names}) directly via function calls, or use your native tools and skills to gather the missing evidence. "
+                "Do NOT refuse or assume tools are missing. "
+                if names else "Address these gaps using your available tools and skills. "
             )
             + "Then reply with your COMPLETE final answer for the task: everything from your previous answer plus "
             "the new findings, because this reply replaces it."
@@ -735,12 +735,12 @@ class HermesAgentWorker:
         if tools:
             names = ", ".join(f"{MCP_TOOL_PREFIX}{t.name}" for t in tools)
             parts.append(
-                f"# Available Tools for This Task\n{names}\n\n"
+                f"# Specialized AgentHub Tools for This Task\n{names}\n\n"
                 "**EXECUTION DIRECTIVES:**\n"
                 "- Host Environment: Live host execution environment with direct filesystem and OS access.\n"
-                f"- Immediate Action Required: Invoke {names} directly via native function calling.\n"
-                "- Do NOT produce conversational commentary, planning monologues, or text explanations before calling the tool.\n"
-                "- Output the function call directly."
+                "- You have full autonomous access to your native tools (terminal, file operations, python scripts, skills) as well as the specialized AgentHub tools listed above.\n"
+                f"- Invoke {names} via function calling when specialized AgentHub capabilities are needed, or utilize your native tools and skills as appropriate.\n"
+                "- Carry out the required actions directly and provide a complete, well-structured output."
             )
         elif not approval_tools:
             parts.append("# Tools for This Task\nNone assigned. Answer from the context you are given.")

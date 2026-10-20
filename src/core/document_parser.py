@@ -147,21 +147,11 @@ def parse_docx_file(file_path: Path) -> str:
                         line = "".join(texts).strip()
                         if line:
                             paragraphs.append(line)
-                    if not paragraphs:
-                        # Resilient regex fallback across any Word XML namespace variation
-                        xml_str = xml_content.decode("utf-8", errors="replace")
-                        p_blocks = re.findall(r"<w:p\b[^>]*>(.*?)</w:p>", xml_str, flags=re.DOTALL)
-                        for pb in p_blocks:
-                            words = re.findall(r"<w:t\b[^>]*>(.*?)</w:t>", pb, flags=re.DOTALL)
-                            if words:
-                                text_line = "".join(words).strip()
-                                if text_line:
-                                    paragraphs.append(text_line)
-                                if sum(len(l) for l in paragraphs) > MAX_EXTRACT_CHARS:
-                                    paragraphs.append("[...document truncated...]")
-                                    break
+                        if sum(len(l) for l in paragraphs) > MAX_EXTRACT_CHARS:
+                            paragraphs.append("[...document truncated...]")
+                            break
                     if paragraphs:
-                        return "\n\n".join(paragraphs)
+                        return "\n".join(paragraphs)
     except Exception as exc:
         logger.warning("Pure XML docx extraction failed on '%s': %s", file_path.name, exc)
 
