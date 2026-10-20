@@ -26,11 +26,13 @@ from uuid import uuid4
 import asyncio
 import time
 import httpx
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, UploadFile, File
 from fastapi.responses import FileResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 from temporalio.client import Client
+
+from src.core.document_parser import process_uploaded_file, AttachmentMeta
 
 from src.core.models import TaskDAG
 from src.core.path_utils import extract_target_path
@@ -98,6 +100,30 @@ class SolveRequest(BaseModel):
     # Outage tolerance for this run (brief|standard|extended|unlimited).
     # None → fall back to settings.default_resilience.
     resilience: str | None = None
+    attachments: list[dict[str, Any]] | None = None
+
+
+def enrich_query_with_attachments(query: str, attachments: list[dict[str, Any]] | None) -> str:
+    """Enrich the user query with attached file metadata, file paths, and extracted content."""
+    if not attachments:
+        return query
+    lines = [query.strip(), "", "---", "# Attached Files & Documents (Uploaded by User):"]
+    for idx, att in enumerate(attachments, 1):
+        fname = att.get("filename", f"file_{idx}")
+        fpath = att.get("file_path", "")
+        ftype = att.get("file_type", "")
+        fsize = att.get("size_bytes", 0)
+        size_str = f"{fsize / 1024:.1f} KB" if fsize < 1024 * 1024 else f"{fsize / (1024 * 1024):.1f} MB"
+        text = att.get("extracted_text", "")
+        lines.append(f"### Attachment {idx}: `{fname}` ({ftype.upper()}, {size_str})")
+        if fpath:
+            lines.append(f"- **Local File Path on Disk**: `{fpath}`")
+        if text:
+            clean_text = text.strip()
+            lines.append(f"- **Extracted Document Content**:\n```\n{clean_text}\n```")
+        lines.append("")
+    lines.append("---")
+    return "\n".join(lines).strip()
 
 
 class SolveAsyncResponse(BaseModel):
@@ -959,6 +985,31 @@ async def run_direct_workflow(
         return err_res
 
 
+@app.post("/api/upload")
+async def upload_attachments(files: list[UploadFile] = File(...)):
+    """Upload and parse documents (PDF, Word, TXT, CSV, Logs, etc.) for prompt execution."""
+    session_id = uuid4().hex[:8]
+    results: list[dict[str, Any]] = []
+    for file in files:
+        try:
+            content = await file.read()
+            meta = process_uploaded_file(content, file.filename or "uploaded_file", session_id=session_id)
+            results.append(meta.model_dump())
+        except Exception as exc:
+            logger.warning("Failed to process uploaded file '%s': %s", file.filename, exc)
+            results.append({
+                "id": f"err-{uuid4().hex[:6]}",
+                "filename": file.filename or "unknown",
+                "file_path": "",
+                "file_type": "error",
+                "size_bytes": 0,
+                "extracted_text": f"Upload processing failed: {exc}",
+                "char_count": 0,
+                "preview": "Error processing document",
+            })
+    return {"attachments": results, "session_id": session_id}
+
+
 @app.post("/solve", response_model=SolveResponse)
 async def solve(request: SolveRequest):
     """Submit a problem and wait for the complete result.
@@ -973,19 +1024,19 @@ async def solve(request: SolveRequest):
     level = normalize_level(request.resilience or getattr(getattr(app.state, "settings", None), "default_resilience", "standard"))
 
     custom_dag = request.custom_dag
-    # Auto-plan mode: do NOT inject a hardcoded template — let the Meta-Planner
-    # build the workflow dynamically every time using the required Hermes skills & tools.
+    effective_query = enrich_query_with_attachments(request.query, request.attachments)
 
     if not getattr(app.state, "temporal", None):
         logger.info(
-            "Solving (sync via Standalone Engine): workflow=%s, query=%s, agent_id=%s, resilience=%s",
+            "Solving (sync via Standalone Engine): workflow=%s, query=%s, agent_id=%s, resilience=%s, attachments=%d",
             workflow_id,
-            request.query[:100],
+            effective_query[:100],
             request.agent_id or "default",
             level,
+            len(request.attachments or []),
         )
         result = await run_direct_workflow(
-            workflow_id, request.query, request.agent_id or "", custom_dag, level
+            workflow_id, effective_query, request.agent_id or "", custom_dag, level
         )
         return SolveResponse(
             workflow_id=workflow_id,
@@ -997,15 +1048,16 @@ async def solve(request: SolveRequest):
         )
 
     logger.info(
-        "Solving (sync via Temporal): workflow=%s, query=%s, agent_id=%s, resilience=%s",
+        "Solving (sync via Temporal): workflow=%s, query=%s, agent_id=%s, resilience=%s, attachments=%d",
         workflow_id,
-        request.query[:100],
+        effective_query[:100],
         request.agent_id or "default",
         level,
+        len(request.attachments or []),
     )
 
     try:
-        workflow_args = [request.query, request.agent_id or "", custom_dag, level]
+        workflow_args = [effective_query, request.agent_id or "", custom_dag, level]
 
         handle = await app.state.temporal.start_workflow(
             UAOSWorkflow.run,
@@ -1041,21 +1093,21 @@ async def solve_async(request: SolveRequest):
     level = normalize_level(request.resilience or getattr(getattr(app.state, "settings", None), "default_resilience", "standard"))
 
     custom_dag = request.custom_dag
-    # Auto-plan mode: do NOT inject a hardcoded template — let the Meta-Planner
-    # build the workflow dynamically every time using the required Hermes skills & tools.
+    effective_query = enrich_query_with_attachments(request.query, request.attachments)
 
     if not getattr(app.state, "temporal", None):
         logger.info(
-            "Solving (async via Standalone Engine): workflow=%s, query=%s, agent_id=%s, custom_dag=%s, resilience=%s",
+            "Solving (async via Standalone Engine): workflow=%s, query=%s, agent_id=%s, custom_dag=%s, resilience=%s, attachments=%d",
             workflow_id,
-            request.query[:100],
+            effective_query[:100],
             request.agent_id or "default",
             "yes" if custom_dag else "no",
             level,
+            len(request.attachments or []),
         )
         asyncio.create_task(
             run_direct_workflow(
-                workflow_id, request.query, request.agent_id or "", custom_dag, level
+                workflow_id, effective_query, request.agent_id or "", custom_dag, level
             )
         )
         return SolveAsyncResponse(
@@ -1064,16 +1116,17 @@ async def solve_async(request: SolveRequest):
         )
 
     logger.info(
-        "Solving (async via Temporal): workflow=%s, query=%s, agent_id=%s, custom_dag=%s, resilience=%s",
+        "Solving (async via Temporal): workflow=%s, query=%s, agent_id=%s, custom_dag=%s, resilience=%s, attachments=%d",
         workflow_id,
-        request.query[:100],
+        effective_query[:100],
         request.agent_id or "default",
         "yes" if custom_dag else "no",
         level,
+        len(request.attachments or []),
     )
 
     try:
-        workflow_args = [request.query, request.agent_id or "", custom_dag, level]
+        workflow_args = [effective_query, request.agent_id or "", custom_dag, level]
 
         await app.state.temporal.start_workflow(
             UAOSWorkflow.run,

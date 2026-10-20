@@ -83,13 +83,29 @@ async def read_file(
         return f"Error: Path is not a file: {clean_path}"
 
     try:
-        content = target.read_text(encoding="utf-8", errors="replace")
+        ext = target.suffix.lower()
+        if ext in (".docx", ".doc"):
+            from src.core.document_parser import parse_docx_file
+            content = parse_docx_file(target)
+        elif ext == ".pdf":
+            from src.core.document_parser import parse_pdf_file
+            content = parse_pdf_file(target)
+        else:
+            content = target.read_text(encoding="utf-8", errors="replace")
 
-        if len(content) > MAX_READ_CHARS:
+        # Generous reading allowance for document analysis (default 24000 chars)
+        max_chars = 24000
+        try:
+            from src.core.config import get_settings
+            max_chars = getattr(get_settings(), "worker_max_output_chars", 24000)
+        except Exception:
+            pass
+
+        if len(content) > max_chars:
             return (
-                content[:MAX_READ_CHARS]
+                content[:max_chars]
                 + f"\n\n[...truncated. File is {len(content)} chars total, "
-                f"showing first {MAX_READ_CHARS}]"
+                f"showing first {max_chars}]"
             )
 
         return content

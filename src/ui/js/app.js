@@ -411,19 +411,127 @@ document.addEventListener("DOMContentLoaded", () => {
     }
   }
 
-  const runCase1NowBtn = document.getElementById("run-case1-now");
-  if (runCase1NowBtn) {
-    runCase1NowBtn.addEventListener("click", () => {
-      promptInput.value = "Investigate critical security logs in D:\\Security-logs-test\\attack-cases-benchmark\\case-1-apt-enterprise-intrusion\\raw-logs: Triage alert false-positive likelihood, gather evidence on threat indicators, discover impact, compress timeline, and propose containment firewall rules.";
-      window._case1Approved = false;
-      if (typeof loadWorkflowTemplate === "function") {
-        try { loadWorkflowTemplate("soc-5-phase-investigation"); } catch (_) {}
-      }
-      solveBtn.click();
+  // ── File Attachment System ───────────────────────────────────────
+  const promptFileInput = document.getElementById("prompt-file-input");
+  const attachFileBtn = document.getElementById("attach-file-btn");
+  const attachFileBadge = document.getElementById("attach-file-badge");
+  const promptAttachmentsTray = document.getElementById("prompt-attachments-tray");
+  let attachedFiles = [];
+
+  function getFileIcon(filename) {
+    const ext = (filename.split('.').pop() || '').toLowerCase();
+    if (ext === 'pdf') return '📕';
+    if (ext === 'docx' || ext === 'doc') return '📘';
+    if (['csv', 'xlsx', 'xls'].includes(ext)) return '📊';
+    if (['json', 'yaml', 'yml', 'xml'].includes(ext)) return '⚙️';
+    if (['log', 'txt', 'md'].includes(ext)) return '📝';
+    if (['py', 'js', 'sh', 'sql'].includes(ext)) return '💻';
+    return '📄';
+  }
+
+  function formatFileSize(bytes) {
+    if (bytes < 1024) return bytes + ' B';
+    if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(1) + ' KB';
+    return (bytes / (1024 * 1024)).toFixed(1) + ' MB';
+  }
+
+  function renderAttachmentsTray() {
+    if (!promptAttachmentsTray) return;
+    promptAttachmentsTray.innerHTML = '';
+    if (attachedFiles.length === 0) {
+      promptAttachmentsTray.style.display = 'none';
+      if (attachFileBadge) attachFileBadge.style.display = 'none';
+      if (attachFileBtn) attachFileBtn.classList.remove('has-files');
+      return;
+    }
+    promptAttachmentsTray.style.display = 'flex';
+    if (attachFileBadge) {
+      attachFileBadge.textContent = attachedFiles.length;
+      attachFileBadge.style.display = 'inline-flex';
+    }
+    if (attachFileBtn) attachFileBtn.classList.add('has-files');
+
+    attachedFiles.forEach((file, index) => {
+      const chip = document.createElement('div');
+      chip.className = 'attachment-chip';
+      chip.innerHTML = `
+        <span class="attachment-chip-icon">${getFileIcon(file.name)}</span>
+        <span class="attachment-chip-name" title="${file.name}">${file.name}</span>
+        <span class="attachment-chip-size">(${formatFileSize(file.size)})</span>
+        <button type="button" class="attachment-chip-remove" title="Remove attachment" data-index="${index}">✕</button>
+      `;
+      promptAttachmentsTray.appendChild(chip);
+    });
+
+    promptAttachmentsTray.querySelectorAll('.attachment-chip-remove').forEach(btn => {
+      btn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        const idx = parseInt(btn.getAttribute('data-index'), 10);
+        attachedFiles.splice(idx, 1);
+        renderAttachmentsTray();
+      });
     });
   }
 
-  // Automatic trigger for Case 1 benchmark via query parameter
+  if (attachFileBtn && promptFileInput) {
+    attachFileBtn.addEventListener('click', () => {
+      promptFileInput.click();
+    });
+
+    promptFileInput.addEventListener('change', () => {
+      if (promptFileInput.files && promptFileInput.files.length > 0) {
+        for (let i = 0; i < promptFileInput.files.length; i++) {
+          const file = promptFileInput.files[i];
+          if (file.size > 50 * 1024 * 1024) {
+            showToast(`File "${file.name}" exceeds 50MB limit`, "error");
+            continue;
+          }
+          if (!attachedFiles.some(f => f.name === file.name && f.size === file.size)) {
+            attachedFiles.push(file);
+          }
+        }
+        renderAttachmentsTray();
+        promptFileInput.value = '';
+      }
+    });
+  }
+
+  // Drag and drop onto prompt input
+  if (promptInput) {
+    ['dragenter', 'dragover'].forEach(eventName => {
+      promptInput.addEventListener(eventName, (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        promptInput.classList.add('drag-over');
+      });
+    });
+
+    ['dragleave', 'drop'].forEach(eventName => {
+      promptInput.addEventListener(eventName, (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        promptInput.classList.remove('drag-over');
+      });
+    });
+
+    promptInput.addEventListener('drop', (e) => {
+      if (e.dataTransfer && e.dataTransfer.files && e.dataTransfer.files.length > 0) {
+        for (let i = 0; i < e.dataTransfer.files.length; i++) {
+          const file = e.dataTransfer.files[i];
+          if (file.size > 50 * 1024 * 1024) {
+            showToast(`File "${file.name}" exceeds 50MB limit`, "error");
+            continue;
+          }
+          if (!attachedFiles.some(f => f.name === file.name && f.size === file.size)) {
+            attachedFiles.push(file);
+          }
+        }
+        renderAttachmentsTray();
+      }
+    });
+  }
+
+  // Presets and query param autorun
   if (window.location.search.includes("autorun=case1")) {
     console.log("[AutoRun] autorun=case1 detected! Launching Case 1 benchmark automatically...");
     setTimeout(() => {
@@ -436,28 +544,61 @@ document.addEventListener("DOMContentLoaded", () => {
   // 3. Problem Submission
   solveBtn.addEventListener("click", async () => {
     const query = promptInput.value.trim();
-    if (!query) {
-      showToast("Please enter a problem description first", "error");
+    if (!query && attachedFiles.length === 0) {
+      showToast("Please enter a problem description or attach a file first", "error");
       return;
     }
 
     setRunningState(true);
     resetDashboard();
+
+    // Upload any attached files first
+    let uploadedAttachments = [];
+    if (attachedFiles.length > 0) {
+      showToast(`Uploading and extracting ${attachedFiles.length} file(s)...`, "info");
+      const formData = new FormData();
+      for (const file of attachedFiles) {
+        formData.append("files", file);
+      }
+      try {
+        const uploadRes = await fetch("/api/upload", {
+          method: "POST",
+          body: formData,
+        });
+        if (uploadRes.ok) {
+          const uploadData = await uploadRes.json();
+          uploadedAttachments = uploadData.attachments || [];
+          showToast(`Extracted ${uploadedAttachments.length} document(s) successfully!`, "success");
+        } else {
+          console.warn("Upload failed, proceeding with prompt only");
+        }
+      } catch (uploadErr) {
+        console.error("Upload error:", uploadErr);
+        showToast("Failed to upload attached files: " + uploadErr.message, "error");
+      }
+    }
+
     const modeAsyncEl = document.getElementById("mode-async");
     const isAsync = modeAsyncEl ? modeAsyncEl.checked : true;
     const agentSelectorEl = document.getElementById("agent-selector");
     const selectedAgentId = agentSelectorEl ? agentSelectorEl.value : "";
     const resilienceEl = document.getElementById("resilience-selector");
     const selectedResilience = resilienceEl ? resilienceEl.value : null;
+    const effectiveQuery = query || `Analyze the attached file(s): ${uploadedAttachments.map(a => a.filename).join(', ')}`;
     const customDagPayload = (isCustomWorkflowMode && activeCustomDag && activeCustomDag.tasks && activeCustomDag.tasks.length > 0)
-      ? { ...activeCustomDag, goal: query }
+      ? { ...activeCustomDag, goal: effectiveQuery }
       : null;
     const solvePayload = {
-      query,
+      query: effectiveQuery,
       agent_id: selectedAgentId || null,
       custom_dag: customDagPayload,
       resilience: selectedResilience || null,
+      attachments: uploadedAttachments.length > 0 ? uploadedAttachments : null,
     };
+
+    // Reset attachments tray after submission
+    attachedFiles = [];
+    renderAttachmentsTray();
 
     try {
       if (isAsync) {

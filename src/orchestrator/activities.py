@@ -905,6 +905,7 @@ async def evaluate_task_output(
         except Exception:
             wf_id = "default"
 
+    settings = get_settings()
     llm = get_orchestration_llm(agent_id)
 
     prior_summary = "\n".join(
