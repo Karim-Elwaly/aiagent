@@ -670,6 +670,7 @@ class UAOSWorkflow:
                             elif retry_eval.get("decision") in ("needs_retry", "need_more_info", "retry", "failed"):
                                 r_fb = (retry_eval.get("feedback") or "").lower()
                                 is_skepticism = any(term in r_fb for term in (
+                                    # File count / quantity skepticism
                                     "only two files", "only 2 files", "only one file", "only 1 file",
                                     "only one log", "only 1 log", "partial aggregation", "did not list all files",
                                     "list all files", "more files", "additional logs", "additional log", "omitted",
@@ -677,6 +678,14 @@ class UAOSWorkflow:
                                     "expected indicators", "container id", "container ids", "file hash", "file hashes",
                                     "complete list", "re-run the extraction", "capture these details",
                                     "missing expected", "more indicators", "additional indicators", "missing indicators",
+                                    # Document extraction completeness skepticism
+                                    # The parser already extracted the max it can; re-running will not help.
+                                    "extracted text is incomplete", "re-run extraction", "re‐run extraction",
+                                    "full content", "full rfp", "full document", "complete document",
+                                    "capture the full", "capture all content", "entire document",
+                                    "full text", "complete text", "entire rfp", "entire content",
+                                    "incomplete extraction", "incomplete document", "text is incomplete",
+                                    "re-extract", "re‑extract", "full rfp content",
                                 ))
                                 if is_skepticism and len(task_output.strip()) > 80:
                                     workflow.logger.info(

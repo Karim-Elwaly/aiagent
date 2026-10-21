@@ -23,7 +23,7 @@ from src.registry.tool_registry import ToolSpec
 logger = logging.getLogger(__name__)
 
 # ── Configuration ────────────────────────────────────────────────
-MAX_READ_CHARS = 8000  # prevent context overflow on large files
+MAX_READ_CHARS = 40000  # covers most business/RFP documents; Hermes can use native docx/pdf skills for larger files
 
 
 def _format_size(size_bytes: int) -> str:
@@ -94,10 +94,22 @@ async def read_file(
             content = target.read_text(encoding="utf-8", errors="replace")
 
         if len(content) > MAX_READ_CHARS:
+            hint = ""
+            if suffix in (".docx", ".doc"):
+                hint = (
+                    f" To read the full document, use your native docx skill: "
+                    f"run `python -c \"import docx; doc=docx.Document(r'{target.resolve()}'); "
+                    f"[print(p.text) for p in doc.paragraphs]\"` via the terminal tool."
+                )
+            elif suffix == ".pdf":
+                hint = (
+                    f" To read the full document, use your native pdf skill via the terminal tool "
+                    f"on the file at: `{target.resolve()}`"
+                )
             return (
                 content[:MAX_READ_CHARS]
-                + f"\n\n[...truncated. File is {len(content)} chars total, "
-                f"showing first {MAX_READ_CHARS}]"
+                + f"\n\n[...truncated. Full file is {len(content)} chars total at `{target.resolve()}`, "
+                f"showing first {MAX_READ_CHARS}.{hint}]"
             )
 
         return content

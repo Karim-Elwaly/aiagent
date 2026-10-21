@@ -25,7 +25,7 @@ from pydantic import BaseModel
 logger = logging.getLogger(__name__)
 
 # Max characters extracted into prompt context to prevent context window saturation
-MAX_EXTRACT_CHARS = 24000
+MAX_EXTRACT_CHARS = 60000
 MAX_PREVIEW_CHARS = 600
 
 # Base uploads directory

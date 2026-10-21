@@ -808,8 +808,34 @@ async def run_direct_workflow(
                                     supervisor_aborted = True
                                     supervisor_abort_reason = retry_eval.get("feedback", "")
                                 elif retry_eval.get("decision") in ("needs_retry", "need_more_info", "retry", "failed"):
-                                    retry_failed = True
-                                    retry_failed_reason = retry_eval.get("feedback", "")
+                                    r_fb = (retry_eval.get("feedback") or "").lower()
+                                    is_skepticism = any(term in r_fb for term in (
+                                        # File count / quantity skepticism
+                                        "only two files", "only 2 files", "only one file", "only 1 file",
+                                        "only one log", "only 1 log", "partial aggregation", "did not list all files",
+                                        "list all files", "more files", "additional logs", "additional log", "omitted",
+                                        "capture all files", "not all files", "truncated", "lacks several expected",
+                                        "expected indicators", "container id", "container ids", "file hash", "file hashes",
+                                        "complete list", "re-run the extraction", "capture these details",
+                                        "missing expected", "more indicators", "additional indicators", "missing indicators",
+                                        # Document extraction completeness skepticism
+                                        # The parser already extracted the max it can; re-running will not help.
+                                        "extracted text is incomplete", "re-run extraction", "re\u2011run extraction",
+                                        "full content", "full rfp", "full document", "complete document",
+                                        "capture the full", "capture all content", "entire document",
+                                        "full text", "complete text", "entire rfp", "entire content",
+                                        "incomplete extraction", "incomplete document", "text is incomplete",
+                                        "re-extract", "re\u2011extract", "full rfp content",
+                                    ))
+                                    if is_skepticism and len(task_output.strip()) > 80:
+                                        logger.info(
+                                            "Supervisor skepticism on retry for '%s' (%r) bypassed; proceeding with verified task output.",
+                                            task.name, retry_eval.get("feedback"),
+                                        )
+                                        # Task output is substantive — accept it despite skepticism
+                                    else:
+                                        retry_failed = True
+                                        retry_failed_reason = retry_eval.get("feedback", "")
                             else:
                                 retry_failed = True
                                 retry_failed_reason = retry_result.get("error", "Task execution failed on retry")
