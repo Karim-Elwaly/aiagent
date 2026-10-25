@@ -6373,8 +6373,42 @@ Integrates with smart home sensors, switches, lighting, and scenes.`
   const arenaExistingProfilesList = document.getElementById("arena-existing-profiles-list");
   const arenaExistingProfilesBadge = document.getElementById("arena-existing-profiles-badge");
   const fleetProfilesCountEl = document.getElementById("fleet-profiles-count");
+  const arenaSelectDropdown = document.getElementById("arena-select-dropdown");
+  const arenaCloneBtn = document.getElementById("arena-clone-btn");
+  const arenaLoadDagBtn = document.getElementById("arena-load-dag-btn");
+  const arenaDeleteBtn = document.getElementById("arena-delete-btn");
 
   let currentFleetArena = null;
+
+  async function loadSavedArenas(selectArenaId = null) {
+    if (!arenaSelectDropdown) return [];
+    try {
+      const res = await fetch("/api/fleet/arenas");
+      if (res.ok) {
+        const arenas = await res.json();
+        if (!arenas.length) {
+          arenaSelectDropdown.innerHTML = `<option value="">No saved fleets yet (Plan one below)</option>`;
+          return [];
+        }
+        arenaSelectDropdown.innerHTML = arenas.map(a => {
+          const uCount = (a.units || []).length;
+          const status = (a.status || "draft").toUpperCase();
+          const label = `${a.arena_name || a.arena_id} (${uCount} units • ${status})`;
+          return `<option value="${escapeHtml(a.arena_id)}">${escapeHtml(label)}</option>`;
+        }).join("");
+
+        if (selectArenaId) {
+          arenaSelectDropdown.value = selectArenaId;
+        } else if (currentFleetArena && currentFleetArena.arena_id) {
+          arenaSelectDropdown.value = currentFleetArena.arena_id;
+        }
+        return arenas;
+      }
+    } catch (e) {
+      console.warn("Could not load saved fleet arenas:", e);
+    }
+    return [];
+  }
 
   async function loadFleetProfiles() {
     try {
@@ -6426,6 +6460,7 @@ Integrates with smart home sensors, switches, lighting, and scenes.`
   }
 
   function renderFleetArena(manifest) {
+    if (!manifest) return;
     currentFleetArena = manifest;
     if (arenaModalTitle) arenaModalTitle.textContent = manifest.arena_name || "Autonomous Fleet Arena";
     if (arenaStatusBadge) {
@@ -6435,9 +6470,26 @@ Integrates with smart home sensors, switches, lighting, and scenes.`
       arenaStatusBadge.style.color = st === "draft" ? "#a5b4fc" : st === "provisioned" ? "#93c5fd" : "#34d399";
     }
     if (arenaModalId) arenaModalId.textContent = manifest.arena_id;
-    if (arenaUnitsCount) arenaUnitsCount.textContent = (manifest.units || []).length;
+    const unitCount = (manifest.units || []).length;
+    if (arenaUnitsCount) arenaUnitsCount.textContent = unitCount;
     if (arenaReusableCount) arenaReusableCount.textContent = (manifest.profiles_existing || []).length;
     if (arenaToCreateCount) arenaToCreateCount.textContent = (manifest.profiles_to_create || []).length;
+
+    // Synchronize global Mission Control KPIs & Header Counters
+    if (fleetSpecialistCountEl) {
+      fleetSpecialistCountEl.textContent = `${unitCount} Specialist Units`;
+    }
+    if (kpiActiveUnitsEl) {
+      kpiActiveUnitsEl.textContent = `${unitCount} / ${unitCount}`;
+    }
+    if (kpiMatchedToolsEl) {
+      const uniqueTools = new Set();
+      (manifest.units || []).forEach(u => (u.scoped_tools || []).forEach(t => uniqueTools.add(t)));
+      kpiMatchedToolsEl.textContent = `${uniqueTools.size} Ready`;
+    }
+    if (arenaSelectDropdown && manifest.arena_id) {
+      arenaSelectDropdown.value = manifest.arena_id;
+    }
 
     if (arenaUnitsContainer) {
       if (!manifest.units || !manifest.units.length) {
@@ -6538,6 +6590,113 @@ Integrates with smart home sensors, switches, lighting, and scenes.`
     }
   }
 
+  // ── Arena Switcher & Reusability Toolbar Listeners ──
+  if (arenaSelectDropdown) {
+    arenaSelectDropdown.addEventListener("change", async () => {
+      const selectedId = arenaSelectDropdown.value;
+      if (!selectedId) return;
+      try {
+        const res = await fetch(`/api/fleet/arena/${encodeURIComponent(selectedId)}`);
+        if (res.ok) {
+          const manifest = await res.json();
+          renderFleetArena(manifest);
+          loadFleetProfiles();
+        }
+      } catch (e) {
+        showToast(`Failed to load fleet: ${e.message}`, "error");
+      }
+    });
+  }
+
+  if (arenaCloneBtn) {
+    arenaCloneBtn.addEventListener("click", async () => {
+      if (!currentFleetArena) {
+        showToast("No active fleet arena to clone.", "error");
+        return;
+      }
+      const defaultName = `${currentFleetArena.arena_name || "Fleet"} (Reusable)`;
+      const newName = prompt("Name your reusable fleet clone (profiles already exist in Hermes — 0 restarts needed):", defaultName);
+      if (newName === null) return; // User cancelled
+
+      showToast("Cloning fleet DAG topology & reusing named profiles...", "info");
+      try {
+        const res = await fetch(`/api/fleet/arena/${encodeURIComponent(currentFleetArena.arena_id)}/clone`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ new_name: newName.trim() || defaultName }),
+        });
+        if (!res.ok) {
+          const err = await res.json();
+          throw new Error(err.detail || "Clone failed");
+        }
+        const cloned = await res.json();
+        showToast(`Fleet cloned! ${(cloned.units || []).length} units ready — 100% profiles reused in Hermes.`);
+        await loadSavedArenas(cloned.arena_id);
+        renderFleetArena(cloned);
+        loadFleetProfiles();
+      } catch (e) {
+        showToast(`Fleet clone failed: ${e.message}`, "error");
+      }
+    });
+  }
+
+  if (arenaLoadDagBtn) {
+    arenaLoadDagBtn.addEventListener("click", () => {
+      if (!currentFleetArena || !currentFleetArena.dag) {
+        showToast("No DAG topology found for this fleet.", "error");
+        return;
+      }
+      activeCustomDag = JSON.parse(JSON.stringify(currentFleetArena.dag));
+      currentWorkflowTasks = JSON.parse(JSON.stringify(currentFleetArena.dag.tasks || []));
+      isCustomWorkflowMode = true;
+      updateWorkflowModeUI();
+      if (dagRenderer) {
+        dagRenderer.render(activeCustomDag);
+      }
+      const pEl = promptInput || document.getElementById("problem-prompt");
+      if (pEl && currentFleetArena.mission_prompt) {
+        pEl.value = currentFleetArena.mission_prompt;
+      }
+      if (fleetSpecialistCountEl) {
+        fleetSpecialistCountEl.textContent = `${(currentFleetArena.units || []).length} Specialist Units`;
+      }
+      if (fleetArenaModal) fleetArenaModal.classList.remove("active");
+      showToast(`Fleet loaded into visualizer! ${(currentFleetArena.units || []).length} specialist units ready.`);
+    });
+  }
+
+  if (arenaDeleteBtn) {
+    arenaDeleteBtn.addEventListener("click", async () => {
+      if (!currentFleetArena) return;
+      const targetId = currentFleetArena.arena_id;
+      const name = currentFleetArena.arena_name || targetId;
+      if (!confirm(`Delete Fleet Arena '${name}'?\n(Named profiles in Hermes will remain intact for reuse)`)) return;
+
+      try {
+        const res = await fetch(`/api/fleet/arena/${encodeURIComponent(targetId)}`, { method: "DELETE" });
+        if (!res.ok) {
+          const err = await res.json();
+          throw new Error(err.detail || "Delete failed");
+        }
+        showToast(`Fleet '${name}' deleted.`);
+        const remaining = await loadSavedArenas();
+        if (remaining.length > 0) {
+          const nextRes = await fetch(`/api/fleet/arena/${encodeURIComponent(remaining[0].arena_id)}`);
+          if (nextRes.ok) {
+            const nextManifest = await nextRes.json();
+            renderFleetArena(nextManifest);
+          }
+        } else {
+          currentFleetArena = null;
+          if (arenaModalTitle) arenaModalTitle.textContent = "Autonomous Fleet Arena";
+          if (arenaUnitsContainer) arenaUnitsContainer.innerHTML = `<div style="text-align: center; padding: 24px; color: var(--text-dim);">No saved fleets available.</div>`;
+        }
+      } catch (e) {
+        showToast(`Delete failed: ${e.message}`, "error");
+      }
+    });
+  }
+
   if (planFleetArenaBtn) {
     planFleetArenaBtn.addEventListener("click", async () => {
       const pEl = promptInput || document.getElementById("problem-prompt");
@@ -6559,6 +6718,7 @@ Integrates with smart home sensors, switches, lighting, and scenes.`
           throw new Error(err.detail || "Planning failed");
         }
         const manifest = await res.json();
+        await loadSavedArenas(manifest.arena_id);
         renderFleetArena(manifest);
         loadFleetProfiles();
         if (fleetArenaModal) fleetArenaModal.classList.add("active");
@@ -6574,17 +6734,21 @@ Integrates with smart home sensors, switches, lighting, and scenes.`
       const pEl = promptInput || document.getElementById("problem-prompt");
       const prompt = pEl ? pEl.value.trim() : "";
       try {
-        const res = await fetch("/api/fleet/arenas");
-        if (res.ok) {
-          const arenas = await res.json();
-          if (arenas.length > 0) {
-            renderFleetArena(arenas[0]);
-          } else if (prompt) {
-            planFleetArenaBtn.click();
-            return;
+        const arenas = await loadSavedArenas();
+        if (arenas.length > 0) {
+          const target = (currentFleetArena && arenas.find(a => a.arena_id === currentFleetArena.arena_id)) || arenas[0];
+          const fullRes = await fetch(`/api/fleet/arena/${encodeURIComponent(target.arena_id)}`);
+          if (fullRes.ok) {
+            const fullManifest = await fullRes.json();
+            renderFleetArena(fullManifest);
           } else {
-            showToast("Enter a prompt and click 'Plan Fleet Arena' to create one.", "info");
+            renderFleetArena(target);
           }
+        } else if (prompt) {
+          planFleetArenaBtn.click();
+          return;
+        } else {
+          showToast("Enter a prompt and click 'Plan Fleet Arena' to create one.", "info");
         }
       } catch (e) {
         console.warn(e);
@@ -6611,6 +6775,7 @@ Integrates with smart home sensors, switches, lighting, and scenes.`
           throw new Error(errDetail || `HTTP ${res.status}`);
         }
         const updated = await res.json();
+        await loadSavedArenas(updated.arena_id);
         renderFleetArena(updated);
         loadFleetProfiles();
         showToast("Provisioned missing fleet profiles in Hermes!");
@@ -6662,6 +6827,7 @@ Integrates with smart home sensors, switches, lighting, and scenes.`
   loadMemoryStats();
   loadDistilledSkillsStats();
   loadFleetProfiles();
+  loadSavedArenas();
 
   // Global Keyboard Shortcuts (2026 Pro Experience)
   window.addEventListener("keydown", (e) => {

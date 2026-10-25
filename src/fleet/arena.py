@@ -13,6 +13,7 @@ across different missions (exempt from LRU eviction).
 
 from __future__ import annotations
 
+import copy
 import logging
 import re
 import time
@@ -88,9 +89,11 @@ class FleetArenaComposer:
         self,
         registry: ToolRegistry | None = None,
         store: FleetArenaStore | None = None,
+        settings: Any = None,
     ):
         self.registry = registry
         self.store = store or FleetArenaStore()
+        self.settings = settings
 
     # ── Phase 1: Plan ──────────────────────────────────────────────
 
@@ -410,6 +413,83 @@ class FleetArenaComposer:
             raise ValueError(f"Fleet Arena '{arena_id}' not found")
         return manifest.dag
 
+    def clone_arena(
+        self,
+        arena_id: str,
+        new_name: str | None = None,
+        new_prompt: str | None = None,
+    ) -> FleetArenaManifest:
+        """Clone an existing Fleet Arena into a fresh ready-to-run instance.
+
+        Preserves all named Hermes profile bindings, tool assignments, and unit
+        specifications, but clears prior execution state and attached files so
+        the operator can attach new files and launch a new mission immediately.
+
+        Because the named profiles already exist in Hermes, the cloned arena
+        starts with status 'provisioned' (zero gateway restarts required).
+        """
+        manifest = self.store.load(arena_id)
+        if manifest is None:
+            raise ValueError(f"Fleet Arena '{arena_id}' not found")
+
+        from uuid import uuid4
+        import time
+
+        new_arena_id = f"arena-{manifest.arena_slug}-{uuid4().hex[:6]}"
+        existing_profiles = self._list_existing_fleet_profiles()
+
+        new_units = []
+        for u in manifest.units:
+            clean_desc = re.split(r"\n+--- (?:ATTACHED FILE|# Attached Files)", u.description)[0].rstrip()
+            unit_copy = FleetArenaUnit(
+                profile_name=u.profile_name,
+                unit_codename=u.unit_codename,
+                task_id=u.task_id,
+                task_name=u.task_name,
+                operational_stage=u.operational_stage,
+                scoped_tools=list(u.scoped_tools),
+                required_skills=list(u.required_skills),
+                description=clean_desc,
+                input_contract=u.input_contract,
+                output_contract=u.output_contract,
+                profile_exists=(u.profile_name in existing_profiles),
+                attached_files=[],
+            )
+            new_units.append(unit_copy)
+
+        new_dag = copy.deepcopy(manifest.dag)
+        new_tasks = []
+        for t in new_dag.get("tasks", []):
+            t_copy = dict(t)
+            t_copy["description"] = re.split(r"\n+--- (?:ATTACHED FILE|# Attached Files)", t_copy.get("description", ""))[0].rstrip()
+            t_copy.pop("tool_calls_made", None)
+            new_tasks.append(t_copy)
+        new_dag["tasks"] = new_tasks
+
+        all_exist = all(u.profile_exists for u in new_units)
+        cloned_manifest = FleetArenaManifest(
+            arena_id=new_arena_id,
+            arena_name=new_name or f"{manifest.arena_name} (Reused)",
+            arena_slug=manifest.arena_slug,
+            mission_prompt=new_prompt or manifest.mission_prompt,
+            strategy_profile=manifest.strategy_profile,
+            units=new_units,
+            dag=new_dag,
+            status="provisioned" if all_exist else "draft",
+            created_at=time.time(),
+            profiles_to_create=[u.profile_name for u in new_units if not u.profile_exists],
+            profiles_existing=[u.profile_name for u in new_units if u.profile_exists],
+            agent_id=manifest.agent_id,
+        )
+
+        self.store.save(cloned_manifest)
+        logger.info(
+            "Cloned Fleet Arena '%s' -> '%s' (status=%s, %d/%d profiles existing in Hermes)",
+            arena_id, new_arena_id, cloned_manifest.status,
+            len(cloned_manifest.profiles_existing), len(new_units),
+        )
+        return cloned_manifest
+
     # ── Utility ────────────────────────────────────────────────────
 
     def _list_existing_fleet_profiles(self) -> set[str]:
@@ -418,7 +498,7 @@ class FleetArenaComposer:
             from src.core.config import get_settings
             from src.hermes.profiles import hermes_home
 
-            settings = get_settings()
+            settings = self.settings or get_settings()
             p_root = hermes_home(settings) / "profiles"
             if not p_root.is_dir():
                 return set()

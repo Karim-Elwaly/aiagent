@@ -165,3 +165,76 @@ def test_fleet_arena_start_endpoint_direct(client):
             assert data["workflow_id"].startswith("fleet-arena-test-123-")
             assert data["units_count"] == 1
 
+
+def test_fleet_arena_clone_endpoint(client):
+    """Test POST /api/fleet/arena/{id}/clone clones the DAG topology and returns provisioned manifest."""
+    with patch("src.fleet.arena.FleetArenaComposer.clone_arena") as mock_clone:
+        cloned_manifest = FleetArenaManifest(
+            arena_id="arena-test-cloned-456",
+            arena_name="Cloned Fleet Arena",
+            arena_slug="test-cloned",
+            mission_prompt="New Mission",
+            units=[
+                FleetArenaUnit(
+                    profile_name="fleet-test-unit",
+                    unit_codename="WORKER",
+                    task_id="t1",
+                    task_name="Unit 1",
+                    profile_exists=True,
+                    attached_files=[],
+                )
+            ],
+            status="provisioned",
+            profiles_existing=["fleet-test-unit"],
+            profiles_to_create=[],
+        )
+        mock_clone.return_value = cloned_manifest
+
+        resp = client.post(
+            "/api/fleet/arena/arena-test-123/clone",
+            json={"new_name": "Cloned Fleet Arena", "new_prompt": "New Mission"},
+        )
+        assert resp.status_code == 200
+        data = resp.json()
+        assert data["arena_id"] == "arena-test-cloned-456"
+        assert data["arena_name"] == "Cloned Fleet Arena"
+        assert data["status"] == "provisioned"
+        assert len(data["units"]) == 1
+        assert data["units"][0]["attached_files"] == []
+
+
+def test_fleet_arena_delete_endpoint(client):
+    """Test DELETE /api/fleet/arena/{id} removes manifest from store."""
+    with patch("src.fleet.arena_store.FleetArenaStore.delete") as mock_del:
+        mock_del.return_value = True
+
+        resp = client.delete("/api/fleet/arena/arena-test-123")
+        assert resp.status_code == 200
+        assert resp.json()["deleted"] is True
+        assert resp.json()["arena_id"] == "arena-test-123"
+
+
+def test_workflow_templates_includes_fleet_arenas(client):
+    """Test GET /api/workflows/templates dynamically includes saved Fleet Arenas."""
+    mock_arena = {
+        "arena_id": "arena-reusable-factory-999",
+        "arena_name": "RFP Proposal Factory",
+        "mission_prompt": "Produce RFP response",
+        "dag": {
+            "tasks": [
+                {"id": "t1", "name": "Ingest RFP", "agent_id": "fleet-rfp-ingest"},
+                {"id": "t2", "name": "Extract Criteria", "agent_id": "fleet-rfp-extract"},
+            ]
+        },
+    }
+    with patch("src.fleet.arena_store.FleetArenaStore.list_all", return_value=[mock_arena]):
+        resp = client.get("/api/workflows/templates")
+        assert resp.status_code == 200
+        templates = resp.json()
+        fleet_tpl = next((t for t in templates if t.get("arena_id") == "arena-reusable-factory-999"), None)
+        assert fleet_tpl is not None
+        assert fleet_tpl["id"] == "fleet-arena-reusable-factory-999"
+        assert "RFP Proposal Factory" in fleet_tpl["name"]
+        assert len(fleet_tpl["tasks"]) == 2
+
+

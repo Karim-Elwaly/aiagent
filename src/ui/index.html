@@ -1686,6 +1686,23 @@
         </div>
       </div>
 
+      <!-- Fleet Arena Switcher & Reusability Toolbar -->
+      <div style="display: flex; gap: 10px; align-items: center; padding: 10px 16px; background: rgba(15, 23, 42, 0.95); border-bottom: 1px solid var(--border-subtle); flex-wrap: wrap;">
+        <span style="font-size: 11px; font-weight: 700; color: #a5b4fc; text-transform: uppercase;">Saved Fleets:</span>
+        <select id="arena-select-dropdown" class="font-mono" style="flex: 1; min-width: 220px; background: #0f172a; color: #f8fafc; border: 1px solid var(--border-subtle); border-radius: 6px; padding: 6px 10px; font-size: 12px; cursor: pointer;">
+          <!-- Populated from GET /api/fleet/arenas -->
+        </select>
+        <button type="button" id="arena-clone-btn" class="btn-secondary" style="border-color: #10b981; color: #6ee7b7; padding: 5px 12px; font-size: 11px; background: rgba(16, 185, 129, 0.1);" title="Clone this fleet's specialist team for a new mission without needing to re-provision in Hermes">
+          <span>📋 Reuse / Clone Fleet</span>
+        </button>
+        <button type="button" id="arena-load-dag-btn" class="btn-secondary" style="border-color: #6366f1; color: #a5b4fc; padding: 5px 12px; font-size: 11px; background: rgba(99, 102, 241, 0.1);" title="Load this fleet's topology directly into the visualizer workspace">
+          <span>⚡ Load in Visualizer</span>
+        </button>
+        <button type="button" id="arena-delete-btn" class="btn-secondary" style="border-color: #ef4444; color: #fca5a5; padding: 5px 10px; font-size: 11px; background: rgba(239, 68, 68, 0.1);" title="Delete this fleet arena">
+          <span>🗑️</span>
+        </button>
+      </div>
+
       <!-- Arena Stats Ribbon -->
       <div style="display: flex; gap: 12px; padding: 10px 16px; background: rgba(15, 23, 42, 0.7); border-bottom: 1px solid var(--border-subtle); align-items: center; flex-wrap: wrap;">
         <div>
@@ -1795,7 +1812,7 @@
 
   <!-- Scripts -->
   <script src="./js/marked.min.js"></script>
-  <script src="./js/dag_renderer.js"></script>
-  <script src="./js/app.js?v=2.7.1"></script>
+  <script src="./js/dag_renderer.js?v=2.8.0"></script>
+  <script src="./js/app.js?v=2.8.0"></script>
 </body>
 </html>

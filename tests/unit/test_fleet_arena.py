@@ -260,3 +260,94 @@ def test_delete_fleet_profile():
         # Cannot delete permanent profiles
         assert hp.delete_profile(DEFAULT_PROFILE) is False
         assert hp.delete_profile(ORCHESTRATOR_PROFILE) is False
+
+
+def test_clone_arena():
+    """Verify FleetArenaComposer.clone_arena duplicates topology, clears attachments, and starts provisioned."""
+    with tempfile.TemporaryDirectory() as tmpdir:
+        from src.hermes.profiles import HermesProfiles
+
+        settings = MagicMock()
+        settings.hermes_profiles_dir = tmpdir
+        settings.hermes_home = tmpdir
+        settings.worker_engine = "hermes"
+        settings.llm_model = "test-model"
+
+        store = FleetArenaStore(root=Path(tmpdir))
+        composer = FleetArenaComposer(settings=settings, store=store)
+
+        unit1 = FleetArenaUnit(
+            profile_name="fleet-soc-analyst",
+            unit_codename="ANALYST",
+            task_id="t1",
+            task_name="Extract Logs",
+            operational_stage="RECON_INGESTION",
+            scoped_tools=["search_tool"],
+            required_skills=["analysis"],
+            description="Analyzes input logs",
+            input_contract="Input logs",
+            output_contract="Analysis report",
+            profile_exists=True,
+            attached_files=[{"filename": "old_logs.txt", "file_path": "/path/old_logs.txt"}],
+        )
+
+        orig_manifest = FleetArenaManifest(
+            arena_id="arena-soc-original",
+            arena_name="Original SOC Fleet",
+            arena_slug="soc-original",
+            mission_prompt="Investigate original incident",
+            units=[unit1],
+            dag={
+                "tasks": [
+                    {
+                        "id": "t1",
+                        "name": "Extract Logs",
+                        "description": "Original desc with old_logs.txt attached:\n--- ATTACHED FILE old_logs.txt ---\nDATA",
+                        "agent_id": "fleet-soc-analyst",
+                    }
+                ]
+            },
+            status="completed",
+            profiles_existing=["fleet-soc-analyst"],
+            profiles_to_create=[],
+        )
+        store.save(orig_manifest)
+
+        # Create dummy profile in tmpdir so _list_existing_fleet_profiles finds it
+        p_dir = Path(tmpdir) / "profiles" / "fleet-soc-analyst"
+        p_dir.mkdir(parents=True, exist_ok=True)
+        (p_dir / "config.yaml").write_text("model: test-model\n")
+
+        cloned = composer.clone_arena(
+            "arena-soc-original",
+            new_name="Incident #202 Reusable Fleet",
+            new_prompt="Investigate incident #202 in AWS VPC",
+        )
+
+            # Verified properties
+            assert cloned.arena_id != "arena-soc-original"
+            assert cloned.arena_name == "Incident #202 Reusable Fleet"
+            assert cloned.mission_prompt == "Investigate incident #202 in AWS VPC"
+            # Since profile exists in Hermes, status is immediately provisioned (0 restarts needed)
+            assert cloned.status == "provisioned"
+            assert cloned.profiles_existing == ["fleet-soc-analyst"]
+            assert cloned.profiles_to_create == []
+
+            # Unit verification
+            assert len(cloned.units) == 1
+            cloned_unit = cloned.units[0]
+            assert cloned_unit.profile_name == "fleet-soc-analyst"
+            assert cloned_unit.profile_exists is True
+            # Crucial: previous phase attachments are stripped out for the fresh run
+            assert cloned_unit.attached_files == []
+
+            # Clean DAG verification
+            cloned_task = cloned.dag["tasks"][0]
+            assert "old_logs.txt" not in cloned_task["description"]
+
+            # Persistent store verification
+            loaded = store.load(cloned.arena_id)
+            assert loaded is not None
+            assert loaded.arena_id == cloned.arena_id
+            assert loaded.arena_name == "Incident #202 Reusable Fleet"
+

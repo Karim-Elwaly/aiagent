@@ -47,6 +47,11 @@ class DAGRenderer {
     }
     if (emptyEl) emptyEl.style.display = "none";
 
+    const specialistBadge = document.getElementById("fleet-specialist-count");
+    if (specialistBadge && dag.tasks) {
+      specialistBadge.textContent = `${dag.tasks.length} Specialist Units`;
+    }
+
     // 1. Assign topological levels to tasks
     const levels = this._computeLevels(dag.tasks);
 

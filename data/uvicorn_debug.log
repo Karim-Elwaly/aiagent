@@ -52004,3 +52004,959 @@ Traceback (most recent call last):
 2026-10-25 14:51:45,049 | INFO     | mcp.server.streamable_http_manager | StreamableHTTP session manager shutting down
 2026-10-25 14:51:45,050 | INFO     | src.orchestrator.cron_scheduler | CronScheduler background service stopped
 2026-10-25 14:51:45,050 | INFO     | src.api.main | UAOS API shutting down
+2026-10-25 15:01:00,612 | INFO     | src.registry.tool_registry | Registered tool 'python_executor_v1' (native) providing skills: ['code_execution', 'data_analysis', 'math_computation', 'data_processing']
+2026-10-25 15:01:00,614 | INFO     | src.registry.tool_registry | Registered tool 'file_deleter_v1' (native) providing skills: ['file_deletion']
+2026-10-25 15:01:00,614 | INFO     | src.registry.tool_registry | Registered tool 'disk_usage_v1' (native) providing skills: ['disk_usage', 'disk_space', 'storage_report', 'filesystem_capacity']
+2026-10-25 15:01:00,614 | INFO     | src.registry.tool_registry | Registered tool 'dir_lister_v1' (native) providing skills: ['directory_listing', 'file_discovery', 'filesystem_inspection', 'file_enumeration', 'recursive_file_listing', 'file_tree', 'data_processing']
+2026-10-25 15:01:00,614 | INFO     | src.registry.tool_registry | Registered tool 'file_reader_v1' (native) providing skills: ['file_reading']
+2026-10-25 15:01:00,614 | INFO     | src.registry.tool_registry | Registered tool 'file_writer_v1' (native) providing skills: ['file_writing']
+2026-10-25 15:01:00,615 | INFO     | src.registry.tool_registry | Registered tool 'hermes_clarify_v1' (hermes) providing skills: ['clarify', 'clarify_question', 'operator_inquiry', 'hitl_dialog']
+2026-10-25 15:01:00,615 | INFO     | src.registry.tool_registry | Registered tool 'hermes_cronjob_manage_v1' (hermes) providing skills: ['cronjob_manage', 'cronjob', 'schedule_automation', 'recurring_workflows']
+2026-10-25 15:01:00,615 | INFO     | src.registry.tool_registry | Registered tool 'hermes_delegate_task_v1' (hermes) providing skills: ['delegate_task', 'subagent_delegation', 'parallel_execution', 'worker_spawn']
+2026-10-25 15:01:00,615 | INFO     | src.registry.tool_registry | Registered tool 'hermes_image_generate_v1' (hermes) providing skills: ['image_generate', 'image_generation', 'diagram_generation', 'visual_design']
+2026-10-25 15:01:00,615 | INFO     | src.registry.tool_registry | Registered tool 'hermes_memory_v1' (hermes) providing skills: ['memory', 'memory_manager', 'knowledge_persistence', 'user_profile']
+2026-10-25 15:01:00,615 | INFO     | src.registry.tool_registry | Registered tool 'hermes_patch_file_v1' (hermes) providing skills: ['patch_file', 'patch', 'surgical_edit', 'code_patching']
+2026-10-25 15:01:00,615 | INFO     | src.registry.tool_registry | Registered tool 'hermes_session_search_v1' (hermes) providing skills: ['session_search', 'historical_recall', 'conversation_search']
+2026-10-25 15:01:00,615 | INFO     | src.registry.tool_registry | Registered tool 'hermes_todo_v1' (hermes) providing skills: ['todo_list', 'task_planning', 'milestone_tracking']
+2026-10-25 15:01:00,615 | INFO     | src.registry.tool_registry | Registered tool 'hermes_tts_speak_v1' (hermes) providing skills: ['tts_speak', 'text_to_speech', 'voice_synthesis', 'audio_narration']
+2026-10-25 15:01:00,615 | INFO     | src.registry.tool_registry | Registered tool 'hermes_vision_analyze_v1' (hermes) providing skills: ['vision_analyze', 'image_inspection', 'ocr', 'visual_reasoning']
+2026-10-25 15:01:00,615 | INFO     | src.registry.tool_registry | Registered tool 'hermes_web_extract_v1' (hermes) providing skills: ['web_extract', 'web_scraping', 'article_reading', 'content_extraction']
+2026-10-25 15:01:00,619 | INFO     | src.registry.tool_registry | Registered tool 'soc_analyze_impact' (native) providing skills: ['impact_analysis', 'blast_radius', 'asset_mapping', 'lateral_movement']
+2026-10-25 15:01:00,619 | INFO     | src.registry.tool_registry | Registered tool 'soc_compress_timeline' (native) providing skills: ['log_compression', 'timeline_synthesis', 'context_compression', 'summarization', 'incident_compression', 'mitre_mapping', 'mitre_rca']
+2026-10-25 15:01:00,619 | INFO     | src.registry.tool_registry | Registered tool 'soc_gather_evidence' (native) providing skills: ['evidence_gathering', 'log_forensics', 'artifact_inspection', 'file_reading', 'directory_listing']
+2026-10-25 15:01:00,620 | INFO     | src.registry.tool_registry | Registered tool 'soc_lookup_threat' (native) providing skills: ['threat_discovery', 'threat_intel', 'ioc_lookup', 'reputation_check']
+2026-10-25 15:01:00,620 | INFO     | src.registry.tool_registry | Registered tool 'soc_propose_containment' (native) providing skills: ['incident_response', 'containment_playbook', 'remediation', 'firewall_rule', 'containment_actions', 'containment_rules', 'response_action']
+2026-10-25 15:01:00,620 | INFO     | src.registry.tool_registry | Registered tool 'soc_triage_alert' (native) providing skills: ['triage', 'alert_triage', 'ioc_extraction', 'security_audit', 'general_reasoning']
+2026-10-25 15:01:00,621 | INFO     | src.registry.tool_registry | Registered tool 'system_command_v1' (native) providing skills: ['shell_command', 'system_command', 'command_execution', 'powershell_execution', 'system_inspection', 'terminal_command']
+2026-10-25 15:01:00,621 | INFO     | src.registry.tool_registry | Registered tool 'system_info_v1' (native) providing skills: ['system_info', 'host_info', 'device_info', 'hostname_lookup', 'system_inspection', 'environment_query']
+2026-10-25 15:01:00,621 | INFO     | src.registry.tool_registry | Registered tool 'web_search_v1' (native) providing skills: ['web_search', 'research', 'fact_checking']
+2026-10-25 15:01:00,621 | INFO     | src.registry.auto_discover | Auto-discovery built-ins complete: 26 tools registered, 0 errors
+2026-10-25 15:01:00,623 | INFO     | src.registry.tool_registry | Registered tool 'verify_ssl_cert_v1' (native) providing skills: ['ssl_verification', 'security_audit']
+2026-10-25 15:01:00,623 | INFO     | src.registry.auto_discover | Discovered custom tool 'verify_ssl_cert' from ssl_verifier.py
+2026-10-25 15:01:00,624 | INFO     | src.registry.tool_registry | Registered tool 'summarize_to_presentation_v1' (native) providing skills: ['summarization']
+2026-10-25 15:01:00,624 | INFO     | src.registry.auto_discover | Discovered custom tool 'summarize_to_presentation' from summarize_to_presentation.py
+2026-10-25 15:01:00,627 | INFO     | src.registry.tool_registry | Registered tool 'skill_airtable_crm_v1' (skill) providing skills: ['airtable_crm', 'crm_management', 'database_query', 'records']
+2026-10-25 15:01:00,627 | INFO     | src.registry.hermes.hermes_loader | Discovered Hermes skill 'airtable_crm' from airtable_crm.md
+2026-10-25 15:01:00,628 | INFO     | src.registry.tool_registry | Registered tool 'skill_apple_notes_v1' (skill) providing skills: ['apple_notes', 'knowledge_base', 'markdown_notes', 'note_taking']
+2026-10-25 15:01:00,628 | INFO     | src.registry.hermes.hermes_loader | Discovered Hermes skill 'apple_notes' from apple_notes.md
+2026-10-25 15:01:00,628 | INFO     | src.registry.tool_registry | Registered tool 'skill_apple_reminders_v1' (skill) providing skills: ['apple_reminders', 'deadline_tracking', 'reminder_alerts', 'task_scheduling']
+2026-10-25 15:01:00,628 | INFO     | src.registry.hermes.hermes_loader | Discovered Hermes skill 'apple_reminders' from apple_reminders.md
+2026-10-25 15:01:00,629 | INFO     | src.registry.tool_registry | Registered tool 'skill_architecture_diagram_v1' (skill) providing skills: ['architecture_diagram', 'cloud_architecture', 'diagram', 'svg']
+2026-10-25 15:01:00,629 | INFO     | src.registry.hermes.hermes_loader | Discovered Hermes skill 'architecture_diagram' from architecture_diagram.md
+2026-10-25 15:01:00,630 | INFO     | src.registry.tool_registry | Registered tool 'skill_arxiv_research_v1' (skill) providing skills: ['arxiv_research', 'literature_review', 'ml_research', 'paper_search']
+2026-10-25 15:01:00,630 | INFO     | src.registry.hermes.hermes_loader | Discovered Hermes skill 'arxiv_research' from arxiv_research.md
+2026-10-25 15:01:00,631 | INFO     | src.registry.tool_registry | Registered tool 'skill_ascii_art_v1' (skill) providing skills: ['ansi_banners', 'ascii_art', 'cli_typography', 'terminal_graphics']
+2026-10-25 15:01:00,631 | INFO     | src.registry.hermes.hermes_loader | Discovered Hermes skill 'ascii_art' from ascii_art.md
+2026-10-25 15:01:00,631 | INFO     | src.registry.tool_registry | Registered tool 'skill_claude_code_v1' (skill) providing skills: ['claude_code', 'codebase_search', 'pair_programming', 'test_driven_dev']
+2026-10-25 15:01:00,631 | INFO     | src.registry.hermes.hermes_loader | Discovered Hermes skill 'claude_code' from claude_code.md
+2026-10-25 15:01:00,632 | INFO     | src.registry.tool_registry | Registered tool 'skill_computer_use_v1' (skill) providing skills: ['computer_use', 'desktop_control', 'gui_automation', 'screenshot_grounding']
+2026-10-25 15:01:00,632 | INFO     | src.registry.hermes.hermes_loader | Discovered Hermes skill 'computer_use' from computer_use.md
+2026-10-25 15:01:00,633 | INFO     | src.registry.tool_registry | Registered tool 'skill_database_optimizer_v1' (skill) providing skills: ['database_optimizer', 'explain_analyze', 'index_optimization', 'sql_tuning']
+2026-10-25 15:01:00,633 | INFO     | src.registry.hermes.hermes_loader | Discovered Hermes skill 'database_optimizer' from database_optimizer.md
+2026-10-25 15:01:00,633 | INFO     | src.registry.tool_registry | Registered tool 'skill_discord_notifier_v1' (skill) providing skills: ['chat_notifications', 'discord_notifier', 'embed_builder', 'webhook_alerts']
+2026-10-25 15:01:00,633 | INFO     | src.registry.hermes.hermes_loader | Discovered Hermes skill 'discord_notifier' from discord_notifier.md
+2026-10-25 15:01:00,634 | INFO     | src.registry.tool_registry | Registered tool 'skill_docker_ops_v1' (skill) providing skills: ['container_management', 'devops_troubleshooting', 'docker_compose', 'docker_ops']
+2026-10-25 15:01:00,634 | INFO     | src.registry.hermes.hermes_loader | Discovered Hermes skill 'docker_ops' from docker_ops.md
+2026-10-25 15:01:00,635 | INFO     | src.registry.tool_registry | Registered tool 'skill_docx_v1' (skill) providing skills: ['docx']
+2026-10-25 15:01:00,635 | INFO     | src.registry.hermes.hermes_loader | Discovered Hermes skill 'docx' from docx.md
+2026-10-25 15:01:00,636 | INFO     | src.registry.tool_registry | Registered tool 'skill_drug_discovery_v1' (skill) providing skills: ['bioactivity', 'cheminformatics', 'drug_discovery', 'molecular_biology', 'smiles']
+2026-10-25 15:01:00,636 | INFO     | src.registry.hermes.hermes_loader | Discovered Hermes skill 'drug_discovery' from drug_discovery.md
+2026-10-25 15:01:00,637 | INFO     | src.registry.tool_registry | Registered tool 'skill_fitness_nutrition_v1' (skill) providing skills: ['fitness_nutrition', 'health_science', 'macronutrient_planning', 'metabolic_calculation']
+2026-10-25 15:01:00,637 | INFO     | src.registry.hermes.hermes_loader | Discovered Hermes skill 'fitness_nutrition' from fitness_nutrition.md
+2026-10-25 15:01:00,638 | INFO     | src.registry.tool_registry | Registered tool 'skill_github_workflow_v1' (skill) providing skills: ['ci_cd_debug', 'github_workflow', 'pull_requests', 'release_notes']
+2026-10-25 15:01:00,638 | INFO     | src.registry.hermes.hermes_loader | Discovered Hermes skill 'github_workflow' from github_workflow.md
+2026-10-25 15:01:00,639 | INFO     | src.registry.tool_registry | Registered tool 'skill_gitnexus_explorer_v1' (skill) providing skills: ['architecture_recovery', 'ast', 'code_analysis', 'dependency_graph', 'gitnexus_explorer']
+2026-10-25 15:01:00,639 | INFO     | src.registry.hermes.hermes_loader | Discovered Hermes skill 'gitnexus_explorer' from gitnexus_explorer.md
+2026-10-25 15:01:00,640 | INFO     | src.registry.tool_registry | Registered tool 'skill_here_now_v1' (skill) providing skills: ['environmental_briefing', 'here_now', 'local_intelligence', 'timezone', 'weather']
+2026-10-25 15:01:00,641 | INFO     | src.registry.hermes.hermes_loader | Discovered Hermes skill 'here_now' from here_now.md
+2026-10-25 15:01:00,641 | INFO     | src.registry.tool_registry | Registered tool 'skill_home_assistant_v1' (skill) providing skills: ['home_assistant', 'iot_automation', 'rest_api', 'smart_home']
+2026-10-25 15:01:00,641 | INFO     | src.registry.hermes.hermes_loader | Discovered Hermes skill 'home_assistant' from home_assistant.md
+2026-10-25 15:01:00,642 | INFO     | src.registry.tool_registry | Registered tool 'skill_impeccable_design_v1' (skill) providing skills: ['accessibility', 'design_audit', 'impeccable_design', 'ui_ux', 'visual_hierarchy', 'web_styling']
+2026-10-25 15:01:00,642 | INFO     | src.registry.hermes.hermes_loader | Discovered Hermes skill 'impeccable_design' from impeccable_design.md
+2026-10-25 15:01:00,644 | INFO     | src.registry.tool_registry | Registered tool 'skill_instructor_mlops_v1' (skill) providing skills: ['instructor_mlops', 'json_extraction', 'pydantic', 'schema_validation', 'structured_output']
+2026-10-25 15:01:00,644 | INFO     | src.registry.hermes.hermes_loader | Discovered Hermes skill 'instructor_mlops' from instructor_mlops.md
+2026-10-25 15:01:00,646 | INFO     | src.registry.tool_registry | Registered tool 'skill_oss_forensics_v1' (skill) providing skills: ['audit', 'malware_analysis', 'oss_forensics', 'reverse_engineering', 'supply_chain_security']
+2026-10-25 15:01:00,646 | INFO     | src.registry.hermes.hermes_loader | Discovered Hermes skill 'oss_forensics' from oss_forensics.md
+2026-10-25 15:01:00,647 | INFO     | src.registry.tool_registry | Registered tool 'skill_simplify_code_v1' (skill) providing skills: ['clean_code', 'code_refactoring', 'complexity_reduction', 'simplify_code']
+2026-10-25 15:01:00,647 | INFO     | src.registry.hermes.hermes_loader | Discovered Hermes skill 'simplify_code' from simplify_code.md
+2026-10-25 15:01:00,648 | INFO     | src.registry.tool_registry | Registered tool 'skill_stripe_payments_v1' (skill) providing skills: ['billing_reconcile', 'invoice_check', 'stripe_payments', 'subscription_audit']
+2026-10-25 15:01:00,648 | INFO     | src.registry.hermes.hermes_loader | Discovered Hermes skill 'stripe_payments' from stripe_payments.md
+2026-10-25 15:01:00,649 | INFO     | src.registry.tool_registry | Registered tool 'skill_subagent_delegation_v1' (skill) providing skills: ['multi_agent_orchestration', 'parallel_execution', 'subagent_delegation', 'task_decomposition']
+2026-10-25 15:01:00,649 | INFO     | src.registry.hermes.hermes_loader | Discovered Hermes skill 'subagent_delegation' from subagent_delegation.md
+2026-10-25 15:01:00,649 | INFO     | src.registry.auto_discover | Discovered 24 Hermes skills
+2026-10-25 15:01:00,649 | INFO     | src.registry.auto_discover | Total auto-discovery complete: 52 tools registered, 0 errors
+2026-10-25 15:01:00,649 | INFO     | src.api.main | Tool Registry: ToolRegistry(tools=52, skills=202)
+2026-10-25 15:01:00,651 | INFO     | src.connectors.manager | Initialized Security Connector [Elasticsearch SIEM] (siem) - Status: simulated
+2026-10-25 15:01:00,651 | INFO     | src.connectors.manager | Initialized Security Connector [CrowdStrike Falcon EDR] (edr) - Status: simulated
+2026-10-25 15:01:00,651 | INFO     | src.connectors.manager | Initialized Security Connector [Splunk Enterprise SIEM] (siem) - Status: simulated
+2026-10-25 15:01:00,652 | INFO     | src.connectors.manager | Initialized Security Connector [Microsoft Sentinel] (siem) - Status: simulated
+2026-10-25 15:01:00,652 | INFO     | src.connectors.manager | Initialized Security Connector [Microsoft Defender for Endpoint] (edr) - Status: simulated
+2026-10-25 15:01:00,652 | INFO     | src.connectors.manager | Initialized Security Connector [SentinelOne Singularity] (edr) - Status: simulated
+2026-10-25 15:01:00,652 | INFO     | src.connectors.manager | Initialized Security Connector [Palo Alto NGFW / Panorama] (firewall) - Status: simulated
+2026-10-25 15:01:00,652 | INFO     | src.connectors.manager | Initialized Security Connector [Fortinet FortiGate Firewall] (firewall) - Status: simulated
+2026-10-25 15:01:00,652 | INFO     | src.connectors.manager | Initialized Security Connector [Okta Identity Cloud] (iam) - Status: simulated
+2026-10-25 15:01:00,652 | INFO     | src.connectors.manager | Initialized Security Connector [Microsoft Entra ID] (iam) - Status: simulated
+2026-10-25 15:01:00,652 | INFO     | src.connectors.manager | Initialized Security Connector [VirusTotal v3 CTI] (threat_intel) - Status: simulated
+2026-10-25 15:01:00,652 | INFO     | src.connectors.manager | Initialized Security Connector [AbuseIPDB Threat Intel] (threat_intel) - Status: simulated
+2026-10-25 15:01:00,652 | INFO     | src.connectors.manager | Initialized Security Connector [TheHive SOAR & Case Management] (itsm) - Status: simulated
+2026-10-25 15:01:00,652 | INFO     | src.registry.tool_registry | Registered tool 'elastic_search_logs' (connector) providing skills: ['siem_search', 'log_query', 'telemetry_investigation']
+2026-10-25 15:01:00,652 | INFO     | src.registry.tool_registry | Registered tool 'elastic_lookup_ioc' (connector) providing skills: ['ioc_lookup', 'threat_hunting', 'telemetry_investigation']
+2026-10-25 15:01:00,652 | INFO     | src.registry.tool_registry | Registered tool 'crowdstrike_get_device' (connector) providing skills: ['edr_telemetry', 'host_investigation', 'endpoint_lookup']
+2026-10-25 15:01:00,652 | INFO     | src.registry.tool_registry | Registered tool 'crowdstrike_contain_host' (connector) providing skills: ['host_containment', 'endpoint_isolation', 'incident_mitigation']
+2026-10-25 15:01:00,652 | INFO     | src.registry.tool_registry | Registered tool 'crowdstrike_lift_containment' (connector) providing skills: ['host_remediation', 'lift_isolation']
+2026-10-25 15:01:00,652 | INFO     | src.registry.tool_registry | Registered tool 'splunk_search_spl' (connector) providing skills: ['siem_search', 'splunk_query', 'telemetry_investigation']
+2026-10-25 15:01:00,652 | INFO     | src.registry.tool_registry | Registered tool 'sentinel_query_kql' (connector) providing skills: ['siem_search', 'kql_query', 'cloud_threat_hunting']
+2026-10-25 15:01:00,652 | INFO     | src.registry.tool_registry | Registered tool 'defender_get_machine' (connector) providing skills: ['edr_telemetry', 'host_investigation', 'endpoint_lookup']
+2026-10-25 15:01:00,652 | INFO     | src.registry.tool_registry | Registered tool 'defender_isolate_machine' (connector) providing skills: ['host_containment', 'endpoint_isolation', 'incident_mitigation']
+2026-10-25 15:01:00,652 | INFO     | src.registry.tool_registry | Registered tool 'sentinelone_find_agent' (connector) providing skills: ['edr_telemetry', 'host_investigation', 'endpoint_lookup']
+2026-10-25 15:01:00,652 | INFO     | src.registry.tool_registry | Registered tool 'sentinelone_quarantine_agent' (connector) providing skills: ['host_containment', 'endpoint_isolation', 'incident_mitigation']
+2026-10-25 15:01:00,652 | INFO     | src.registry.tool_registry | Registered tool 'paloalto_register_ip_dag' (connector) providing skills: ['firewall_blocking', 'ip_containment', 'perimeter_defense']
+2026-10-25 15:01:00,652 | INFO     | src.registry.tool_registry | Registered tool 'paloalto_unregister_ip_dag' (connector) providing skills: ['firewall_remediation', 'unblock_ip']
+2026-10-25 15:01:00,652 | INFO     | src.registry.tool_registry | Registered tool 'fortigate_ban_ip' (connector) providing skills: ['firewall_blocking', 'ip_containment', 'perimeter_defense']
+2026-10-25 15:01:00,653 | INFO     | src.registry.tool_registry | Registered tool 'fortigate_unban_ip' (connector) providing skills: ['firewall_remediation', 'unblock_ip']
+2026-10-25 15:01:00,653 | INFO     | src.registry.tool_registry | Registered tool 'okta_get_user' (connector) providing skills: ['identity_lookup', 'iam_investigation', 'user_context']
+2026-10-25 15:01:00,653 | INFO     | src.registry.tool_registry | Registered tool 'okta_clear_user_sessions' (connector) providing skills: ['session_revocation', 'identity_containment', 'credential_invalidation']
+2026-10-25 15:01:00,653 | INFO     | src.registry.tool_registry | Registered tool 'okta_suspend_user' (connector) providing skills: ['account_suspension', 'identity_containment']
+2026-10-25 15:01:00,653 | INFO     | src.registry.tool_registry | Registered tool 'entraid_get_user' (connector) providing skills: ['identity_lookup', 'iam_investigation', 'user_context']
+2026-10-25 15:01:00,653 | INFO     | src.registry.tool_registry | Registered tool 'entraid_revoke_sessions' (connector) providing skills: ['session_revocation', 'identity_containment']
+2026-10-25 15:01:00,653 | INFO     | src.registry.tool_registry | Registered tool 'entraid_disable_account' (connector) providing skills: ['account_suspension', 'identity_containment']
+2026-10-25 15:01:00,653 | INFO     | src.registry.tool_registry | Registered tool 'virustotal_lookup_ip' (connector) providing skills: ['threat_intel', 'ioc_enrichment', 'ip_reputation']
+2026-10-25 15:01:00,653 | INFO     | src.registry.tool_registry | Registered tool 'virustotal_lookup_hash' (connector) providing skills: ['threat_intel', 'ioc_enrichment', 'malware_analysis']
+2026-10-25 15:01:00,653 | INFO     | src.registry.tool_registry | Registered tool 'abuseipdb_check_ip' (connector) providing skills: ['threat_intel', 'ioc_enrichment', 'ip_reputation']
+2026-10-25 15:01:00,653 | INFO     | src.registry.tool_registry | Registered tool 'thehive_create_case' (connector) providing skills: ['case_management', 'soar_incident', 'incident_ticketing']
+2026-10-25 15:01:00,653 | INFO     | src.registry.tool_registry | Registered tool 'thehive_add_observable' (connector) providing skills: ['case_management', 'soar_incident', 'attach_ioc']
+2026-10-25 15:01:00,653 | INFO     | src.connectors.manager | Registered 26 tools from enterprise security connectors
+2026-10-25 15:01:00,654 | INFO     | src.api.main | Enterprise Security Connectors initialized: 13 active
+2026-10-25 15:01:00,663 | INFO     | src.api.main | Connected to Temporal at localhost:7234
+2026-10-25 15:01:00,663 | INFO     | src.api.main | Connected to Temporal at localhost:7234 (activities handled by worker_runner)
+2026-10-25 15:01:00,665 | INFO     | src.orchestrator.cron_scheduler | Loaded 2 scheduled jobs from D:\projects\aiagent\data\schedules.json
+2026-10-25 15:01:00,665 | INFO     | src.orchestrator.cron_scheduler | CronScheduler background service started
+2026-10-25 15:01:00,665 | INFO     | src.api.main | UAOS API ready at http://0.0.0.0:8001
+2026-10-25 15:01:01,061 | INFO     | mcp.server.streamable_http_manager | StreamableHTTP session manager started
+2026-10-25 15:01:04,999 | INFO     | httpx | HTTP Request: GET http://10.7.75.103:1234/v1/models "HTTP/1.1 200 OK"
+2026-10-25 15:01:05,953 | INFO     | src.hermes.profiles | Profile 'aiagent-dyn-1bec1b1a' acquired 4 exact skills: ['computer_use', 'docx', 'oss_forensics', 'simplify_code']
+2026-10-25 15:01:06,268 | INFO     | src.hermes.profiles | Profile 'aiagent-dyn-2eb764f2' acquired 3 exact skills: ['computer_use', 'oss_forensics', 'simplify_code']
+2026-10-25 15:01:06,601 | INFO     | src.hermes.profiles | Profile 'aiagent-dyn-3037fb06' acquired 4 exact skills: ['computer_use', 'docx', 'oss_forensics', 'simplify_code']
+2026-10-25 15:01:06,909 | INFO     | src.hermes.profiles | Profile 'aiagent-dyn-3b9ca5bd' acquired 4 exact skills: ['computer_use', 'email-inbox-triage', 'oss_forensics', 'simplify_code']
+2026-10-25 15:01:07,199 | INFO     | src.hermes.profiles | Profile 'aiagent-dyn-4d43acbd' acquired 4 exact skills: ['computer_use', 'docx', 'oss_forensics', 'simplify_code']
+2026-10-25 15:01:07,507 | INFO     | src.hermes.profiles | Profile 'aiagent-dyn-9265d116' acquired 1 exact skills: ['oss_forensics']
+2026-10-25 15:01:07,816 | INFO     | src.hermes.profiles | Profile 'aiagent-dyn-9464553e' acquired 3 exact skills: ['computer_use', 'oss_forensics', 'simplify_code']
+2026-10-25 15:01:08,099 | INFO     | src.hermes.profiles | Profile 'aiagent-dyn-94e23e95' acquired 4 exact skills: ['computer_use', 'docx', 'oss_forensics', 'simplify_code']
+2026-10-25 15:01:08,413 | INFO     | src.hermes.profiles | Profile 'aiagent-dyn-a8d0fa3e' acquired 3 exact skills: ['computer_use', 'instructor_mlops', 'simplify_code']
+2026-10-25 15:01:08,698 | INFO     | src.hermes.profiles | Profile 'aiagent-dyn-b62e3012' acquired 2 exact skills: ['docx', 'oss_forensics']
+2026-10-25 15:01:09,003 | INFO     | src.hermes.profiles | Profile 'aiagent-dyn-b912eb63' acquired 1 exact skills: ['oss_forensics']
+2026-10-25 15:01:09,312 | INFO     | src.hermes.profiles | Profile 'aiagent-dyn-c45ca427' acquired 4 exact skills: ['computer_use', 'docx', 'github_workflow', 'simplify_code']
+2026-10-25 15:01:09,631 | INFO     | src.hermes.profiles | Profile 'aiagent-dyn-d8f90b43' acquired 4 exact skills: ['computer_use', 'docker_ops', 'oss_forensics', 'simplify_code']
+2026-10-25 15:01:09,928 | INFO     | src.hermes.profiles | Profile 'aiagent-dyn-f029f66d' acquired 2 exact skills: ['computer_use', 'docker_ops']
+2026-10-25 15:01:10,225 | INFO     | src.hermes.profiles | Profile 'aiagent-dyn-f79fd56f' acquired 4 exact skills: ['computer_use', 'instructor_mlops', 'oss_forensics', 'simplify_code']
+2026-10-25 15:01:10,533 | INFO     | httpx | HTTP Request: GET http://10.7.75.103:1234/v1 "HTTP/1.1 200 OK"
+2026-10-25 15:01:15,563 | INFO     | httpx | HTTP Request: GET http://10.7.75.103:1234/v1/models "HTTP/1.1 200 OK"
+2026-10-25 15:01:15,895 | INFO     | src.brain.meta_planner | Planning attempt 1/3 for query: Enterprise RFP Proposal & Pricing Factory: Ingest uploaded government cloud migration RFP, extract m
+2026-10-25 15:01:21,239 | INFO     | httpx | HTTP Request: POST http://10.7.75.103:1234/v1/chat/completions "HTTP/1.1 200 OK"
+2026-10-25 15:01:21,248 | INFO     | src.brain.meta_planner | Planning succeeded: 4 tasks, goal='Create a comprehensive executive proposal and pricing model for a government clo'
+2026-10-25 15:01:21,253 | INFO     | src.fleet.arena_store | Saved Fleet Arena manifest 'arena-enterprise-rfp-proposal-29642b' (status=draft)
+2026-10-25 15:01:21,253 | INFO     | src.fleet.arena | Planned Fleet Arena 'arena-enterprise-rfp-proposal-29642b' (Enterprise RFP Proposal & Pricing Factory: Ingest uploade... Arena) with 4 units — 0 profiles to create, 4 existing
+2026-10-25 15:01:21,571 | INFO     | src.hermes.profiles | Profile 'aiagent-dyn-1bec1b1a' acquired 4 exact skills: ['computer_use', 'docx', 'oss_forensics', 'simplify_code']
+2026-10-25 15:01:21,893 | INFO     | src.hermes.profiles | Profile 'aiagent-dyn-2eb764f2' acquired 3 exact skills: ['computer_use', 'oss_forensics', 'simplify_code']
+2026-10-25 15:01:22,242 | INFO     | src.hermes.profiles | Profile 'aiagent-dyn-3037fb06' acquired 4 exact skills: ['computer_use', 'docx', 'oss_forensics', 'simplify_code']
+2026-10-25 15:01:22,599 | INFO     | src.hermes.profiles | Profile 'aiagent-dyn-3b9ca5bd' acquired 4 exact skills: ['computer_use', 'email-inbox-triage', 'oss_forensics', 'simplify_code']
+2026-10-25 15:01:22,890 | INFO     | src.hermes.profiles | Profile 'aiagent-dyn-4d43acbd' acquired 4 exact skills: ['computer_use', 'docx', 'oss_forensics', 'simplify_code']
+2026-10-25 15:01:23,126 | INFO     | src.hermes.profiles | Profile 'aiagent-dyn-9265d116' acquired 1 exact skills: ['oss_forensics']
+2026-10-25 15:01:23,379 | INFO     | src.hermes.profiles | Profile 'aiagent-dyn-9464553e' acquired 3 exact skills: ['computer_use', 'oss_forensics', 'simplify_code']
+2026-10-25 15:01:23,655 | INFO     | src.hermes.profiles | Profile 'aiagent-dyn-94e23e95' acquired 4 exact skills: ['computer_use', 'docx', 'oss_forensics', 'simplify_code']
+2026-10-25 15:01:23,928 | INFO     | src.hermes.profiles | Profile 'aiagent-dyn-a8d0fa3e' acquired 3 exact skills: ['computer_use', 'instructor_mlops', 'simplify_code']
+2026-10-25 15:01:24,180 | INFO     | src.hermes.profiles | Profile 'aiagent-dyn-b62e3012' acquired 2 exact skills: ['docx', 'oss_forensics']
+2026-10-25 15:01:24,474 | INFO     | src.hermes.profiles | Profile 'aiagent-dyn-b912eb63' acquired 1 exact skills: ['oss_forensics']
+2026-10-25 15:01:24,818 | INFO     | src.hermes.profiles | Profile 'aiagent-dyn-c45ca427' acquired 4 exact skills: ['computer_use', 'docx', 'github_workflow', 'simplify_code']
+2026-10-25 15:01:25,075 | INFO     | src.hermes.profiles | Profile 'aiagent-dyn-d8f90b43' acquired 4 exact skills: ['computer_use', 'docker_ops', 'oss_forensics', 'simplify_code']
+2026-10-25 15:01:25,352 | INFO     | src.hermes.profiles | Profile 'aiagent-dyn-f029f66d' acquired 2 exact skills: ['computer_use', 'docker_ops']
+2026-10-25 15:01:25,645 | INFO     | src.hermes.profiles | Profile 'aiagent-dyn-f79fd56f' acquired 4 exact skills: ['computer_use', 'instructor_mlops', 'oss_forensics', 'simplify_code']
+2026-10-25 15:01:26,015 | INFO     | httpx | HTTP Request: GET http://10.7.75.103:1234/v1/models "HTTP/1.1 200 OK"
+2026-10-25 15:01:28,010 | INFO     | src.hermes.profiles | Profile 'aiagent-dyn-1bec1b1a' acquired 4 exact skills: ['computer_use', 'docx', 'oss_forensics', 'simplify_code']
+2026-10-25 15:01:28,357 | INFO     | src.hermes.profiles | Profile 'aiagent-dyn-2eb764f2' acquired 3 exact skills: ['computer_use', 'oss_forensics', 'simplify_code']
+2026-10-25 15:01:28,716 | INFO     | src.hermes.profiles | Profile 'aiagent-dyn-3037fb06' acquired 4 exact skills: ['computer_use', 'docx', 'oss_forensics', 'simplify_code']
+2026-10-25 15:01:29,061 | INFO     | src.hermes.profiles | Profile 'aiagent-dyn-3b9ca5bd' acquired 4 exact skills: ['computer_use', 'email-inbox-triage', 'oss_forensics', 'simplify_code']
+2026-10-25 15:01:29,380 | INFO     | src.hermes.profiles | Profile 'aiagent-dyn-4d43acbd' acquired 4 exact skills: ['computer_use', 'docx', 'oss_forensics', 'simplify_code']
+2026-10-25 15:01:29,723 | INFO     | src.hermes.profiles | Profile 'aiagent-dyn-9265d116' acquired 1 exact skills: ['oss_forensics']
+2026-10-25 15:01:30,039 | INFO     | src.hermes.profiles | Profile 'aiagent-dyn-9464553e' acquired 3 exact skills: ['computer_use', 'oss_forensics', 'simplify_code']
+2026-10-25 15:01:30,372 | INFO     | src.hermes.profiles | Profile 'aiagent-dyn-94e23e95' acquired 4 exact skills: ['computer_use', 'docx', 'oss_forensics', 'simplify_code']
+2026-10-25 15:01:30,709 | INFO     | src.hermes.profiles | Profile 'aiagent-dyn-a8d0fa3e' acquired 3 exact skills: ['computer_use', 'instructor_mlops', 'simplify_code']
+2026-10-25 15:01:31,058 | INFO     | src.hermes.profiles | Profile 'aiagent-dyn-b62e3012' acquired 2 exact skills: ['docx', 'oss_forensics']
+2026-10-25 15:01:31,424 | INFO     | src.hermes.profiles | Profile 'aiagent-dyn-b912eb63' acquired 1 exact skills: ['oss_forensics']
+2026-10-25 15:01:31,733 | INFO     | src.hermes.profiles | Profile 'aiagent-dyn-c45ca427' acquired 4 exact skills: ['computer_use', 'docx', 'github_workflow', 'simplify_code']
+2026-10-25 15:01:31,903 | INFO     | mcp.server.streamable_http | Terminating session: None
+2026-10-25 15:01:31,917 | INFO     | mcp.server.streamable_http | Terminating session: None
+2026-10-25 15:01:31,926 | INFO     | mcp.server.lowlevel.server | Processing request of type ListToolsRequest
+2026-10-25 15:01:31,933 | INFO     | mcp.server.streamable_http | Terminating session: None
+2026-10-25 15:01:32,038 | INFO     | src.hermes.profiles | Profile 'aiagent-dyn-d8f90b43' acquired 4 exact skills: ['computer_use', 'docker_ops', 'oss_forensics', 'simplify_code']
+2026-10-25 15:01:32,311 | INFO     | src.hermes.profiles | Profile 'aiagent-dyn-f029f66d' acquired 2 exact skills: ['computer_use', 'docker_ops']
+2026-10-25 15:01:32,383 | INFO     | mcp.server.streamable_http | Terminating session: None
+2026-10-25 15:01:32,396 | INFO     | mcp.server.streamable_http | Terminating session: None
+2026-10-25 15:01:32,405 | INFO     | mcp.server.lowlevel.server | Processing request of type ListToolsRequest
+2026-10-25 15:01:32,412 | INFO     | mcp.server.streamable_http | Terminating session: None
+2026-10-25 15:01:32,611 | INFO     | src.hermes.profiles | Profile 'aiagent-dyn-f79fd56f' acquired 4 exact skills: ['computer_use', 'instructor_mlops', 'oss_forensics', 'simplify_code']
+2026-10-25 15:01:32,662 | INFO     | src.fleet.arena | Fleet profile 'fleet-enterprise-rfp-p-ingest-or-synthesize' already exists; reusing
+2026-10-25 15:01:32,705 | INFO     | src.hermes.profiles | Synchronized 1 environment variables into profile 'fleet-enterprise-rfp-p-ingest-or-synthesize'
+2026-10-25 15:01:32,775 | INFO     | src.fleet.arena | Fleet profile 'fleet-enterprise-rfp-p-extract-mandatory-te' already exists; reusing
+2026-10-25 15:01:32,873 | INFO     | src.fleet.arena | Fleet profile 'fleet-enterprise-rfp-p-model-multi-tier-lab' already exists; reusing
+2026-10-25 15:01:32,911 | INFO     | mcp.server.streamable_http | Terminating session: None
+2026-10-25 15:01:32,931 | INFO     | mcp.server.streamable_http | Terminating session: None
+2026-10-25 15:01:32,952 | INFO     | mcp.server.lowlevel.server | Processing request of type ListToolsRequest
+2026-10-25 15:01:32,958 | INFO     | mcp.server.streamable_http | Terminating session: None
+2026-10-25 15:01:32,976 | INFO     | src.fleet.arena | Fleet profile 'fleet-enterprise-rfp-p-generate-executive-p' already exists; reusing
+2026-10-25 15:01:33,451 | INFO     | src.fleet.arena_store | Saved Fleet Arena manifest 'arena-enterprise-rfp-proposal-29642b' (status=provisioned)
+2026-10-25 15:01:33,452 | INFO     | src.fleet.arena | Fleet Arena 'arena-enterprise-rfp-proposal-29642b' provisioned — 4 profiles ready, 0 failed
+2026-10-25 15:01:33,462 | INFO     | src.fleet.arena_store | Saved Fleet Arena manifest 'arena-enterprise-rfp-proposal-29642b' (status=running)
+2026-10-25 15:01:33,462 | INFO     | src.api.main | Starting Fleet Arena workflow (Temporal): arena=arena-enterprise-rfp-proposal-29642b, workflow=fleet-arena-enterprise-rfp-proposal-29642b-89d68f
+2026-10-25 15:01:33,462 | INFO     | mcp.server.streamable_http | Terminating session: None
+2026-10-25 15:01:33,469 | INFO     | mcp.server.streamable_http | Terminating session: None
+2026-10-25 15:01:33,475 | INFO     | mcp.server.lowlevel.server | Processing request of type ListToolsRequest
+2026-10-25 15:01:33,479 | INFO     | mcp.server.streamable_http | Terminating session: None
+2026-10-25 15:01:33,954 | INFO     | mcp.server.streamable_http | Terminating session: None
+2026-10-25 15:01:33,962 | INFO     | mcp.server.streamable_http | Terminating session: None
+2026-10-25 15:01:33,967 | INFO     | mcp.server.lowlevel.server | Processing request of type ListToolsRequest
+2026-10-25 15:01:33,971 | INFO     | mcp.server.streamable_http | Terminating session: None
+2026-10-25 15:01:34,905 | INFO     | mcp.server.streamable_http | Terminating session: None
+2026-10-25 15:01:34,913 | INFO     | mcp.server.streamable_http | Terminating session: None
+2026-10-25 15:01:34,921 | INFO     | mcp.server.lowlevel.server | Processing request of type ListToolsRequest
+2026-10-25 15:01:34,926 | INFO     | mcp.server.streamable_http | Terminating session: None
+2026-10-25 15:01:35,541 | INFO     | mcp.server.streamable_http | Terminating session: None
+2026-10-25 15:01:35,557 | INFO     | mcp.server.streamable_http | Terminating session: None
+2026-10-25 15:01:35,564 | INFO     | mcp.server.lowlevel.server | Processing request of type ListToolsRequest
+2026-10-25 15:01:35,567 | INFO     | mcp.server.streamable_http | Terminating session: None
+2026-10-25 15:01:35,571 | INFO     | httpx | HTTP Request: GET http://10.7.75.103:1234/v1/models "HTTP/1.1 200 OK"
+2026-10-25 15:01:36,018 | INFO     | mcp.server.streamable_http | Terminating session: None
+2026-10-25 15:01:36,026 | INFO     | mcp.server.streamable_http | Terminating session: None
+2026-10-25 15:01:36,032 | INFO     | mcp.server.lowlevel.server | Processing request of type ListToolsRequest
+2026-10-25 15:01:36,036 | INFO     | mcp.server.streamable_http | Terminating session: None
+2026-10-25 15:01:36,533 | INFO     | mcp.server.streamable_http | Terminating session: None
+2026-10-25 15:01:36,540 | INFO     | mcp.server.streamable_http | Terminating session: None
+2026-10-25 15:01:36,545 | INFO     | mcp.server.lowlevel.server | Processing request of type ListToolsRequest
+2026-10-25 15:01:36,550 | INFO     | mcp.server.streamable_http | Terminating session: None
+2026-10-25 15:01:37,065 | INFO     | mcp.server.streamable_http | Terminating session: None
+2026-10-25 15:01:37,072 | INFO     | mcp.server.streamable_http | Terminating session: None
+2026-10-25 15:01:37,079 | INFO     | mcp.server.lowlevel.server | Processing request of type ListToolsRequest
+2026-10-25 15:01:37,083 | INFO     | mcp.server.streamable_http | Terminating session: None
+2026-10-25 15:01:37,538 | INFO     | mcp.server.streamable_http | Terminating session: None
+2026-10-25 15:01:37,544 | INFO     | mcp.server.streamable_http | Terminating session: None
+2026-10-25 15:01:37,549 | INFO     | mcp.server.lowlevel.server | Processing request of type ListToolsRequest
+2026-10-25 15:01:37,553 | INFO     | mcp.server.streamable_http | Terminating session: None
+2026-10-25 15:01:38,001 | INFO     | mcp.server.streamable_http | Terminating session: None
+2026-10-25 15:01:38,007 | INFO     | mcp.server.streamable_http | Terminating session: None
+2026-10-25 15:01:38,012 | INFO     | mcp.server.lowlevel.server | Processing request of type ListToolsRequest
+2026-10-25 15:01:38,017 | INFO     | mcp.server.streamable_http | Terminating session: None
+2026-10-25 15:01:38,912 | INFO     | mcp.server.streamable_http | Terminating session: None
+2026-10-25 15:01:38,918 | INFO     | mcp.server.streamable_http | Terminating session: None
+2026-10-25 15:01:38,922 | INFO     | mcp.server.lowlevel.server | Processing request of type ListToolsRequest
+2026-10-25 15:01:38,927 | INFO     | mcp.server.streamable_http | Terminating session: None
+2026-10-25 15:01:39,453 | INFO     | mcp.server.streamable_http | Terminating session: None
+2026-10-25 15:01:39,461 | INFO     | mcp.server.streamable_http | Terminating session: None
+2026-10-25 15:01:39,469 | INFO     | mcp.server.lowlevel.server | Processing request of type ListToolsRequest
+2026-10-25 15:01:39,473 | INFO     | mcp.server.streamable_http | Terminating session: None
+2026-10-25 15:01:39,974 | INFO     | mcp.server.streamable_http | Terminating session: None
+2026-10-25 15:01:39,979 | INFO     | mcp.server.streamable_http | Terminating session: None
+2026-10-25 15:01:39,984 | INFO     | mcp.server.lowlevel.server | Processing request of type ListToolsRequest
+2026-10-25 15:01:39,988 | INFO     | mcp.server.streamable_http | Terminating session: None
+2026-10-25 15:01:40,512 | INFO     | mcp.server.streamable_http | Terminating session: None
+2026-10-25 15:01:40,519 | INFO     | mcp.server.streamable_http | Terminating session: None
+2026-10-25 15:01:40,525 | INFO     | mcp.server.lowlevel.server | Processing request of type ListToolsRequest
+2026-10-25 15:01:40,530 | INFO     | mcp.server.streamable_http | Terminating session: None
+2026-10-25 15:01:41,153 | INFO     | mcp.server.streamable_http | Terminating session: None
+2026-10-25 15:01:41,161 | INFO     | mcp.server.streamable_http | Terminating session: None
+2026-10-25 15:01:41,168 | INFO     | mcp.server.lowlevel.server | Processing request of type ListToolsRequest
+2026-10-25 15:01:41,171 | INFO     | mcp.server.streamable_http | Terminating session: None
+2026-10-25 15:01:41,629 | INFO     | mcp.server.streamable_http | Terminating session: None
+2026-10-25 15:01:41,635 | INFO     | mcp.server.streamable_http | Terminating session: None
+2026-10-25 15:01:41,641 | INFO     | mcp.server.lowlevel.server | Processing request of type ListToolsRequest
+2026-10-25 15:01:41,643 | INFO     | mcp.server.streamable_http | Terminating session: None
+2026-10-25 15:01:42,153 | INFO     | mcp.server.streamable_http | Terminating session: None
+2026-10-25 15:01:42,161 | INFO     | mcp.server.streamable_http | Terminating session: None
+2026-10-25 15:01:42,167 | INFO     | mcp.server.lowlevel.server | Processing request of type ListToolsRequest
+2026-10-25 15:01:42,171 | INFO     | mcp.server.streamable_http | Terminating session: None
+2026-10-25 15:01:42,652 | INFO     | mcp.server.streamable_http | Terminating session: None
+2026-10-25 15:01:42,658 | INFO     | mcp.server.streamable_http | Terminating session: None
+2026-10-25 15:01:42,667 | INFO     | mcp.server.lowlevel.server | Processing request of type ListToolsRequest
+2026-10-25 15:01:42,670 | INFO     | mcp.server.streamable_http | Terminating session: None
+2026-10-25 15:01:43,171 | INFO     | mcp.server.streamable_http | Terminating session: None
+2026-10-25 15:01:43,187 | INFO     | mcp.server.streamable_http | Terminating session: None
+2026-10-25 15:01:43,192 | INFO     | mcp.server.lowlevel.server | Processing request of type ListToolsRequest
+2026-10-25 15:01:43,196 | INFO     | mcp.server.streamable_http | Terminating session: None
+2026-10-25 15:01:43,656 | INFO     | mcp.server.streamable_http | Terminating session: None
+2026-10-25 15:01:43,663 | INFO     | mcp.server.streamable_http | Terminating session: None
+2026-10-25 15:01:43,669 | INFO     | mcp.server.lowlevel.server | Processing request of type ListToolsRequest
+2026-10-25 15:01:43,671 | INFO     | mcp.server.streamable_http | Terminating session: None
+2026-10-25 15:01:45,560 | INFO     | httpx | HTTP Request: GET http://10.7.75.103:1234/v1/models "HTTP/1.1 200 OK"
+2026-10-25 15:01:55,504 | INFO     | httpx | HTTP Request: GET http://10.7.75.103:1234/v1/models "HTTP/1.1 200 OK"
+2026-10-25 15:01:59,167 | INFO     | mcp.server.streamable_http | Terminating session: None
+2026-10-25 15:01:59,175 | INFO     | mcp.server.streamable_http | Terminating session: None
+2026-10-25 15:01:59,183 | INFO     | mcp.server.lowlevel.server | Processing request of type ListToolsRequest
+2026-10-25 15:01:59,187 | INFO     | mcp.server.streamable_http | Terminating session: None
+2026-10-25 15:01:59,767 | INFO     | mcp.server.streamable_http | Terminating session: None
+2026-10-25 15:01:59,773 | INFO     | mcp.server.streamable_http | Terminating session: None
+2026-10-25 15:01:59,780 | INFO     | mcp.server.lowlevel.server | Processing request of type ListToolsRequest
+2026-10-25 15:01:59,838 | INFO     | mcp.server.streamable_http | Terminating session: None
+2026-10-25 15:02:00,332 | INFO     | mcp.server.streamable_http | Terminating session: None
+2026-10-25 15:02:00,337 | INFO     | mcp.server.streamable_http | Terminating session: None
+2026-10-25 15:02:00,343 | INFO     | mcp.server.lowlevel.server | Processing request of type ListToolsRequest
+2026-10-25 15:02:00,348 | INFO     | mcp.server.streamable_http | Terminating session: None
+2026-10-25 15:02:00,842 | INFO     | mcp.server.streamable_http | Terminating session: None
+2026-10-25 15:02:00,848 | INFO     | mcp.server.streamable_http | Terminating session: None
+2026-10-25 15:02:00,856 | INFO     | mcp.server.lowlevel.server | Processing request of type ListToolsRequest
+2026-10-25 15:02:00,859 | INFO     | mcp.server.streamable_http | Terminating session: None
+2026-10-25 15:02:01,331 | INFO     | mcp.server.streamable_http | Terminating session: None
+2026-10-25 15:02:01,338 | INFO     | mcp.server.streamable_http | Terminating session: None
+2026-10-25 15:02:01,346 | INFO     | mcp.server.lowlevel.server | Processing request of type ListToolsRequest
+2026-10-25 15:02:01,351 | INFO     | mcp.server.streamable_http | Terminating session: None
+2026-10-25 15:02:01,871 | INFO     | mcp.server.streamable_http | Terminating session: None
+2026-10-25 15:02:01,877 | INFO     | mcp.server.streamable_http | Terminating session: None
+2026-10-25 15:02:01,882 | INFO     | mcp.server.lowlevel.server | Processing request of type ListToolsRequest
+2026-10-25 15:02:01,885 | INFO     | mcp.server.streamable_http | Terminating session: None
+2026-10-25 15:02:05,587 | INFO     | httpx | HTTP Request: GET http://10.7.75.103:1234/v1/models "HTTP/1.1 200 OK"
+2026-10-25 15:02:15,562 | INFO     | httpx | HTTP Request: GET http://10.7.75.103:1234/v1/models "HTTP/1.1 200 OK"
+2026-10-25 15:02:16,779 | INFO     | mcp.server.lowlevel.server | Processing request of type CallToolRequest
+2026-10-25 15:02:16,779 | INFO     | src.hermes.mcp_server | [MCP] Tool call received: profile=fleet-enterprise-rfp-p-ingest-or-synthesize, tool=execute_python, args={'code': 'import json, datetime\nnow = datetime.datetime.utcnow().isoformat() + \'Z\'\nrfp = {\n    "title": "Government Cloud Migration Initiative RFP",\n    "issue_date": "2026-10-01",\n    "rfp_id": "GCM-2026-001",\n    "sections": {\n        "scope_of_work": "The Department of Homeland Security (DHS) seeks proposals to migrate its existing on‑premises data center infrastructure, applications, and workloads to a compliant federal cloud environment. The migration will encompass all mission‑critical services, including but not limited to identity management, data analytics, and secure communications. Deliverables include a detailed migration plan, phased execution schedule, post‑migration validation, and ongoing support for at least 12 months.",\n        "technical_requirements": {\n            "security_controls": ["FedRAMP High", "NIST SP 800-53 Rev.5 (Security & Privacy Controls)"],\n            "compliance": ["HIPAA (if applicable)", "CJIS", "FIPS 140‑2/3 for encryption modules"],\n            "performance": {\n                "latency": "<50 ms between DHS HQ and cloud region",\n                "throughput": "≥10 Gbps network connectivity"\n            },\n            "data_residency": "All data must reside within U.S. borders; no cross‑border transfer without explicit authorization.",\n            "encryption": {\n                "at_rest": "AES‑256 or equivalent, with key management via AWS KMS/ Azure Key Vault",\n                "in_transit": "TLS 1.2+ for all network traffic"\n            },\n            "identity_management": "Integration with DHS Active Directory and MFA using FIDO2/WebAuthn.",\n            "audit_logging": "Centralized SIEM ingestion, retention of logs for 7 years, tamper‑evident storage.",\n            "disaster_recovery": {\n                "RPO": "≤4 hours",\n                "RTO": "≤12 hours"\n            },\n            "network_architecture": "VPC with subnets per security zone, private link to on‑prem services, and dedicated VPN.",\n            "legacy_integration": "Support for legacy Windows Server 2012 R2 applications via Hyper‑V or containerization."\n        },\n        "evaluation_criteria": [\n            "Technical merit (40%) – alignment with requirements, architecture quality, security posture.",\n            "Compliance alignment (20%) – evidence of FedRAMP High, NIST controls, and other regulatory adherence.\n            "Labor pricing model (15%) – tiered rates for senior, mid‑level, junior staff; clarity of cost breakdown.",\n            "Experience & references (10%) – prior federal cloud migrations, client testimonials.",\n            "Schedule feasibility (5%) – realistic timeline and milestone adherence.",\n            "Risk mitigation plan (5%) – identification of potential risks and proposed mitigations."\n        ],\n        "submission_instructions": {\n            "format": "PDF or DOCX, maximum 50 pages; include executive summary, technical approach, labor pricing tables, compliance matrix.",\n            "deadline": "2026-11-15 17:00 EST",\n            "contact": {\n                "name": "Jane Doe",\n                "title": "RFP Coordinator",\n                "email": "jane.doe@dhs.gov",\n                "phone": "+1‑202‑555‑0198"\n            }\n        }\n    },\n    "metadata": {\n        "source": "generated",\n        "generation_date": now\n    }\n}\nprint(json.dumps(rfp, indent=4))'}
+2026-10-25 15:02:16,850 | INFO     | src.hermes.mcp_server | [MCP] Tool 'execute_python' executed successfully: result=STDERR:
+  File "C:\Users\KARIME~1\AppData\Local\Temp\tmp6zpd6gp9.py", line 32
+    "Compliance alignment (20%) – evidence of FedRAMP High, NIST control
+2026-10-25 15:02:16,851 | INFO     | mcp.server.streamable_http | Terminating session: None
+2026-10-25 15:02:22,065 | INFO     | mcp.server.lowlevel.server | Processing request of type CallToolRequest
+2026-10-25 15:02:22,065 | INFO     | src.hermes.mcp_server | [MCP] Tool call received: profile=fleet-enterprise-rfp-p-ingest-or-synthesize, tool=execute_python, args={'code': 'import json, datetime\nnow = datetime.datetime.utcnow().isoformat() + \'Z\'\nrfp = {\n    "title": "Government Cloud Migration Initiative RFP",\n    "issue_date": "2026-10-01",\n    "rfp_id": "GCM-2026-001",\n    "sections": {\n        "scope_of_work": "The Department of Homeland Security (DHS) seeks proposals to migrate its existing on‑premises data center infrastructure, applications, and workloads to a compliant federal cloud environment. The migration will encompass all mission‑critical services, including but not limited to identity management, data analytics, and secure communications. Deliverables include a detailed migration plan, phased execution schedule, post‑migration validation, and ongoing support for at least 12 months.",\n        "technical_requirements": {\n            "security_controls": ["FedRAMP High", "NIST SP 800-53 Rev.5 (Security & Privacy Controls)"],\n            "compliance": ["HIPAA (if applicable)", "CJIS", "FIPS 140‑2/3 for encryption modules"],\n            "performance": {\n                "latency": "<50 ms between DHS HQ and cloud region",\n                "throughput": "≥10 Gbps network connectivity"\n            },\n            "data_residency": "All data must reside within U.S. borders; no cross‑border transfer without explicit authorization.",\n            "encryption": {\n                "at_rest": "AES‑256 or equivalent, with key management via AWS KMS/ Azure Key Vault",\n                "in_transit": "TLS 1.2+ for all network traffic"\n            },\n            "identity_management": "Integration with DHS Active Directory and MFA using FIDO2/WebAuthn.",\n            "audit_logging": "Centralized SIEM ingestion, retention of logs for 7 years, tamper‑evident storage.",\n            "disaster_recovery": {\n                "RPO": "≤4 hours",\n                "RTO": "≤12 hours"\n            },\n            "network_architecture": "VPC with subnets per security zone, private link to on‑prem services, and dedicated VPN.",\n            "legacy_integration": "Support for legacy Windows Server 2012 R2 applications via Hyper‑V or containerization."\n        },\n        "evaluation_criteria": [\n            "Technical merit (40%) – alignment with requirements, architecture quality, security posture.",\n            "Compliance alignment (20%) – evidence of FedRAMP High, NIST controls, and other regulatory adherence.",\n            "Labor pricing model (15%) – tiered rates for senior, mid‑level, junior staff; clarity of cost breakdown.",\n            "Experience & references (10%) – prior federal cloud migrations, client testimonials.",\n            "Schedule feasibility (5%) – realistic timeline and milestone adherence.",\n            "Risk mitigation plan (5%) – identification of potential risks and proposed mitigations."\n        ],\n        "submission_instructions": {\n            "format": "PDF or DOCX, maximum 50 pages; include executive summary, technical approach, labor pricing tables, compliance matrix.",\n            "deadline": "2026-11-15 17:00 EST",\n            "contact": {\n                "name": "Jane Doe",\n                "title": "RFP Coordinator",\n                "email": "jane.doe@dhs.gov",\n                "phone": "+1‑202‑555‑0198"\n            }\n        }\n    },\n    "metadata": {\n        "source": "generated",\n        "generation_date": now\n    }\n}\nprint(json.dumps(rfp, indent=4))'}
+2026-10-25 15:02:22,189 | INFO     | src.hermes.mcp_server | [MCP] Tool 'execute_python' executed successfully: result={
+    "title": "Government Cloud Migration Initiative RFP",
+    "issue_date": "2026-10-01",
+    "rfp_id": "GCM-2026-001",
+    "sections": {
+        "s
+2026-10-25 15:02:22,190 | INFO     | mcp.server.streamable_http | Terminating session: None
+2026-10-25 15:02:25,626 | INFO     | httpx | HTTP Request: GET http://10.7.75.103:1234/v1/models "HTTP/1.1 200 OK"
+2026-10-25 15:02:35,587 | INFO     | httpx | HTTP Request: GET http://10.7.75.103:1234/v1/models "HTTP/1.1 200 OK"
+2026-10-25 15:02:45,578 | INFO     | httpx | HTTP Request: GET http://10.7.75.103:1234/v1/models "HTTP/1.1 200 OK"
+2026-10-25 15:02:47,862 | INFO     | mcp.server.lowlevel.server | Processing request of type CallToolRequest
+2026-10-25 15:02:47,863 | INFO     | src.hermes.mcp_server | [MCP] Tool call received: profile=fleet-enterprise-rfp-p-extract-mandatory-te, tool=execute_python, args={'code': 'import json, sys\nrfp_json = {\n"title":"Government Cloud Migration Initiative RFP",\n"issue_date":"2026-10-01",\n"rfp_id":"GCM-2026-001",\n"sections":{\n"scope_of_work":"The Department of Homeland Security (DHS) seeks proposals to migrate its existing on‑premises data center infrastructure, applications, and workloads to a compliant federal cloud environment. The migration will encompass all mission‑critical services, including but not limited to identity management, data analytics, and secure communications. Deliverables include a detailed migration plan, phased execution schedule, post‑migration validation, and ongoing support for at least 12 months.",\n"technical_requirements":{\n"security_controls":["FedRAMP High","NIST SP 800-53 Rev.5 (Security & Privacy Controls)"],\n"compliance":["HIPAA (if applicable)","CJIS","FIPS 140‑2/3 for encryption modules"],\n"performance":{"latency":"<50 ms between DHS HQ and cloud region","throughput":"≥10 Gbps network connectivity"},\n"data_residency":"All data must reside within U.S. borders; no cross‑border transfer without explicit authorization.",\n"encryption":{\n"at_rest":"AES‑256 or equivalent, with key management via AWS KMS/ Azure Key Vault",\n"in_transit":"TLS 1.2+ for all network traffic"\n},\n"identity_management":"Integration with DHS Active Directory and MFA using FIDO2/WebAuthn.",\n"audit_logging":"Centralized SIEM ingestion, retention of logs for 7 years, tamper‑evident storage.",\n"disaster_recovery":{"RPO":"≤4 hours","RTO":"≤12 hours"},\n"network_architecture":"VPC with subnets per security zone, private link to on‑prem services, and dedicated VPN.",\n"legacy_integration":"Support for legacy Windows Server 2012 R2 applications via Hyper‑V or containerization."\n},\n"evaluation_criteria":["Technical merit (40%) – alignment with requirements, architecture quality, security posture.","Compliance alignment (20%) – evidence of FedRAMP High, NIST controls, and other regulatory adherence.","Labor pricing model (15%) – tiered rates for senior, mid‑level, junior staff; clarity of cost breakdown.","Experience & references (10%) – prior federal cloud migrations, client testimonials.","Schedule feasibility (5%) – realistic timeline and milestone adherence.","Risk mitigation plan (5%) – identification of potential risks and proposed mitigations."],\n"submission_instructions":{\n"format":"PDF or DOCX, maximum 50 pages; include executive summary, technical approach, labor pricing tables, compliance matrix.",\n"deadline":"2026-11-15 17:00 EST",\n"contact":{"name":"Jane Doe","title":"RFP Coordinator","email":"jane.doe@dhs.gov","phone":"+1‑202‑555‑0198"}\n}\n},\n"metadata":{\n"source":"generated",\n"generation_date":"2026-10-25T12:02:22.170691Z"\n}}\n# Extract mandatory compliance criteria\ncriteria = []\nsec = rfp_json[\'sections\'][\'technical_requirements\']\n# security_controls\nfor sc in sec.get(\'security_controls\',[]):\n    criteria.append((sc, f"{sc} control requirement", \'technical_requirements.security_controls\'))\n# compliance list\nfor comp in sec.get(\'compliance\', []):\n    criteria.append((comp, f"{comp} regulatory compliance", \'technical_requirements.compliance\'))\n# data_residency\ncriteria.append((\'Data Residency\', sec[\'data_residency\'], \'technical_requirements.data_residency\'))\n# encryption at rest and in transit\nfor key,val in sec.get(\'encryption\', {}).items():\n    criteria.append((f"Encryption {key.replace(\'_\',\' \').title()}", val, f\'technical_requirements.encryption.{key}\'))\n# identity_management\ncriteria.append((\'Identity Management\', sec[\'identity_management\'], \'technical_requirements.identity_management\'))\n# audit_logging\ncriteria.append((\'Audit Logging\', sec[\'audit_logging\'], \'technical_requirements.audit_logging\'))\n# disaster_recovery\nfor k,v in sec.get(\'disaster_recovery\', {}).items():\n    criteria.append((f"Disaster Recovery {k}", v, f\'technical_requirements.disaster_recovery.{k}\'))\n# network_architecture\ncriteria.append((\'Network Architecture\', sec[\'network_architecture\'], \'technical_requirements.network_architecture\'))\n# legacy_integration\ncriteria.append((\'Legacy Integration\', sec[\'legacy_integration\'], \'technical_requirements.legacy_integration\'))\nprint(json.dumps(criteria, indent=2))'}
+2026-10-25 15:02:47,962 | INFO     | src.hermes.mcp_server | [MCP] Tool 'execute_python' executed successfully: result=[
+  [
+    "FedRAMP High",
+    "FedRAMP High control requirement",
+    "technical_requirements.security_controls"
+  ],
+  [
+    "NIST SP 800-53 Rev.5 (S
+2026-10-25 15:02:47,963 | INFO     | mcp.server.streamable_http | Terminating session: None
+2026-10-25 15:02:53,723 | INFO     | mcp.server.lowlevel.server | Processing request of type CallToolRequest
+2026-10-25 15:02:53,724 | INFO     | src.hermes.mcp_server | [MCP] Tool call received: profile=fleet-enterprise-rfp-p-extract-mandatory-te, tool=execute_python, args={'code': 'import json, sys\nresult = \'\'\'[\\n  [\\n    \\"FedRAMP High\\",\\n    \\"FedRAMP High control requirement\\",\\n    \\"technical_requirements.security_controls\\"\\n  ],\\n  [\\n    \\"NIST SP 800-53 Rev.5 (Security & Privacy Controls)\\",\\n    \\"NIST SP 800-53 Rev.5 (Security & Privacy Controls) control requirement\\",\\n    \\"technical_requirements.security_controls\\"\\n  ],\\n  [\\n    \\"HIPAA (if applicable)\\",\\n    \\"HIPAA (if applicable) regulatory compliance\\",\\n    \\"technical_requirements.compliance\\"\\n  ],\\n  [\\n    \\"CJIS\\",\\n    \\"CJIS regulatory compliance\\",\\n    \\"technical_requirements.compliance\\"\\n  ],\\n  [\\n    \\"FIPS 140\\\\u20112/3 for encryption modules\\",\\n    \\"FIPS 140\\\\u20112/3 for encryption modules regulatory compliance\\",\\n    \\"technical_requirements.compliance\\"\\n  ],\\n  [\\n    \\"Data Residency\\",\\n    \\"All data must reside within U.S. borders; no cross\\\\u2011border transfer without explicit authorization.\\",\\n    \\"technical_requirements.data_residency\\"\\n  ],\\n  [\\n    \\"Encryption At Rest\\",\\n    \\"AES\\\\u2011256 or equivalent, with key management via AWS KMS/ Azure Key Vault\\",\\n    \\"technical_requirements.encryption.at_rest\\"\\n  ],\\n  [\\n    \\"Encryption In Transit\\",\\n    \\"TLS 1.2+ for all network traffic\\",\\n    \\"technical_requirements.encryption.in_transit\\"\\n  ],\\n  [\\n    \\"Identity Management\\",\\n    \\"Integration with DHS Active Directory and MFA using FIDO2/WebAuthn.\\",\\n    \\"technical_requirements.identity_management\\"\\n  ],\\n  [\\n    \\"Audit Logging\\",\\n    \\"Centralized SIEM ingestion, retention of logs for 7 years, tamper\\\\u2011evident storage.\\",\\n    \\"technical_requirements.audit_logging\\"\\n  ],\\n  [\\n    \\"Disaster Recovery RPO\\",\\n    \\"\\\\u22644 hours\\",\\n    \\"technical_requirements.disaster_recovery.RPO\\"\\n  ],\\n  [\\n    \\"Disaster Recovery RTO\\",\\n    \\"\\\\u226412 hours\\",\\n    \\"technical_requirements.disaster_recovery.RTO\\"\\n  ],\\n  [\\n    \\"Network Architecture\\",\\n    \\"VPC with subnets per security zone, private link to on\\\\u2011prem services, and dedicated VPN.\\",\\n    \\"technical_requirements.network_architecture\\"\\n  ],\\n  [\\n    \\"Legacy Integration\\",\\n    \\"Support for legacy Windows Server 2012 R2 applications via Hyper\\\\u2011V or containerization.\\",\\n    \\"technical_requirements.legacy_integration\\"\\n  ]\\n]\'\'\'\n# decode unicode escapes\nimport codecs\ndecoded = codecs.decode(result, \'unicode_escape\')\ncriteria = json.loads(decoded)\nprint(\'--- table ---\')\nheader = [\'Criterion\',\'Description\',\'Source\']\nrows=[header]\nfor c,d,s in criteria:\n    rows.append([c,d,s])\n# compute column widths\ncol_widths=[max(len(row[i]) for row in rows) for i in range(3)]\nlines=[]\nfor r in rows:\n    line=\' | \'.join(r[i].ljust(col_widths[i]) for i in range(3))\n    lines.append(line)\nprint(\'\\n\'.join(lines))'}
+2026-10-25 15:02:53,822 | INFO     | src.hermes.mcp_server | [MCP] Tool 'execute_python' executed successfully: result=--- table ---
+
+STDERR:
+Traceback (most recent call last):
+  File "C:\Users\KARIME~1\AppData\Local\Temp\tmpmikm7t93.py", line 18, in <module>
+    print
+2026-10-25 15:02:53,823 | INFO     | mcp.server.streamable_http | Terminating session: None
+2026-10-25 15:02:55,574 | INFO     | httpx | HTTP Request: GET http://10.7.75.103:1234/v1/models "HTTP/1.1 200 OK"
+2026-10-25 15:02:59,849 | INFO     | mcp.server.lowlevel.server | Processing request of type CallToolRequest
+2026-10-25 15:02:59,849 | INFO     | src.hermes.mcp_server | [MCP] Tool call received: profile=fleet-enterprise-rfp-p-extract-mandatory-te, tool=execute_python, args={'code': 'import json, codecs\nresult=\'\'\'[\\n  [\\n    \\"FedRAMP High\\",\\n    \\"FedRAMP High control requirement\\",\\n    \\"technical_requirements.security_controls\\"\\n  ],\\n  [\\n    \\"NIST SP 800-53 Rev.5 (Security & Privacy Controls)\\",\\n    \\"NIST SP 800-53 Rev.5 (Security & Privacy Controls) control requirement\\",\\n    \\"technical_requirements.security_controls\\"\\n  ],\\n  [\\n    \\"HIPAA (if applicable)\\",\\n    \\"HIPAA (if applicable) regulatory compliance\\",\\n    \\"technical_requirements.compliance\\"\\n  ],\\n  [\\n    \\"CJIS\\",\\n    \\"CJIS regulatory compliance\\",\\n    \\"technical_requirements.compliance\\"\\n  ],\\n  [\\n    \\"FIPS 140\\\\u20112/3 for encryption modules\\",\\n    \\"FIPS 140\\\\u20112/3 for encryption modules regulatory compliance\\",\\n    \\"technical_requirements.compliance\\"\\n  ],\\n  [\\n    \\"Data Residency\\",\\n    \\"All data must reside within U.S. borders; no cross\\\\u2011border transfer without explicit authorization.\\",\\n    \\"technical_requirements.data_residency\\"\\n  ],\\n  [\\n    \\"Encryption At Rest\\",\\n    \\"AES\\\\u2011256 or equivalent, with key management via AWS KMS/ Azure Key Vault\\",\\n    \\"technical_requirements.encryption.at_rest\\"\\n  ],\\n  [\\n    \\"Encryption In Transit\\",\\n    \\"TLS 1.2+ for all network traffic\\",\\n    \\"technical_requirements.encryption.in_transit\\"\\n  ],\\n  [\\n    \\"Identity Management\\",\\n    \\"Integration with DHS Active Directory and MFA using FIDO2/WebAuthn.\\",\\n    \\"technical_requirements.identity_management\\"\\n  ],\\n  [\\n    \\"Audit Logging\\",\\n    \\"Centralized SIEM ingestion, retention of logs for 7 years, tamper\\\\u2011evident storage.\\",\\n    \\"technical_requirements.audit_logging\\"\\n  ],\\n  [\\n    \\"Disaster Recovery RPO\\",\\n    \\"\\\\u22644 hours\\",\\n    \\"technical_requirements.disaster_recovery.RPO\\"\\n  ],\\n  [\\n    \\"Disaster Recovery RTO\\",\\n    \\"\\\\u226412 hours\\",\\n    \\"technical_requirements.disaster_recovery.RTO\\"\\n  ],\\n  [\\n    \\"Network Architecture\\",\\n    \\"VPC with subnets per security zone, private link to on\\\\u2011prem services, and dedicated VPN.\\",\\n    \\"technical_requirements.network_architecture\\"\\n  ],\\n  [\\n    \\"Legacy Integration\\",\\n    \\"Support for legacy Windows Server 2012 R2 applications via Hyper\\\\u2011V or containerization.\\",\\n    \\"technical_requirements.legacy_integration\\"\\n  ]\\n]\'\'\'\n# decode unicode escapes\ndecoded=codecs.decode(result,\'unicode_escape\')\ncriteria=json.loads(decoded)\n# replace non-ASCII hyphen (U+2011) with normal hyphen\nfor c in criteria:\n    for i in range(3):\n        if isinstance(c[i], str):\n            c[i]=c[i].replace(\'\\u2011\',\'-\').replace(\'–\',\'-\')\n# build table\nheader=[\'Criterion\',\'Description\',\'Source\']\nrows=[header]\nfor c,d,s in criteria:\n    rows.append([c,d,s])\ncol_widths=[max(len(row[i]) for row in rows) for i in range(3)]\nlines=[]\nfor r in rows:\n    line=\' | \'.join(r[i].ljust(col_widths[i]) for i in range(3))\n    lines.append(line)\nprint(\'\\n\'.join(lines))'}
+2026-10-25 15:02:59,947 | INFO     | src.hermes.mcp_server | [MCP] Tool 'execute_python' executed successfully: result=STDERR:
+Traceback (most recent call last):
+  File "C:\Users\KARIME~1\AppData\Local\Temp\tmpim2u9eh7.py", line 21, in <module>
+    print('\n'.join(line
+2026-10-25 15:02:59,947 | INFO     | mcp.server.streamable_http | Terminating session: None
+2026-10-25 15:03:05,571 | INFO     | httpx | HTTP Request: GET http://10.7.75.103:1234/v1/models "HTTP/1.1 200 OK"
+2026-10-25 15:03:06,377 | INFO     | mcp.server.lowlevel.server | Processing request of type CallToolRequest
+2026-10-25 15:03:06,377 | INFO     | src.hermes.mcp_server | [MCP] Tool call received: profile=fleet-enterprise-rfp-p-extract-mandatory-te, tool=execute_python, args={'code': 'import json, codecs\nresult=\'\'\'[\\n  [\\n    \\"FedRAMP High\\",\\n    \\"FedRAMP High control requirement\\",\\n    \\"technical_requirements.security_controls\\"\\n  ],\\n  [\\n    \\"NIST SP 800-53 Rev.5 (Security & Privacy Controls)\\",\\n    \\"NIST SP 800-53 Rev.5 (Security & Privacy Controls) control requirement\\",\\n    \\"technical_requirements.security_controls\\"\\n  ],\\n  [\\n    \\"HIPAA (if applicable)\\",\\n    \\"HIPAA (if applicable) regulatory compliance\\",\\n    \\"technical_requirements.compliance\\"\\n  ],\\n  [\\n    \\"CJIS\\",\\n    \\"CJIS regulatory compliance\\",\\n    \\"technical_requirements.compliance\\"\\n  ],\\n  [\\n    \\"FIPS 140\\\\u20112/3 for encryption modules\\",\\n    \\"FIPS 140\\\\u20112/3 for encryption modules regulatory compliance\\",\\n    \\"technical_requirements.compliance\\"\\n  ],\\n  [\\n    \\"Data Residency\\",\\n    \\"All data must reside within U.S. borders; no cross\\\\u2011border transfer without explicit authorization.\\",\\n    \\"technical_requirements.data_residency\\"\\n  ],\\n  [\\n    \\"Encryption At Rest\\",\\n    \\"AES\\\\u2011256 or equivalent, with key management via AWS KMS/ Azure Key Vault\\",\\n    \\"technical_requirements.encryption.at_rest\\"\\n  ],\\n  [\\n    \\"Encryption In Transit\\",\\n    \\"TLS 1.2+ for all network traffic\\",\\n    \\"technical_requirements.encryption.in_transit\\"\\n  ],\\n  [\\n    \\"Identity Management\\",\\n    \\"Integration with DHS Active Directory and MFA using FIDO2/WebAuthn.\\",\\n    \\"technical_requirements.identity_management\\"\\n  ],\\n  [\\n    \\"Audit Logging\\",\\n    \\"Centralized SIEM ingestion, retention of logs for 7 years, tamper\\\\u2011evident storage.\\",\\n    \\"technical_requirements.audit_logging\\"\\n  ],\\n  [\\n    \\"Disaster Recovery RPO\\",\\n    \\"\\\\u22644 hours\\",\\n    \\"technical_requirements.disaster_recovery.RPO\\"\\n  ],\\n  [\\n    \\"Disaster Recovery RTO\\",\\n    \\"\\\\u226412 hours\\",\\n    \\"technical_requirements.disaster_recovery.RTO\\"\\n  ],\\n  [\\n    \\"Network Architecture\\",\\n    \\"VPC with subnets per security zone, private link to on\\\\u2011prem services, and dedicated VPN.\\",\\n    \\"technical_requirements.network_architecture\\"\\n  ],\\n  [\\n    \\"Legacy Integration\\",\\n    \\"Support for legacy Windows Server 2012 R2 applications via Hyper\\\\u2011V or containerization.\\",\\n    \\"technical_requirements.legacy_integration\\"\\n  ]\\n]\'\'\'\ndecoded=codecs.decode(result,\'unicode_escape\')\ncriteria=json.loads(decoded)\n# replace special chars\nfor c in criteria:\n    for i in range(3):\n        if isinstance(c[i], str):\n            s=c[i]\n            s=s.replace(\'≤\',\'<=\').replace(\'≥\',\'>=\')\n            s=s.replace(\'\\u2011\',\'-\').replace(\'–\',\'-\')\n            c[i]=s\n# build table string\nheader=[\'Criterion\',\'Description\',\'Source\']\nrows=[header]\nfor c,d,s in criteria:\n    rows.append([c,d,s])\ncol_widths=[max(len(row[i]) for row in rows) for i in range(3)]\nlines=[]\nfor r in rows:\n    line=\' | \'.join(r[i].ljust(col_widths[i]) for i in range(3))\n    lines.append(line)\noutput=\'\\n\'.join(lines)\nprint(output)\n'}
+2026-10-25 15:03:06,475 | INFO     | src.hermes.mcp_server | [MCP] Tool 'execute_python' executed successfully: result=Criterion                                          | Description                                                                                      
+2026-10-25 15:03:06,476 | INFO     | mcp.server.streamable_http | Terminating session: None
+2026-10-25 15:03:15,580 | INFO     | httpx | HTTP Request: GET http://10.7.75.103:1234/v1/models "HTTP/1.1 200 OK"
+2026-10-25 15:03:25,312 | INFO     | httpx | HTTP Request: GET http://10.7.75.103:1234/v1/models "HTTP/1.1 200 OK"
+2026-10-25 15:03:27,716 | INFO     | httpx | HTTP Request: GET http://10.7.75.103:1234/v1/models "HTTP/1.1 200 OK"
+2026-10-25 15:03:38,932 | INFO     | httpx | HTTP Request: GET http://10.7.75.103:1234/v1/models "HTTP/1.1 200 OK"
+2026-10-25 15:03:48,909 | INFO     | httpx | HTTP Request: GET http://10.7.75.103:1234/v1/models "HTTP/1.1 200 OK"
+2026-10-25 15:03:53,979 | INFO     | mcp.server.streamable_http | Terminating session: None
+2026-10-25 15:03:53,988 | INFO     | mcp.server.streamable_http | Terminating session: None
+2026-10-25 15:03:54,000 | INFO     | mcp.server.lowlevel.server | Processing request of type ListToolsRequest
+2026-10-25 15:03:54,006 | INFO     | mcp.server.streamable_http | Terminating session: None
+2026-10-25 15:03:54,500 | INFO     | mcp.server.streamable_http | Terminating session: None
+2026-10-25 15:03:54,509 | INFO     | mcp.server.streamable_http | Terminating session: None
+2026-10-25 15:03:54,516 | INFO     | mcp.server.lowlevel.server | Processing request of type ListToolsRequest
+2026-10-25 15:03:54,521 | INFO     | mcp.server.streamable_http | Terminating session: None
+2026-10-25 15:03:55,035 | INFO     | mcp.server.streamable_http | Terminating session: None
+2026-10-25 15:03:55,042 | INFO     | mcp.server.streamable_http | Terminating session: None
+2026-10-25 15:03:55,048 | INFO     | mcp.server.lowlevel.server | Processing request of type ListToolsRequest
+2026-10-25 15:03:55,052 | INFO     | mcp.server.streamable_http | Terminating session: None
+2026-10-25 15:03:55,514 | INFO     | mcp.server.streamable_http | Terminating session: None
+2026-10-25 15:03:55,520 | INFO     | mcp.server.streamable_http | Terminating session: None
+2026-10-25 15:03:55,524 | INFO     | mcp.server.lowlevel.server | Processing request of type ListToolsRequest
+2026-10-25 15:03:55,528 | INFO     | mcp.server.streamable_http | Terminating session: None
+2026-10-25 15:03:55,942 | INFO     | mcp.server.streamable_http | Terminating session: None
+2026-10-25 15:03:55,946 | INFO     | mcp.server.streamable_http | Terminating session: None
+2026-10-25 15:03:55,951 | INFO     | mcp.server.lowlevel.server | Processing request of type ListToolsRequest
+2026-10-25 15:03:55,953 | INFO     | mcp.server.streamable_http | Terminating session: None
+2026-10-25 15:03:56,704 | INFO     | mcp.server.streamable_http | Terminating session: None
+2026-10-25 15:03:56,710 | INFO     | mcp.server.streamable_http | Terminating session: None
+2026-10-25 15:03:56,714 | INFO     | mcp.server.lowlevel.server | Processing request of type ListToolsRequest
+2026-10-25 15:03:56,717 | INFO     | mcp.server.streamable_http | Terminating session: None
+2026-10-25 15:03:57,194 | INFO     | mcp.server.streamable_http | Terminating session: None
+2026-10-25 15:03:57,198 | INFO     | mcp.server.streamable_http | Terminating session: None
+2026-10-25 15:03:57,204 | INFO     | mcp.server.lowlevel.server | Processing request of type ListToolsRequest
+2026-10-25 15:03:57,206 | INFO     | mcp.server.streamable_http | Terminating session: None
+2026-10-25 15:03:57,580 | INFO     | mcp.server.streamable_http | Terminating session: None
+2026-10-25 15:03:57,585 | INFO     | mcp.server.streamable_http | Terminating session: None
+2026-10-25 15:03:57,590 | INFO     | mcp.server.lowlevel.server | Processing request of type ListToolsRequest
+2026-10-25 15:03:57,593 | INFO     | mcp.server.streamable_http | Terminating session: None
+2026-10-25 15:03:57,958 | INFO     | mcp.server.streamable_http | Terminating session: None
+2026-10-25 15:03:57,964 | INFO     | mcp.server.streamable_http | Terminating session: None
+2026-10-25 15:03:57,970 | INFO     | mcp.server.lowlevel.server | Processing request of type ListToolsRequest
+2026-10-25 15:03:57,974 | INFO     | mcp.server.streamable_http | Terminating session: None
+2026-10-25 15:03:58,325 | INFO     | mcp.server.streamable_http | Terminating session: None
+2026-10-25 15:03:58,328 | INFO     | mcp.server.streamable_http | Terminating session: None
+2026-10-25 15:03:58,333 | INFO     | mcp.server.lowlevel.server | Processing request of type ListToolsRequest
+2026-10-25 15:03:58,335 | INFO     | mcp.server.streamable_http | Terminating session: None
+2026-10-25 15:03:58,855 | INFO     | mcp.server.streamable_http | Terminating session: None
+2026-10-25 15:03:58,862 | INFO     | mcp.server.streamable_http | Terminating session: None
+2026-10-25 15:03:58,866 | INFO     | mcp.server.lowlevel.server | Processing request of type ListToolsRequest
+2026-10-25 15:03:58,870 | INFO     | httpx | HTTP Request: GET http://10.7.75.103:1234/v1/models "HTTP/1.1 200 OK"
+2026-10-25 15:03:58,872 | INFO     | mcp.server.streamable_http | Terminating session: None
+2026-10-25 15:03:59,230 | INFO     | mcp.server.streamable_http | Terminating session: None
+2026-10-25 15:03:59,234 | INFO     | mcp.server.streamable_http | Terminating session: None
+2026-10-25 15:03:59,239 | INFO     | mcp.server.lowlevel.server | Processing request of type ListToolsRequest
+2026-10-25 15:03:59,242 | INFO     | mcp.server.streamable_http | Terminating session: None
+2026-10-25 15:03:59,643 | INFO     | mcp.server.streamable_http | Terminating session: None
+2026-10-25 15:03:59,647 | INFO     | mcp.server.streamable_http | Terminating session: None
+2026-10-25 15:03:59,651 | INFO     | mcp.server.lowlevel.server | Processing request of type ListToolsRequest
+2026-10-25 15:03:59,654 | INFO     | mcp.server.streamable_http | Terminating session: None
+2026-10-25 15:04:00,024 | INFO     | mcp.server.streamable_http | Terminating session: None
+2026-10-25 15:04:00,029 | INFO     | mcp.server.streamable_http | Terminating session: None
+2026-10-25 15:04:00,033 | INFO     | mcp.server.lowlevel.server | Processing request of type ListToolsRequest
+2026-10-25 15:04:00,036 | INFO     | mcp.server.streamable_http | Terminating session: None
+2026-10-25 15:04:00,376 | INFO     | mcp.server.streamable_http | Terminating session: None
+2026-10-25 15:04:00,381 | INFO     | mcp.server.streamable_http | Terminating session: None
+2026-10-25 15:04:00,385 | INFO     | mcp.server.lowlevel.server | Processing request of type ListToolsRequest
+2026-10-25 15:04:00,388 | INFO     | mcp.server.streamable_http | Terminating session: None
+2026-10-25 15:04:00,723 | INFO     | mcp.server.streamable_http | Terminating session: None
+2026-10-25 15:04:00,727 | INFO     | mcp.server.streamable_http | Terminating session: None
+2026-10-25 15:04:00,731 | INFO     | mcp.server.lowlevel.server | Processing request of type ListToolsRequest
+2026-10-25 15:04:00,733 | INFO     | mcp.server.streamable_http | Terminating session: None
+2026-10-25 15:04:01,160 | INFO     | mcp.server.streamable_http | Terminating session: None
+2026-10-25 15:04:01,163 | INFO     | mcp.server.streamable_http | Terminating session: None
+2026-10-25 15:04:01,167 | INFO     | mcp.server.lowlevel.server | Processing request of type ListToolsRequest
+2026-10-25 15:04:01,170 | INFO     | mcp.server.streamable_http | Terminating session: None
+2026-10-25 15:04:01,523 | INFO     | mcp.server.streamable_http | Terminating session: None
+2026-10-25 15:04:01,527 | INFO     | mcp.server.streamable_http | Terminating session: None
+2026-10-25 15:04:01,531 | INFO     | mcp.server.lowlevel.server | Processing request of type ListToolsRequest
+2026-10-25 15:04:01,534 | INFO     | mcp.server.streamable_http | Terminating session: None
+2026-10-25 15:04:01,892 | INFO     | mcp.server.streamable_http | Terminating session: None
+2026-10-25 15:04:01,896 | INFO     | mcp.server.streamable_http | Terminating session: None
+2026-10-25 15:04:01,900 | INFO     | mcp.server.lowlevel.server | Processing request of type ListToolsRequest
+2026-10-25 15:04:01,905 | INFO     | mcp.server.streamable_http | Terminating session: None
+2026-10-25 15:04:02,251 | INFO     | mcp.server.streamable_http | Terminating session: None
+2026-10-25 15:04:02,255 | INFO     | mcp.server.streamable_http | Terminating session: None
+2026-10-25 15:04:02,260 | INFO     | mcp.server.lowlevel.server | Processing request of type ListToolsRequest
+2026-10-25 15:04:02,261 | INFO     | mcp.server.streamable_http | Terminating session: None
+2026-10-25 15:04:02,623 | INFO     | mcp.server.streamable_http | Terminating session: None
+2026-10-25 15:04:02,628 | INFO     | mcp.server.streamable_http | Terminating session: None
+2026-10-25 15:04:02,633 | INFO     | mcp.server.lowlevel.server | Processing request of type ListToolsRequest
+2026-10-25 15:04:02,634 | INFO     | mcp.server.streamable_http | Terminating session: None
+2026-10-25 15:04:08,873 | INFO     | httpx | HTTP Request: GET http://10.7.75.103:1234/v1/models "HTTP/1.1 200 OK"
+2026-10-25 15:04:16,680 | INFO     | mcp.server.streamable_http | Terminating session: None
+2026-10-25 15:04:16,684 | INFO     | mcp.server.streamable_http | Terminating session: None
+2026-10-25 15:04:16,687 | INFO     | mcp.server.lowlevel.server | Processing request of type ListToolsRequest
+2026-10-25 15:04:16,690 | INFO     | mcp.server.streamable_http | Terminating session: None
+2026-10-25 15:04:17,028 | INFO     | mcp.server.streamable_http | Terminating session: None
+2026-10-25 15:04:17,032 | INFO     | mcp.server.streamable_http | Terminating session: None
+2026-10-25 15:04:17,038 | INFO     | mcp.server.lowlevel.server | Processing request of type ListToolsRequest
+2026-10-25 15:04:17,040 | INFO     | mcp.server.streamable_http | Terminating session: None
+2026-10-25 15:04:17,378 | INFO     | mcp.server.streamable_http | Terminating session: None
+2026-10-25 15:04:17,382 | INFO     | mcp.server.streamable_http | Terminating session: None
+2026-10-25 15:04:17,387 | INFO     | mcp.server.lowlevel.server | Processing request of type ListToolsRequest
+2026-10-25 15:04:17,389 | INFO     | mcp.server.streamable_http | Terminating session: None
+2026-10-25 15:04:17,827 | INFO     | mcp.server.streamable_http | Terminating session: None
+2026-10-25 15:04:17,833 | INFO     | mcp.server.streamable_http | Terminating session: None
+2026-10-25 15:04:17,838 | INFO     | mcp.server.lowlevel.server | Processing request of type ListToolsRequest
+2026-10-25 15:04:17,841 | INFO     | mcp.server.streamable_http | Terminating session: None
+2026-10-25 15:04:18,173 | INFO     | mcp.server.streamable_http | Terminating session: None
+2026-10-25 15:04:18,178 | INFO     | mcp.server.streamable_http | Terminating session: None
+2026-10-25 15:04:18,183 | INFO     | mcp.server.lowlevel.server | Processing request of type ListToolsRequest
+2026-10-25 15:04:18,185 | INFO     | mcp.server.streamable_http | Terminating session: None
+2026-10-25 15:04:18,526 | INFO     | mcp.server.streamable_http | Terminating session: None
+2026-10-25 15:04:18,531 | INFO     | mcp.server.streamable_http | Terminating session: None
+2026-10-25 15:04:18,535 | INFO     | mcp.server.lowlevel.server | Processing request of type ListToolsRequest
+2026-10-25 15:04:18,537 | INFO     | mcp.server.streamable_http | Terminating session: None
+2026-10-25 15:04:18,878 | INFO     | httpx | HTTP Request: GET http://10.7.75.103:1234/v1/models "HTTP/1.1 200 OK"
+2026-10-25 15:04:28,872 | INFO     | httpx | HTTP Request: GET http://10.7.75.103:1234/v1/models "HTTP/1.1 200 OK"
+2026-10-25 15:04:32,254 | INFO     | mcp.server.lowlevel.server | Processing request of type CallToolRequest
+2026-10-25 15:04:32,254 | INFO     | src.hermes.mcp_server | [MCP] Tool call received: profile=fleet-enterprise-rfp-p-model-multi-tier-lab, tool=execute_python, args={'code': 'import json\n# Define tiers and rates\ntiers = {\n    \'Tier A\': {\'name\':\'Senior Architect\', \'rate\':250},\n    \'Tier B\': {\'name\':\'Mid-level Engineer\', \'rate\':180},\n    \'Tier C\': {\'name\':\'Support Staff\', \'rate\':120}\n}\n# Criteria list from t2\ncriteria = [\n    "FedRAMP High",\n    "NIST SP 800-53 Rev.5 (Security & Privacy Controls)",\n    "HIPAA (if applicable)",\n    "CJIS",\n    "FIPS 140-2/3 for encryption modules",\n    "Data Residency",\n    "Encryption At Rest",\n    "Encryption In Transit",\n    "Identity Management",\n    "Audit Logging",\n    "Disaster Recovery RPO",\n    "Disaster Recovery RTO",\n    "Network Architecture",\n    "Legacy Integration"\n]\n# Assign hours per tier for each criterion (arbitrary realistic values)\nhours = {\n    \'FedRAMP High\': {\'Tier A\':4, \'Tier B\':6, \'Tier C\':8},\n    \'NIST SP 800-53 Rev.5 (Security & Privacy Controls)\':{\'Tier A\':5,\'Tier B\':7,\'Tier C\':9},\n    \'HIPAA (if applicable)\':{\'Tier A\':3,\'Tier B\':5,\'Tier C\':6},\n    \'CJIS\':{\'Tier A\':4,\'Tier B\':6,\'Tier C\':8},\n    \'FIPS 140-2/3 for encryption modules\':{\'Tier A\':3,\'Tier B\':5,\'Tier C\':7},\n    \'Data Residency\':{\'Tier A\':2,\'Tier B\':4,\'Tier C\':6},\n    \'Encryption At Rest\':{\'Tier A\':3,\'Tier B\':5,\'Tier C\':7},\n    \'Encryption In Transit\':{\'Tier A\':2,\'Tier B\':4,\'Tier C\':6},\n    \'Identity Management\':{\'Tier A\':4,\'Tier B\':6,\'Tier C\':8},\n    \'Audit Logging\':{\'Tier A\':3,\'Tier B\':5,\'Tier C\':7},\n    \'Disaster Recovery RPO\':{\'Tier A\':4,\'Tier B\':6,\'Tier C\':8},\n    \'Disaster Recovery RTO\':{\'Tier A\':4,\'Tier B\':6,\'Tier C\':8},\n    \'Network Architecture\':{\'Tier A\':5,\'Tier B\':7,\'Tier C\':9},\n    \'Legacy Integration\':{\'Tier A\':3,\'Tier B\':5,\'Tier C\':7}\n}\n# Build table rows\nrows = []\nfor crit in criteria:\n    row = {\'Criterion\':crit}\n    for tier_key, tier_info in tiers.items():\n        h = hours[crit][tier_key]\n        cost = h * tier_info[\'rate\']\n        row[f\'{tier_key} Hours\'] = h\n        row[f\'{tier_key} Cost\'] = f"${cost:,.2f}"\n    rows.append(row)\n# Compute totals per tier\ntotals = {tier:\'$0.00\' for tier in tiers}\nfor tier_key, tier_info in tiers.items():\n    total_hours = sum(hours[crit][tier_key] for crit in criteria)\n    total_cost = total_hours * tier_info[\'rate\']\n    totals[tier_key] = f"${total_cost:,.2f}"\n# Grand total\ngrand_total = sum((sum(hours[crit][t] for crit in criteria)*tiers[t][\'rate\']) for t in tiers)\n# Output as markdown table\nheader = "| Criterion | Tier A Hours | Tier B Hours | Tier C Hours | Tier A Cost | Tier B Cost | Tier C Cost |"\nsep = "|---|---|---|---|---|---|---|"\nlines=[header, sep]\nfor r in rows:\n    lines.append(f"| {r[\'Criterion\']} | {r[\'Tier A Hours\']} | {r[\'Tier B Hours\']} | {r[\'Tier C Hours\']} | {r[\'Tier A Cost\']} | {r[\'Tier B Cost\']} | {r[\'Tier C Cost\']} |")\n# Totals row\nlines.append(f"| **Totals** |  |  |  | {totals[\'Tier A\']} | {totals[\'Tier B\']} | {totals[\'Tier C\']} |")\n# Grand total line\nlines.append(f"\\nGrand Total: {grand_total:,.2f}")\noutput=\'\\n\'.join(lines)\nprint(output)\n'}
+2026-10-25 15:04:32,366 | INFO     | src.hermes.mcp_server | [MCP] Tool 'execute_python' executed successfully: result=| Criterion | Tier A Hours | Tier B Hours | Tier C Hours | Tier A Cost | Tier B Cost | Tier C Cost |
+|---|---|---|---|---|---|---|
+| FedRAMP High | 4 
+2026-10-25 15:04:32,367 | INFO     | mcp.server.streamable_http | Terminating session: None
+2026-10-25 15:04:38,859 | INFO     | httpx | HTTP Request: GET http://10.7.75.103:1234/v1/models "HTTP/1.1 200 OK"
+2026-10-25 15:04:48,834 | INFO     | httpx | HTTP Request: GET http://10.7.75.103:1234/v1/models "HTTP/1.1 200 OK"
+2026-10-25 15:04:58,829 | INFO     | httpx | HTTP Request: GET http://10.7.75.103:1234/v1/models "HTTP/1.1 200 OK"
+2026-10-25 15:05:08,860 | INFO     | httpx | HTTP Request: GET http://10.7.75.103:1234/v1/models "HTTP/1.1 200 OK"
+2026-10-25 15:05:18,868 | INFO     | httpx | HTTP Request: GET http://10.7.75.103:1234/v1/models "HTTP/1.1 200 OK"
+2026-10-25 15:05:28,856 | INFO     | httpx | HTTP Request: GET http://10.7.75.103:1234/v1/models "HTTP/1.1 200 OK"
+2026-10-25 15:05:38,835 | INFO     | httpx | HTTP Request: GET http://10.7.75.103:1234/v1/models "HTTP/1.1 200 OK"
+2026-10-25 15:05:48,867 | INFO     | httpx | HTTP Request: GET http://10.7.75.103:1234/v1/models "HTTP/1.1 200 OK"
+2026-10-25 15:05:58,840 | INFO     | httpx | HTTP Request: GET http://10.7.75.103:1234/v1/models "HTTP/1.1 200 OK"
+2026-10-25 15:06:08,835 | INFO     | httpx | HTTP Request: GET http://10.7.75.103:1234/v1/models "HTTP/1.1 200 OK"
+2026-10-25 15:06:18,850 | INFO     | httpx | HTTP Request: GET http://10.7.75.103:1234/v1/models "HTTP/1.1 200 OK"
+2026-10-25 15:06:28,853 | INFO     | httpx | HTTP Request: GET http://10.7.75.103:1234/v1/models "HTTP/1.1 200 OK"
+2026-10-25 15:06:38,862 | INFO     | httpx | HTTP Request: GET http://10.7.75.103:1234/v1/models "HTTP/1.1 200 OK"
+2026-10-25 15:06:48,865 | INFO     | httpx | HTTP Request: GET http://10.7.75.103:1234/v1/models "HTTP/1.1 200 OK"
+2026-10-25 15:06:54,031 | INFO     | mcp.server.lowlevel.server | Processing request of type PingRequest
+2026-10-25 15:06:54,032 | INFO     | mcp.server.streamable_http | Terminating session: None
+2026-10-25 15:06:54,549 | INFO     | mcp.server.lowlevel.server | Processing request of type PingRequest
+2026-10-25 15:06:54,549 | INFO     | mcp.server.streamable_http | Terminating session: None
+2026-10-25 15:06:55,080 | INFO     | mcp.server.lowlevel.server | Processing request of type PingRequest
+2026-10-25 15:06:55,080 | INFO     | mcp.server.streamable_http | Terminating session: None
+2026-10-25 15:06:55,529 | INFO     | mcp.server.lowlevel.server | Processing request of type PingRequest
+2026-10-25 15:06:55,533 | INFO     | mcp.server.streamable_http | Terminating session: None
+2026-10-25 15:06:55,978 | INFO     | mcp.server.lowlevel.server | Processing request of type PingRequest
+2026-10-25 15:06:55,979 | INFO     | mcp.server.streamable_http | Terminating session: None
+2026-10-25 15:06:56,723 | INFO     | mcp.server.lowlevel.server | Processing request of type PingRequest
+2026-10-25 15:06:56,724 | INFO     | mcp.server.streamable_http | Terminating session: None
+2026-10-25 15:06:57,217 | INFO     | mcp.server.lowlevel.server | Processing request of type PingRequest
+2026-10-25 15:06:57,218 | INFO     | mcp.server.streamable_http | Terminating session: None
+2026-10-25 15:06:57,602 | INFO     | mcp.server.lowlevel.server | Processing request of type PingRequest
+2026-10-25 15:06:57,603 | INFO     | mcp.server.streamable_http | Terminating session: None
+2026-10-25 15:06:57,992 | INFO     | mcp.server.lowlevel.server | Processing request of type PingRequest
+2026-10-25 15:06:57,992 | INFO     | mcp.server.streamable_http | Terminating session: None
+2026-10-25 15:06:58,351 | INFO     | mcp.server.lowlevel.server | Processing request of type PingRequest
+2026-10-25 15:06:58,351 | INFO     | mcp.server.streamable_http | Terminating session: None
+2026-10-25 15:06:58,880 | INFO     | mcp.server.lowlevel.server | Processing request of type PingRequest
+2026-10-25 15:06:58,880 | INFO     | mcp.server.streamable_http | Terminating session: None
+2026-10-25 15:06:59,254 | INFO     | mcp.server.lowlevel.server | Processing request of type PingRequest
+2026-10-25 15:06:59,254 | INFO     | mcp.server.streamable_http | Terminating session: None
+2026-10-25 15:06:59,676 | INFO     | mcp.server.lowlevel.server | Processing request of type PingRequest
+2026-10-25 15:06:59,676 | INFO     | mcp.server.streamable_http | Terminating session: None
+2026-10-25 15:07:00,055 | INFO     | mcp.server.lowlevel.server | Processing request of type PingRequest
+2026-10-25 15:07:00,055 | INFO     | mcp.server.streamable_http | Terminating session: None
+2026-10-25 15:07:00,399 | INFO     | mcp.server.lowlevel.server | Processing request of type PingRequest
+2026-10-25 15:07:00,399 | INFO     | mcp.server.streamable_http | Terminating session: None
+2026-10-25 15:07:00,730 | INFO     | mcp.server.lowlevel.server | Processing request of type PingRequest
+2026-10-25 15:07:00,730 | INFO     | mcp.server.streamable_http | Terminating session: None
+2026-10-25 15:07:01,185 | INFO     | mcp.server.lowlevel.server | Processing request of type PingRequest
+2026-10-25 15:07:01,186 | INFO     | mcp.server.streamable_http | Terminating session: None
+2026-10-25 15:07:01,542 | INFO     | mcp.server.lowlevel.server | Processing request of type PingRequest
+2026-10-25 15:07:01,542 | INFO     | mcp.server.streamable_http | Terminating session: None
+2026-10-25 15:07:01,916 | INFO     | mcp.server.lowlevel.server | Processing request of type PingRequest
+2026-10-25 15:07:01,916 | INFO     | mcp.server.streamable_http | Terminating session: None
+2026-10-25 15:07:02,287 | INFO     | mcp.server.lowlevel.server | Processing request of type PingRequest
+2026-10-25 15:07:02,288 | INFO     | mcp.server.streamable_http | Terminating session: None
+2026-10-25 15:07:02,663 | INFO     | mcp.server.lowlevel.server | Processing request of type PingRequest
+2026-10-25 15:07:02,664 | INFO     | mcp.server.streamable_http | Terminating session: None
+2026-10-25 15:07:08,195 | INFO     | httpx | HTTP Request: GET http://10.7.75.103:1234/v1/models "HTTP/1.1 200 OK"
+2026-10-25 15:07:16,705 | INFO     | mcp.server.lowlevel.server | Processing request of type PingRequest
+2026-10-25 15:07:16,706 | INFO     | mcp.server.streamable_http | Terminating session: None
+2026-10-25 15:07:17,062 | INFO     | mcp.server.lowlevel.server | Processing request of type PingRequest
+2026-10-25 15:07:17,062 | INFO     | mcp.server.streamable_http | Terminating session: None
+2026-10-25 15:07:17,406 | INFO     | mcp.server.lowlevel.server | Processing request of type PingRequest
+2026-10-25 15:07:17,410 | INFO     | mcp.server.streamable_http | Terminating session: None
+2026-10-25 15:07:17,847 | INFO     | mcp.server.lowlevel.server | Processing request of type PingRequest
+2026-10-25 15:07:17,848 | INFO     | mcp.server.streamable_http | Terminating session: None
+2026-10-25 15:07:18,187 | INFO     | httpx | HTTP Request: GET http://10.7.75.103:1234/v1/models "HTTP/1.1 200 OK"
+2026-10-25 15:07:18,192 | INFO     | mcp.server.lowlevel.server | Processing request of type PingRequest
+2026-10-25 15:07:18,194 | INFO     | mcp.server.streamable_http | Terminating session: None
+2026-10-25 15:07:18,546 | INFO     | mcp.server.lowlevel.server | Processing request of type PingRequest
+2026-10-25 15:07:18,547 | INFO     | mcp.server.streamable_http | Terminating session: None
+2026-10-25 15:07:28,122 | INFO     | httpx | HTTP Request: GET http://10.7.75.103:1234/v1/models "HTTP/1.1 200 OK"
+2026-10-25 15:07:38,128 | INFO     | httpx | HTTP Request: GET http://10.7.75.103:1234/v1/models "HTTP/1.1 200 OK"
+2026-10-25 15:07:48,117 | INFO     | httpx | HTTP Request: GET http://10.7.75.103:1234/v1/models "HTTP/1.1 200 OK"
+2026-10-25 15:07:58,138 | INFO     | httpx | HTTP Request: GET http://10.7.75.103:1234/v1/models "HTTP/1.1 200 OK"
+2026-10-25 15:08:08,671 | INFO     | httpx | HTTP Request: GET http://10.7.75.103:1234/v1/models "HTTP/1.1 200 OK"
+2026-10-25 15:08:18,132 | INFO     | httpx | HTTP Request: GET http://10.7.75.103:1234/v1/models "HTTP/1.1 200 OK"
+2026-10-25 15:08:28,123 | INFO     | httpx | HTTP Request: GET http://10.7.75.103:1234/v1/models "HTTP/1.1 200 OK"
+2026-10-25 15:08:38,130 | INFO     | httpx | HTTP Request: GET http://10.7.75.103:1234/v1/models "HTTP/1.1 200 OK"
+2026-10-25 15:08:48,148 | INFO     | httpx | HTTP Request: GET http://10.7.75.103:1234/v1/models "HTTP/1.1 200 OK"
+2026-10-25 15:08:58,124 | INFO     | httpx | HTTP Request: GET http://10.7.75.103:1234/v1/models "HTTP/1.1 200 OK"
+2026-10-25 15:09:08,201 | INFO     | httpx | HTTP Request: GET http://10.7.75.103:1234/v1/models "HTTP/1.1 200 OK"
+2026-10-25 15:09:18,155 | INFO     | httpx | HTTP Request: GET http://10.7.75.103:1234/v1/models "HTTP/1.1 200 OK"
+2026-10-25 15:09:28,125 | INFO     | httpx | HTTP Request: GET http://10.7.75.103:1234/v1/models "HTTP/1.1 200 OK"
+2026-10-25 15:09:38,130 | INFO     | httpx | HTTP Request: GET http://10.7.75.103:1234/v1/models "HTTP/1.1 200 OK"
+2026-10-25 15:09:48,164 | INFO     | httpx | HTTP Request: GET http://10.7.75.103:1234/v1/models "HTTP/1.1 200 OK"
+2026-10-25 15:09:54,033 | INFO     | mcp.server.lowlevel.server | Processing request of type PingRequest
+2026-10-25 15:09:54,034 | INFO     | mcp.server.streamable_http | Terminating session: None
+2026-10-25 15:09:54,561 | INFO     | mcp.server.lowlevel.server | Processing request of type PingRequest
+2026-10-25 15:09:54,562 | INFO     | mcp.server.streamable_http | Terminating session: None
+2026-10-25 15:09:55,104 | INFO     | mcp.server.lowlevel.server | Processing request of type PingRequest
+2026-10-25 15:09:55,105 | INFO     | mcp.server.streamable_http | Terminating session: None
+2026-10-25 15:09:55,539 | INFO     | mcp.server.lowlevel.server | Processing request of type PingRequest
+2026-10-25 15:09:55,540 | INFO     | mcp.server.streamable_http | Terminating session: None
+2026-10-25 15:09:55,984 | INFO     | mcp.server.lowlevel.server | Processing request of type PingRequest
+2026-10-25 15:09:55,984 | INFO     | mcp.server.streamable_http | Terminating session: None
+2026-10-25 15:09:56,750 | INFO     | mcp.server.lowlevel.server | Processing request of type PingRequest
+2026-10-25 15:09:56,750 | INFO     | mcp.server.streamable_http | Terminating session: None
+2026-10-25 15:09:57,231 | INFO     | mcp.server.lowlevel.server | Processing request of type PingRequest
+2026-10-25 15:09:57,233 | INFO     | mcp.server.streamable_http | Terminating session: None
+2026-10-25 15:09:57,619 | INFO     | mcp.server.lowlevel.server | Processing request of type PingRequest
+2026-10-25 15:09:57,620 | INFO     | mcp.server.streamable_http | Terminating session: None
+2026-10-25 15:09:58,091 | INFO     | mcp.server.lowlevel.server | Processing request of type PingRequest
+2026-10-25 15:09:58,091 | INFO     | mcp.server.streamable_http | Terminating session: None
+2026-10-25 15:09:58,126 | INFO     | httpx | HTTP Request: GET http://10.7.75.103:1234/v1/models "HTTP/1.1 200 OK"
+2026-10-25 15:09:58,365 | INFO     | mcp.server.lowlevel.server | Processing request of type PingRequest
+2026-10-25 15:09:58,366 | INFO     | mcp.server.streamable_http | Terminating session: None
+2026-10-25 15:09:58,892 | INFO     | mcp.server.lowlevel.server | Processing request of type PingRequest
+2026-10-25 15:09:58,893 | INFO     | mcp.server.streamable_http | Terminating session: None
+2026-10-25 15:09:59,283 | INFO     | mcp.server.lowlevel.server | Processing request of type PingRequest
+2026-10-25 15:09:59,283 | INFO     | mcp.server.streamable_http | Terminating session: None
+2026-10-25 15:09:59,703 | INFO     | mcp.server.lowlevel.server | Processing request of type PingRequest
+2026-10-25 15:09:59,703 | INFO     | mcp.server.streamable_http | Terminating session: None
+2026-10-25 15:10:00,079 | INFO     | mcp.server.lowlevel.server | Processing request of type PingRequest
+2026-10-25 15:10:00,080 | INFO     | mcp.server.streamable_http | Terminating session: None
+2026-10-25 15:10:00,421 | INFO     | mcp.server.lowlevel.server | Processing request of type PingRequest
+2026-10-25 15:10:00,421 | INFO     | mcp.server.streamable_http | Terminating session: None
+2026-10-25 15:10:00,747 | INFO     | mcp.server.lowlevel.server | Processing request of type PingRequest
+2026-10-25 15:10:00,747 | INFO     | mcp.server.streamable_http | Terminating session: None
+2026-10-25 15:10:01,187 | INFO     | mcp.server.lowlevel.server | Processing request of type PingRequest
+2026-10-25 15:10:01,188 | INFO     | mcp.server.streamable_http | Terminating session: None
+2026-10-25 15:10:01,561 | INFO     | mcp.server.lowlevel.server | Processing request of type PingRequest
+2026-10-25 15:10:01,561 | INFO     | mcp.server.streamable_http | Terminating session: None
+2026-10-25 15:10:01,933 | INFO     | mcp.server.lowlevel.server | Processing request of type PingRequest
+2026-10-25 15:10:01,933 | INFO     | mcp.server.streamable_http | Terminating session: None
+2026-10-25 15:10:02,307 | INFO     | mcp.server.lowlevel.server | Processing request of type PingRequest
+2026-10-25 15:10:02,307 | INFO     | mcp.server.streamable_http | Terminating session: None
+2026-10-25 15:10:02,683 | INFO     | mcp.server.lowlevel.server | Processing request of type PingRequest
+2026-10-25 15:10:02,683 | INFO     | mcp.server.streamable_http | Terminating session: None
+2026-10-25 15:10:08,177 | INFO     | httpx | HTTP Request: GET http://10.7.75.103:1234/v1/models "HTTP/1.1 200 OK"
+2026-10-25 15:10:16,704 | INFO     | mcp.server.lowlevel.server | Processing request of type PingRequest
+2026-10-25 15:10:16,705 | INFO     | mcp.server.streamable_http | Terminating session: None
+2026-10-25 15:10:17,078 | INFO     | mcp.server.lowlevel.server | Processing request of type PingRequest
+2026-10-25 15:10:17,079 | INFO     | mcp.server.streamable_http | Terminating session: None
+2026-10-25 15:10:17,437 | INFO     | mcp.server.lowlevel.server | Processing request of type PingRequest
+2026-10-25 15:10:17,437 | INFO     | mcp.server.streamable_http | Terminating session: None
+2026-10-25 15:10:17,877 | INFO     | mcp.server.lowlevel.server | Processing request of type PingRequest
+2026-10-25 15:10:17,877 | INFO     | mcp.server.streamable_http | Terminating session: None
+2026-10-25 15:10:18,136 | INFO     | httpx | HTTP Request: GET http://10.7.75.103:1234/v1/models "HTTP/1.1 200 OK"
+2026-10-25 15:10:18,221 | INFO     | mcp.server.lowlevel.server | Processing request of type PingRequest
+2026-10-25 15:10:18,222 | INFO     | mcp.server.streamable_http | Terminating session: None
+2026-10-25 15:10:18,544 | INFO     | mcp.server.lowlevel.server | Processing request of type PingRequest
+2026-10-25 15:10:18,544 | INFO     | mcp.server.streamable_http | Terminating session: None
+2026-10-25 15:10:28,125 | INFO     | httpx | HTTP Request: GET http://10.7.75.103:1234/v1/models "HTTP/1.1 200 OK"
+2026-10-25 15:10:38,132 | INFO     | httpx | HTTP Request: GET http://10.7.75.103:1234/v1/models "HTTP/1.1 200 OK"
+2026-10-25 15:10:48,136 | INFO     | httpx | HTTP Request: GET http://10.7.75.103:1234/v1/models "HTTP/1.1 200 OK"
+2026-10-25 15:10:58,172 | INFO     | httpx | HTTP Request: GET http://10.7.75.103:1234/v1/models "HTTP/1.1 200 OK"
+2026-10-25 15:11:08,116 | INFO     | httpx | HTTP Request: GET http://10.7.75.103:1234/v1/models "HTTP/1.1 200 OK"
+2026-10-25 15:11:18,152 | INFO     | httpx | HTTP Request: GET http://10.7.75.103:1234/v1/models "HTTP/1.1 200 OK"
+2026-10-25 15:11:28,176 | INFO     | httpx | HTTP Request: GET http://10.7.75.103:1234/v1/models "HTTP/1.1 200 OK"
+2026-10-25 15:11:28,429 | INFO     | mcp.server.streamable_http_manager | StreamableHTTP session manager shutting down
+2026-10-25 15:11:28,429 | INFO     | src.orchestrator.cron_scheduler | CronScheduler background service stopped
+2026-10-25 15:11:28,429 | INFO     | src.api.main | UAOS API shutting down
+2026-10-25 15:48:41,665 | INFO     | src.registry.tool_registry | Registered tool 'python_executor_v1' (native) providing skills: ['code_execution', 'data_analysis', 'math_computation', 'data_processing']
+2026-10-25 15:48:41,668 | INFO     | src.registry.tool_registry | Registered tool 'file_deleter_v1' (native) providing skills: ['file_deletion']
+2026-10-25 15:48:41,668 | INFO     | src.registry.tool_registry | Registered tool 'disk_usage_v1' (native) providing skills: ['disk_usage', 'disk_space', 'storage_report', 'filesystem_capacity']
+2026-10-25 15:48:41,668 | INFO     | src.registry.tool_registry | Registered tool 'dir_lister_v1' (native) providing skills: ['directory_listing', 'file_discovery', 'filesystem_inspection', 'file_enumeration', 'recursive_file_listing', 'file_tree', 'data_processing']
+2026-10-25 15:48:41,668 | INFO     | src.registry.tool_registry | Registered tool 'file_reader_v1' (native) providing skills: ['file_reading']
+2026-10-25 15:48:41,668 | INFO     | src.registry.tool_registry | Registered tool 'file_writer_v1' (native) providing skills: ['file_writing']
+2026-10-25 15:48:41,671 | INFO     | src.registry.tool_registry | Registered tool 'hermes_clarify_v1' (hermes) providing skills: ['clarify', 'clarify_question', 'operator_inquiry', 'hitl_dialog']
+2026-10-25 15:48:41,671 | INFO     | src.registry.tool_registry | Registered tool 'hermes_cronjob_manage_v1' (hermes) providing skills: ['cronjob_manage', 'cronjob', 'schedule_automation', 'recurring_workflows']
+2026-10-25 15:48:41,672 | INFO     | src.registry.tool_registry | Registered tool 'hermes_delegate_task_v1' (hermes) providing skills: ['delegate_task', 'subagent_delegation', 'parallel_execution', 'worker_spawn']
+2026-10-25 15:48:41,672 | INFO     | src.registry.tool_registry | Registered tool 'hermes_image_generate_v1' (hermes) providing skills: ['image_generate', 'image_generation', 'diagram_generation', 'visual_design']
+2026-10-25 15:48:41,672 | INFO     | src.registry.tool_registry | Registered tool 'hermes_memory_v1' (hermes) providing skills: ['memory', 'memory_manager', 'knowledge_persistence', 'user_profile']
+2026-10-25 15:48:41,672 | INFO     | src.registry.tool_registry | Registered tool 'hermes_patch_file_v1' (hermes) providing skills: ['patch_file', 'patch', 'surgical_edit', 'code_patching']
+2026-10-25 15:48:41,672 | INFO     | src.registry.tool_registry | Registered tool 'hermes_session_search_v1' (hermes) providing skills: ['session_search', 'historical_recall', 'conversation_search']
+2026-10-25 15:48:41,672 | INFO     | src.registry.tool_registry | Registered tool 'hermes_todo_v1' (hermes) providing skills: ['todo_list', 'task_planning', 'milestone_tracking']
+2026-10-25 15:48:41,672 | INFO     | src.registry.tool_registry | Registered tool 'hermes_tts_speak_v1' (hermes) providing skills: ['tts_speak', 'text_to_speech', 'voice_synthesis', 'audio_narration']
+2026-10-25 15:48:41,672 | INFO     | src.registry.tool_registry | Registered tool 'hermes_vision_analyze_v1' (hermes) providing skills: ['vision_analyze', 'image_inspection', 'ocr', 'visual_reasoning']
+2026-10-25 15:48:41,672 | INFO     | src.registry.tool_registry | Registered tool 'hermes_web_extract_v1' (hermes) providing skills: ['web_extract', 'web_scraping', 'article_reading', 'content_extraction']
+2026-10-25 15:48:41,679 | INFO     | src.registry.tool_registry | Registered tool 'soc_analyze_impact' (native) providing skills: ['impact_analysis', 'blast_radius', 'asset_mapping', 'lateral_movement']
+2026-10-25 15:48:41,679 | INFO     | src.registry.tool_registry | Registered tool 'soc_compress_timeline' (native) providing skills: ['log_compression', 'timeline_synthesis', 'context_compression', 'summarization', 'incident_compression', 'mitre_mapping', 'mitre_rca']
+2026-10-25 15:48:41,679 | INFO     | src.registry.tool_registry | Registered tool 'soc_gather_evidence' (native) providing skills: ['evidence_gathering', 'log_forensics', 'artifact_inspection', 'file_reading', 'directory_listing']
+2026-10-25 15:48:41,679 | INFO     | src.registry.tool_registry | Registered tool 'soc_lookup_threat' (native) providing skills: ['threat_discovery', 'threat_intel', 'ioc_lookup', 'reputation_check']
+2026-10-25 15:48:41,679 | INFO     | src.registry.tool_registry | Registered tool 'soc_propose_containment' (native) providing skills: ['incident_response', 'containment_playbook', 'remediation', 'firewall_rule', 'containment_actions', 'containment_rules', 'response_action']
+2026-10-25 15:48:41,680 | INFO     | src.registry.tool_registry | Registered tool 'soc_triage_alert' (native) providing skills: ['triage', 'alert_triage', 'ioc_extraction', 'security_audit', 'general_reasoning']
+2026-10-25 15:48:41,681 | INFO     | src.registry.tool_registry | Registered tool 'system_command_v1' (native) providing skills: ['shell_command', 'system_command', 'command_execution', 'powershell_execution', 'system_inspection', 'terminal_command']
+2026-10-25 15:48:41,683 | INFO     | src.registry.tool_registry | Registered tool 'system_info_v1' (native) providing skills: ['system_info', 'host_info', 'device_info', 'hostname_lookup', 'system_inspection', 'environment_query']
+2026-10-25 15:48:41,686 | INFO     | src.registry.tool_registry | Registered tool 'web_search_v1' (native) providing skills: ['web_search', 'research', 'fact_checking']
+2026-10-25 15:48:41,686 | INFO     | src.registry.auto_discover | Auto-discovery built-ins complete: 26 tools registered, 0 errors
+2026-10-25 15:48:41,690 | INFO     | src.registry.tool_registry | Registered tool 'verify_ssl_cert_v1' (native) providing skills: ['ssl_verification', 'security_audit']
+2026-10-25 15:48:41,690 | INFO     | src.registry.auto_discover | Discovered custom tool 'verify_ssl_cert' from ssl_verifier.py
+2026-10-25 15:48:41,692 | INFO     | src.registry.tool_registry | Registered tool 'summarize_to_presentation_v1' (native) providing skills: ['summarization']
+2026-10-25 15:48:41,692 | INFO     | src.registry.auto_discover | Discovered custom tool 'summarize_to_presentation' from summarize_to_presentation.py
+2026-10-25 15:48:41,705 | INFO     | src.registry.tool_registry | Registered tool 'skill_airtable_crm_v1' (skill) providing skills: ['airtable_crm', 'crm_management', 'database_query', 'records']
+2026-10-25 15:48:41,705 | INFO     | src.registry.hermes.hermes_loader | Discovered Hermes skill 'airtable_crm' from airtable_crm.md
+2026-10-25 15:48:41,714 | INFO     | src.registry.tool_registry | Registered tool 'skill_apple_notes_v1' (skill) providing skills: ['apple_notes', 'knowledge_base', 'markdown_notes', 'note_taking']
+2026-10-25 15:48:41,714 | INFO     | src.registry.hermes.hermes_loader | Discovered Hermes skill 'apple_notes' from apple_notes.md
+2026-10-25 15:48:41,716 | INFO     | src.registry.tool_registry | Registered tool 'skill_apple_reminders_v1' (skill) providing skills: ['apple_reminders', 'deadline_tracking', 'reminder_alerts', 'task_scheduling']
+2026-10-25 15:48:41,716 | INFO     | src.registry.hermes.hermes_loader | Discovered Hermes skill 'apple_reminders' from apple_reminders.md
+2026-10-25 15:48:41,731 | INFO     | src.registry.tool_registry | Registered tool 'skill_architecture_diagram_v1' (skill) providing skills: ['architecture_diagram', 'cloud_architecture', 'diagram', 'svg']
+2026-10-25 15:48:41,731 | INFO     | src.registry.hermes.hermes_loader | Discovered Hermes skill 'architecture_diagram' from architecture_diagram.md
+2026-10-25 15:48:41,750 | INFO     | src.registry.tool_registry | Registered tool 'skill_arxiv_research_v1' (skill) providing skills: ['arxiv_research', 'literature_review', 'ml_research', 'paper_search']
+2026-10-25 15:48:41,750 | INFO     | src.registry.hermes.hermes_loader | Discovered Hermes skill 'arxiv_research' from arxiv_research.md
+2026-10-25 15:48:41,761 | INFO     | src.registry.tool_registry | Registered tool 'skill_ascii_art_v1' (skill) providing skills: ['ansi_banners', 'ascii_art', 'cli_typography', 'terminal_graphics']
+2026-10-25 15:48:41,761 | INFO     | src.registry.hermes.hermes_loader | Discovered Hermes skill 'ascii_art' from ascii_art.md
+2026-10-25 15:48:41,776 | INFO     | src.registry.tool_registry | Registered tool 'skill_claude_code_v1' (skill) providing skills: ['claude_code', 'codebase_search', 'pair_programming', 'test_driven_dev']
+2026-10-25 15:48:41,776 | INFO     | src.registry.hermes.hermes_loader | Discovered Hermes skill 'claude_code' from claude_code.md
+2026-10-25 15:48:41,788 | INFO     | src.registry.tool_registry | Registered tool 'skill_computer_use_v1' (skill) providing skills: ['computer_use', 'desktop_control', 'gui_automation', 'screenshot_grounding']
+2026-10-25 15:48:41,788 | INFO     | src.registry.hermes.hermes_loader | Discovered Hermes skill 'computer_use' from computer_use.md
+2026-10-25 15:48:41,798 | INFO     | src.registry.tool_registry | Registered tool 'skill_database_optimizer_v1' (skill) providing skills: ['database_optimizer', 'explain_analyze', 'index_optimization', 'sql_tuning']
+2026-10-25 15:48:41,798 | INFO     | src.registry.hermes.hermes_loader | Discovered Hermes skill 'database_optimizer' from database_optimizer.md
+2026-10-25 15:48:41,807 | INFO     | src.registry.tool_registry | Registered tool 'skill_discord_notifier_v1' (skill) providing skills: ['chat_notifications', 'discord_notifier', 'embed_builder', 'webhook_alerts']
+2026-10-25 15:48:41,807 | INFO     | src.registry.hermes.hermes_loader | Discovered Hermes skill 'discord_notifier' from discord_notifier.md
+2026-10-25 15:48:41,817 | INFO     | src.registry.tool_registry | Registered tool 'skill_docker_ops_v1' (skill) providing skills: ['container_management', 'devops_troubleshooting', 'docker_compose', 'docker_ops']
+2026-10-25 15:48:41,817 | INFO     | src.registry.hermes.hermes_loader | Discovered Hermes skill 'docker_ops' from docker_ops.md
+2026-10-25 15:48:41,829 | INFO     | src.registry.tool_registry | Registered tool 'skill_docx_v1' (skill) providing skills: ['docx']
+2026-10-25 15:48:41,829 | INFO     | src.registry.hermes.hermes_loader | Discovered Hermes skill 'docx' from docx.md
+2026-10-25 15:48:41,831 | INFO     | src.registry.tool_registry | Registered tool 'skill_drug_discovery_v1' (skill) providing skills: ['bioactivity', 'cheminformatics', 'drug_discovery', 'molecular_biology', 'smiles']
+2026-10-25 15:48:41,831 | INFO     | src.registry.hermes.hermes_loader | Discovered Hermes skill 'drug_discovery' from drug_discovery.md
+2026-10-25 15:48:41,846 | INFO     | src.registry.tool_registry | Registered tool 'skill_fitness_nutrition_v1' (skill) providing skills: ['fitness_nutrition', 'health_science', 'macronutrient_planning', 'metabolic_calculation']
+2026-10-25 15:48:41,846 | INFO     | src.registry.hermes.hermes_loader | Discovered Hermes skill 'fitness_nutrition' from fitness_nutrition.md
+2026-10-25 15:48:41,856 | INFO     | src.registry.tool_registry | Registered tool 'skill_github_workflow_v1' (skill) providing skills: ['ci_cd_debug', 'github_workflow', 'pull_requests', 'release_notes']
+2026-10-25 15:48:41,856 | INFO     | src.registry.hermes.hermes_loader | Discovered Hermes skill 'github_workflow' from github_workflow.md
+2026-10-25 15:48:41,871 | INFO     | src.registry.tool_registry | Registered tool 'skill_gitnexus_explorer_v1' (skill) providing skills: ['architecture_recovery', 'ast', 'code_analysis', 'dependency_graph', 'gitnexus_explorer']
+2026-10-25 15:48:41,871 | INFO     | src.registry.hermes.hermes_loader | Discovered Hermes skill 'gitnexus_explorer' from gitnexus_explorer.md
+2026-10-25 15:48:41,880 | INFO     | src.registry.tool_registry | Registered tool 'skill_here_now_v1' (skill) providing skills: ['environmental_briefing', 'here_now', 'local_intelligence', 'timezone', 'weather']
+2026-10-25 15:48:41,880 | INFO     | src.registry.hermes.hermes_loader | Discovered Hermes skill 'here_now' from here_now.md
+2026-10-25 15:48:41,892 | INFO     | src.registry.tool_registry | Registered tool 'skill_home_assistant_v1' (skill) providing skills: ['home_assistant', 'iot_automation', 'rest_api', 'smart_home']
+2026-10-25 15:48:41,893 | INFO     | src.registry.hermes.hermes_loader | Discovered Hermes skill 'home_assistant' from home_assistant.md
+2026-10-25 15:48:41,905 | INFO     | src.registry.tool_registry | Registered tool 'skill_impeccable_design_v1' (skill) providing skills: ['accessibility', 'design_audit', 'impeccable_design', 'ui_ux', 'visual_hierarchy', 'web_styling']
+2026-10-25 15:48:41,905 | INFO     | src.registry.hermes.hermes_loader | Discovered Hermes skill 'impeccable_design' from impeccable_design.md
+2026-10-25 15:48:41,907 | INFO     | src.registry.tool_registry | Registered tool 'skill_instructor_mlops_v1' (skill) providing skills: ['instructor_mlops', 'json_extraction', 'pydantic', 'schema_validation', 'structured_output']
+2026-10-25 15:48:41,907 | INFO     | src.registry.hermes.hermes_loader | Discovered Hermes skill 'instructor_mlops' from instructor_mlops.md
+2026-10-25 15:48:41,917 | INFO     | src.registry.tool_registry | Registered tool 'skill_oss_forensics_v1' (skill) providing skills: ['audit', 'malware_analysis', 'oss_forensics', 'reverse_engineering', 'supply_chain_security']
+2026-10-25 15:48:41,917 | INFO     | src.registry.hermes.hermes_loader | Discovered Hermes skill 'oss_forensics' from oss_forensics.md
+2026-10-25 15:48:41,931 | INFO     | src.registry.tool_registry | Registered tool 'skill_simplify_code_v1' (skill) providing skills: ['clean_code', 'code_refactoring', 'complexity_reduction', 'simplify_code']
+2026-10-25 15:48:41,931 | INFO     | src.registry.hermes.hermes_loader | Discovered Hermes skill 'simplify_code' from simplify_code.md
+2026-10-25 15:48:41,944 | INFO     | src.registry.tool_registry | Registered tool 'skill_stripe_payments_v1' (skill) providing skills: ['billing_reconcile', 'invoice_check', 'stripe_payments', 'subscription_audit']
+2026-10-25 15:48:41,944 | INFO     | src.registry.hermes.hermes_loader | Discovered Hermes skill 'stripe_payments' from stripe_payments.md
+2026-10-25 15:48:41,955 | INFO     | src.registry.tool_registry | Registered tool 'skill_subagent_delegation_v1' (skill) providing skills: ['multi_agent_orchestration', 'parallel_execution', 'subagent_delegation', 'task_decomposition']
+2026-10-25 15:48:41,955 | INFO     | src.registry.hermes.hermes_loader | Discovered Hermes skill 'subagent_delegation' from subagent_delegation.md
+2026-10-25 15:48:41,955 | INFO     | src.registry.auto_discover | Discovered 24 Hermes skills
+2026-10-25 15:48:41,955 | INFO     | src.registry.auto_discover | Total auto-discovery complete: 52 tools registered, 0 errors
+2026-10-25 15:48:41,955 | INFO     | src.api.main | Tool Registry: ToolRegistry(tools=52, skills=202)
+2026-10-25 15:48:41,956 | INFO     | src.connectors.manager | Initialized Security Connector [Elasticsearch SIEM] (siem) - Status: simulated
+2026-10-25 15:48:41,956 | INFO     | src.connectors.manager | Initialized Security Connector [CrowdStrike Falcon EDR] (edr) - Status: simulated
+2026-10-25 15:48:41,957 | INFO     | src.connectors.manager | Initialized Security Connector [Splunk Enterprise SIEM] (siem) - Status: simulated
+2026-10-25 15:48:41,957 | INFO     | src.connectors.manager | Initialized Security Connector [Microsoft Sentinel] (siem) - Status: simulated
+2026-10-25 15:48:41,957 | INFO     | src.connectors.manager | Initialized Security Connector [Microsoft Defender for Endpoint] (edr) - Status: simulated
+2026-10-25 15:48:41,957 | INFO     | src.connectors.manager | Initialized Security Connector [SentinelOne Singularity] (edr) - Status: simulated
+2026-10-25 15:48:41,957 | INFO     | src.connectors.manager | Initialized Security Connector [Palo Alto NGFW / Panorama] (firewall) - Status: simulated
+2026-10-25 15:48:41,957 | INFO     | src.connectors.manager | Initialized Security Connector [Fortinet FortiGate Firewall] (firewall) - Status: simulated
+2026-10-25 15:48:41,957 | INFO     | src.connectors.manager | Initialized Security Connector [Okta Identity Cloud] (iam) - Status: simulated
+2026-10-25 15:48:41,957 | INFO     | src.connectors.manager | Initialized Security Connector [Microsoft Entra ID] (iam) - Status: simulated
+2026-10-25 15:48:41,957 | INFO     | src.connectors.manager | Initialized Security Connector [VirusTotal v3 CTI] (threat_intel) - Status: simulated
+2026-10-25 15:48:41,957 | INFO     | src.connectors.manager | Initialized Security Connector [AbuseIPDB Threat Intel] (threat_intel) - Status: simulated
+2026-10-25 15:48:41,957 | INFO     | src.connectors.manager | Initialized Security Connector [TheHive SOAR & Case Management] (itsm) - Status: simulated
+2026-10-25 15:48:41,957 | INFO     | src.registry.tool_registry | Registered tool 'elastic_search_logs' (connector) providing skills: ['siem_search', 'log_query', 'telemetry_investigation']
+2026-10-25 15:48:41,957 | INFO     | src.registry.tool_registry | Registered tool 'elastic_lookup_ioc' (connector) providing skills: ['ioc_lookup', 'threat_hunting', 'telemetry_investigation']
+2026-10-25 15:48:41,957 | INFO     | src.registry.tool_registry | Registered tool 'crowdstrike_get_device' (connector) providing skills: ['edr_telemetry', 'host_investigation', 'endpoint_lookup']
+2026-10-25 15:48:41,957 | INFO     | src.registry.tool_registry | Registered tool 'crowdstrike_contain_host' (connector) providing skills: ['host_containment', 'endpoint_isolation', 'incident_mitigation']
+2026-10-25 15:48:41,957 | INFO     | src.registry.tool_registry | Registered tool 'crowdstrike_lift_containment' (connector) providing skills: ['host_remediation', 'lift_isolation']
+2026-10-25 15:48:41,957 | INFO     | src.registry.tool_registry | Registered tool 'splunk_search_spl' (connector) providing skills: ['siem_search', 'splunk_query', 'telemetry_investigation']
+2026-10-25 15:48:41,957 | INFO     | src.registry.tool_registry | Registered tool 'sentinel_query_kql' (connector) providing skills: ['siem_search', 'kql_query', 'cloud_threat_hunting']
+2026-10-25 15:48:41,957 | INFO     | src.registry.tool_registry | Registered tool 'defender_get_machine' (connector) providing skills: ['edr_telemetry', 'host_investigation', 'endpoint_lookup']
+2026-10-25 15:48:41,957 | INFO     | src.registry.tool_registry | Registered tool 'defender_isolate_machine' (connector) providing skills: ['host_containment', 'endpoint_isolation', 'incident_mitigation']
+2026-10-25 15:48:41,957 | INFO     | src.registry.tool_registry | Registered tool 'sentinelone_find_agent' (connector) providing skills: ['edr_telemetry', 'host_investigation', 'endpoint_lookup']
+2026-10-25 15:48:41,957 | INFO     | src.registry.tool_registry | Registered tool 'sentinelone_quarantine_agent' (connector) providing skills: ['host_containment', 'endpoint_isolation', 'incident_mitigation']
+2026-10-25 15:48:41,957 | INFO     | src.registry.tool_registry | Registered tool 'paloalto_register_ip_dag' (connector) providing skills: ['firewall_blocking', 'ip_containment', 'perimeter_defense']
+2026-10-25 15:48:41,957 | INFO     | src.registry.tool_registry | Registered tool 'paloalto_unregister_ip_dag' (connector) providing skills: ['firewall_remediation', 'unblock_ip']
+2026-10-25 15:48:41,957 | INFO     | src.registry.tool_registry | Registered tool 'fortigate_ban_ip' (connector) providing skills: ['firewall_blocking', 'ip_containment', 'perimeter_defense']
+2026-10-25 15:48:41,957 | INFO     | src.registry.tool_registry | Registered tool 'fortigate_unban_ip' (connector) providing skills: ['firewall_remediation', 'unblock_ip']
+2026-10-25 15:48:41,957 | INFO     | src.registry.tool_registry | Registered tool 'okta_get_user' (connector) providing skills: ['identity_lookup', 'iam_investigation', 'user_context']
+2026-10-25 15:48:41,957 | INFO     | src.registry.tool_registry | Registered tool 'okta_clear_user_sessions' (connector) providing skills: ['session_revocation', 'identity_containment', 'credential_invalidation']
+2026-10-25 15:48:41,958 | INFO     | src.registry.tool_registry | Registered tool 'okta_suspend_user' (connector) providing skills: ['account_suspension', 'identity_containment']
+2026-10-25 15:48:41,958 | INFO     | src.registry.tool_registry | Registered tool 'entraid_get_user' (connector) providing skills: ['identity_lookup', 'iam_investigation', 'user_context']
+2026-10-25 15:48:41,958 | INFO     | src.registry.tool_registry | Registered tool 'entraid_revoke_sessions' (connector) providing skills: ['session_revocation', 'identity_containment']
+2026-10-25 15:48:41,958 | INFO     | src.registry.tool_registry | Registered tool 'entraid_disable_account' (connector) providing skills: ['account_suspension', 'identity_containment']
+2026-10-25 15:48:41,958 | INFO     | src.registry.tool_registry | Registered tool 'virustotal_lookup_ip' (connector) providing skills: ['threat_intel', 'ioc_enrichment', 'ip_reputation']
+2026-10-25 15:48:41,958 | INFO     | src.registry.tool_registry | Registered tool 'virustotal_lookup_hash' (connector) providing skills: ['threat_intel', 'ioc_enrichment', 'malware_analysis']
+2026-10-25 15:48:41,958 | INFO     | src.registry.tool_registry | Registered tool 'abuseipdb_check_ip' (connector) providing skills: ['threat_intel', 'ioc_enrichment', 'ip_reputation']
+2026-10-25 15:48:41,958 | INFO     | src.registry.tool_registry | Registered tool 'thehive_create_case' (connector) providing skills: ['case_management', 'soar_incident', 'incident_ticketing']
+2026-10-25 15:48:41,958 | INFO     | src.registry.tool_registry | Registered tool 'thehive_add_observable' (connector) providing skills: ['case_management', 'soar_incident', 'attach_ioc']
+2026-10-25 15:48:41,958 | INFO     | src.connectors.manager | Registered 26 tools from enterprise security connectors
+2026-10-25 15:48:41,959 | INFO     | src.api.main | Enterprise Security Connectors initialized: 13 active
+2026-10-25 15:48:41,968 | INFO     | src.api.main | Connected to Temporal at localhost:7234
+2026-10-25 15:48:41,968 | INFO     | src.api.main | Connected to Temporal at localhost:7234 (activities handled by worker_runner)
+2026-10-25 15:48:41,970 | INFO     | src.orchestrator.cron_scheduler | Loaded 2 scheduled jobs from D:\projects\aiagent\data\schedules.json
+2026-10-25 15:48:41,970 | INFO     | src.orchestrator.cron_scheduler | CronScheduler background service started
+2026-10-25 15:48:41,971 | INFO     | src.api.main | UAOS API ready at http://0.0.0.0:8001
+2026-10-25 15:48:42,685 | INFO     | mcp.server.streamable_http_manager | StreamableHTTP session manager started
+2026-10-25 15:48:48,051 | INFO     | mcp.server.streamable_http | Terminating session: None
+2026-10-25 15:48:48,058 | INFO     | mcp.server.streamable_http | Terminating session: None
+2026-10-25 15:48:48,065 | INFO     | mcp.server.lowlevel.server | Processing request of type ListToolsRequest
+2026-10-25 15:48:48,069 | INFO     | mcp.server.streamable_http | Terminating session: None
+2026-10-25 15:48:51,458 | INFO     | mcp.server.streamable_http | Terminating session: None
+2026-10-25 15:48:51,465 | INFO     | mcp.server.streamable_http | Terminating session: None
+2026-10-25 15:48:51,473 | INFO     | mcp.server.lowlevel.server | Processing request of type ListToolsRequest
+2026-10-25 15:48:51,480 | INFO     | mcp.server.streamable_http | Terminating session: None
+2026-10-25 15:48:52,369 | INFO     | mcp.server.streamable_http | Terminating session: None
+2026-10-25 15:48:52,376 | INFO     | mcp.server.streamable_http | Terminating session: None
+2026-10-25 15:48:52,383 | INFO     | mcp.server.lowlevel.server | Processing request of type ListToolsRequest
+2026-10-25 15:48:52,387 | INFO     | mcp.server.streamable_http | Terminating session: None
+2026-10-25 15:48:52,475 | INFO     | mcp.server.streamable_http | Terminating session: None
+2026-10-25 15:48:52,481 | INFO     | mcp.server.streamable_http | Terminating session: None
+2026-10-25 15:48:52,486 | INFO     | mcp.server.lowlevel.server | Processing request of type ListToolsRequest
+2026-10-25 15:48:52,489 | INFO     | mcp.server.streamable_http | Terminating session: None
+2026-10-25 15:48:53,784 | INFO     | mcp.server.streamable_http | Terminating session: None
+2026-10-25 15:48:53,791 | INFO     | mcp.server.streamable_http | Terminating session: None
+2026-10-25 15:48:53,798 | INFO     | mcp.server.lowlevel.server | Processing request of type ListToolsRequest
+2026-10-25 15:48:53,802 | INFO     | mcp.server.streamable_http | Terminating session: None
+2026-10-25 15:48:54,786 | INFO     | mcp.server.streamable_http | Terminating session: None
+2026-10-25 15:48:54,792 | INFO     | mcp.server.streamable_http | Terminating session: None
+2026-10-25 15:48:54,798 | INFO     | mcp.server.lowlevel.server | Processing request of type ListToolsRequest
+2026-10-25 15:48:54,801 | INFO     | mcp.server.streamable_http | Terminating session: None
+2026-10-25 15:48:55,045 | INFO     | mcp.server.streamable_http | Terminating session: None
+2026-10-25 15:48:55,046 | INFO     | mcp.server.streamable_http | Terminating session: None
+2026-10-25 15:48:55,046 | INFO     | mcp.server.streamable_http | Terminating session: None
+2026-10-25 15:48:55,057 | INFO     | mcp.server.streamable_http | Terminating session: None
+2026-10-25 15:48:55,064 | INFO     | mcp.server.streamable_http | Terminating session: None
+2026-10-25 15:48:55,064 | INFO     | mcp.server.streamable_http | Terminating session: None
+2026-10-25 15:48:55,071 | INFO     | mcp.server.lowlevel.server | Processing request of type ListToolsRequest
+2026-10-25 15:48:55,081 | INFO     | mcp.server.streamable_http | Terminating session: None
+2026-10-25 15:48:55,081 | INFO     | mcp.server.lowlevel.server | Processing request of type ListToolsRequest
+2026-10-25 15:48:55,098 | INFO     | mcp.server.lowlevel.server | Processing request of type ListToolsRequest
+2026-10-25 15:48:55,114 | INFO     | mcp.server.streamable_http | Terminating session: None
+2026-10-25 15:48:55,114 | INFO     | mcp.server.streamable_http | Terminating session: None
+2026-10-25 15:48:55,171 | INFO     | mcp.server.streamable_http | Terminating session: None
+2026-10-25 15:48:55,177 | INFO     | mcp.server.streamable_http | Terminating session: None
+2026-10-25 15:48:55,183 | INFO     | mcp.server.lowlevel.server | Processing request of type ListToolsRequest
+2026-10-25 15:48:55,187 | INFO     | mcp.server.streamable_http | Terminating session: None
+2026-10-25 15:48:56,411 | INFO     | mcp.server.streamable_http | Terminating session: None
+2026-10-25 15:48:56,412 | INFO     | mcp.server.streamable_http | Terminating session: None
+2026-10-25 15:48:56,421 | INFO     | mcp.server.streamable_http | Terminating session: None
+2026-10-25 15:48:56,423 | INFO     | mcp.server.streamable_http | Terminating session: None
+2026-10-25 15:48:56,428 | INFO     | mcp.server.lowlevel.server | Processing request of type ListToolsRequest
+2026-10-25 15:48:56,433 | INFO     | mcp.server.streamable_http | Terminating session: None
+2026-10-25 15:48:56,433 | INFO     | mcp.server.lowlevel.server | Processing request of type ListToolsRequest
+2026-10-25 15:48:56,450 | INFO     | mcp.server.streamable_http | Terminating session: None
+2026-10-25 15:48:57,212 | INFO     | mcp.server.streamable_http | Terminating session: None
+2026-10-25 15:48:57,218 | INFO     | mcp.server.streamable_http | Terminating session: None
+2026-10-25 15:48:57,225 | INFO     | mcp.server.lowlevel.server | Processing request of type ListToolsRequest
+2026-10-25 15:48:57,230 | INFO     | mcp.server.streamable_http | Terminating session: None
+2026-10-25 15:48:57,489 | INFO     | mcp.server.streamable_http | Terminating session: None
+2026-10-25 15:48:57,497 | INFO     | mcp.server.streamable_http | Terminating session: None
+2026-10-25 15:48:57,504 | INFO     | mcp.server.lowlevel.server | Processing request of type ListToolsRequest
+2026-10-25 15:48:57,508 | INFO     | mcp.server.streamable_http | Terminating session: None
+2026-10-25 15:48:57,994 | INFO     | mcp.server.streamable_http | Terminating session: None
+2026-10-25 15:48:58,001 | INFO     | mcp.server.streamable_http | Terminating session: None
+2026-10-25 15:48:58,009 | INFO     | mcp.server.lowlevel.server | Processing request of type ListToolsRequest
+2026-10-25 15:48:58,012 | INFO     | mcp.server.streamable_http | Terminating session: None
+2026-10-25 15:48:58,535 | INFO     | mcp.server.streamable_http | Terminating session: None
+2026-10-25 15:48:58,540 | INFO     | mcp.server.streamable_http | Terminating session: None
+2026-10-25 15:48:58,546 | INFO     | mcp.server.lowlevel.server | Processing request of type ListToolsRequest
+2026-10-25 15:48:58,549 | INFO     | mcp.server.streamable_http | Terminating session: None
+2026-10-25 15:48:59,493 | INFO     | mcp.server.streamable_http | Terminating session: None
+2026-10-25 15:48:59,500 | INFO     | mcp.server.streamable_http | Terminating session: None
+2026-10-25 15:48:59,508 | INFO     | mcp.server.lowlevel.server | Processing request of type ListToolsRequest
+2026-10-25 15:48:59,513 | INFO     | mcp.server.streamable_http | Terminating session: None
+2026-10-25 15:48:59,816 | INFO     | mcp.server.streamable_http | Terminating session: None
+2026-10-25 15:48:59,821 | INFO     | mcp.server.streamable_http | Terminating session: None
+2026-10-25 15:48:59,828 | INFO     | mcp.server.lowlevel.server | Processing request of type ListToolsRequest
+2026-10-25 15:48:59,832 | INFO     | mcp.server.streamable_http | Terminating session: None
+2026-10-25 15:49:00,360 | INFO     | mcp.server.streamable_http | Terminating session: None
+2026-10-25 15:49:00,366 | INFO     | mcp.server.streamable_http | Terminating session: None
+2026-10-25 15:49:00,372 | INFO     | mcp.server.lowlevel.server | Processing request of type ListToolsRequest
+2026-10-25 15:49:00,376 | INFO     | mcp.server.streamable_http | Terminating session: None
+2026-10-25 15:49:00,617 | INFO     | mcp.server.streamable_http | Terminating session: None
+2026-10-25 15:49:00,623 | INFO     | mcp.server.streamable_http | Terminating session: None
+2026-10-25 15:49:00,631 | INFO     | mcp.server.lowlevel.server | Processing request of type ListToolsRequest
+2026-10-25 15:49:00,635 | INFO     | mcp.server.streamable_http | Terminating session: None
+2026-10-25 15:49:02,408 | INFO     | mcp.server.streamable_http | Terminating session: None
+2026-10-25 15:49:02,415 | INFO     | mcp.server.streamable_http | Terminating session: None
+2026-10-25 15:49:02,421 | INFO     | mcp.server.lowlevel.server | Processing request of type ListToolsRequest
+2026-10-25 15:49:02,425 | INFO     | mcp.server.streamable_http | Terminating session: None
+2026-10-25 15:49:19,411 | INFO     | mcp.server.streamable_http | Terminating session: None
+2026-10-25 15:49:19,416 | INFO     | mcp.server.streamable_http | Terminating session: None
+2026-10-25 15:49:19,423 | INFO     | mcp.server.lowlevel.server | Processing request of type ListToolsRequest
+2026-10-25 15:49:19,430 | INFO     | mcp.server.streamable_http | Terminating session: None
+2026-10-25 15:49:20,093 | INFO     | mcp.server.streamable_http | Terminating session: None
+2026-10-25 15:49:20,102 | INFO     | mcp.server.streamable_http | Terminating session: None
+2026-10-25 15:49:20,110 | INFO     | mcp.server.lowlevel.server | Processing request of type ListToolsRequest
+2026-10-25 15:49:20,126 | INFO     | mcp.server.streamable_http | Terminating session: None
+2026-10-25 15:49:20,785 | INFO     | mcp.server.streamable_http | Terminating session: None
+2026-10-25 15:49:20,791 | INFO     | mcp.server.streamable_http | Terminating session: None
+2026-10-25 15:49:20,796 | INFO     | mcp.server.lowlevel.server | Processing request of type ListToolsRequest
+2026-10-25 15:49:20,800 | INFO     | mcp.server.streamable_http | Terminating session: None
+2026-10-25 15:49:21,569 | INFO     | mcp.server.streamable_http | Terminating session: None
+2026-10-25 15:49:21,575 | INFO     | mcp.server.streamable_http | Terminating session: None
+2026-10-25 15:49:21,584 | INFO     | mcp.server.lowlevel.server | Processing request of type ListToolsRequest
+2026-10-25 15:49:21,592 | INFO     | mcp.server.streamable_http | Terminating session: None
+2026-10-25 15:49:22,447 | INFO     | mcp.server.streamable_http | Terminating session: None
+2026-10-25 15:49:22,451 | INFO     | mcp.server.streamable_http | Terminating session: None
+2026-10-25 15:49:22,461 | INFO     | mcp.server.lowlevel.server | Processing request of type ListToolsRequest
+2026-10-25 15:49:22,469 | INFO     | mcp.server.streamable_http | Terminating session: None
+2026-10-25 15:49:24,022 | INFO     | mcp.server.streamable_http | Terminating session: None
+2026-10-25 15:49:24,030 | INFO     | mcp.server.streamable_http | Terminating session: None
+2026-10-25 15:49:24,036 | INFO     | mcp.server.lowlevel.server | Processing request of type ListToolsRequest
+2026-10-25 15:49:24,042 | INFO     | mcp.server.streamable_http | Terminating session: None
+2026-10-25 15:49:24,734 | INFO     | mcp.server.streamable_http | Terminating session: None
+2026-10-25 15:49:24,740 | INFO     | mcp.server.streamable_http | Terminating session: None
+2026-10-25 15:49:24,745 | INFO     | mcp.server.lowlevel.server | Processing request of type ListToolsRequest
+2026-10-25 15:49:24,750 | INFO     | mcp.server.streamable_http | Terminating session: None
+2026-10-25 15:49:25,691 | INFO     | mcp.server.streamable_http | Terminating session: None
+2026-10-25 15:49:25,698 | INFO     | mcp.server.streamable_http | Terminating session: None
+2026-10-25 15:49:25,708 | INFO     | mcp.server.lowlevel.server | Processing request of type ListToolsRequest
+2026-10-25 15:49:25,713 | INFO     | mcp.server.streamable_http | Terminating session: None
+2026-10-25 15:49:26,392 | INFO     | mcp.server.streamable_http | Terminating session: None
+2026-10-25 15:49:26,398 | INFO     | mcp.server.streamable_http | Terminating session: None
+2026-10-25 15:49:26,408 | INFO     | mcp.server.lowlevel.server | Processing request of type ListToolsRequest
+2026-10-25 15:49:26,415 | INFO     | mcp.server.streamable_http | Terminating session: None
+2026-10-25 15:49:27,224 | INFO     | mcp.server.streamable_http | Terminating session: None
+2026-10-25 15:49:27,235 | INFO     | mcp.server.streamable_http | Terminating session: None
+2026-10-25 15:49:27,241 | INFO     | mcp.server.lowlevel.server | Processing request of type ListToolsRequest
+2026-10-25 15:49:27,247 | INFO     | mcp.server.streamable_http | Terminating session: None
+2026-10-25 15:49:28,079 | INFO     | mcp.server.streamable_http | Terminating session: None
+2026-10-25 15:49:28,085 | INFO     | mcp.server.streamable_http | Terminating session: None
+2026-10-25 15:49:28,090 | INFO     | mcp.server.lowlevel.server | Processing request of type ListToolsRequest
+2026-10-25 15:49:28,095 | INFO     | mcp.server.streamable_http | Terminating session: None
+2026-10-25 15:49:28,596 | INFO     | mcp.server.streamable_http | Terminating session: None
+2026-10-25 15:49:28,599 | INFO     | mcp.server.streamable_http | Terminating session: None
+2026-10-25 15:49:28,607 | INFO     | mcp.server.lowlevel.server | Processing request of type ListToolsRequest
+2026-10-25 15:49:28,615 | INFO     | mcp.server.streamable_http | Terminating session: None
+2026-10-25 15:49:29,197 | INFO     | mcp.server.streamable_http | Terminating session: None
+2026-10-25 15:49:29,203 | INFO     | mcp.server.streamable_http | Terminating session: None
+2026-10-25 15:49:29,211 | INFO     | mcp.server.lowlevel.server | Processing request of type ListToolsRequest
+2026-10-25 15:49:29,217 | INFO     | mcp.server.streamable_http | Terminating session: None
+2026-10-25 15:49:29,931 | INFO     | mcp.server.streamable_http | Terminating session: None
+2026-10-25 15:49:29,939 | INFO     | mcp.server.streamable_http | Terminating session: None
+2026-10-25 15:49:29,945 | INFO     | mcp.server.lowlevel.server | Processing request of type ListToolsRequest
+2026-10-25 15:49:29,948 | INFO     | mcp.server.streamable_http | Terminating session: None
+2026-10-25 15:49:30,527 | INFO     | mcp.server.streamable_http | Terminating session: None
+2026-10-25 15:49:30,533 | INFO     | mcp.server.streamable_http | Terminating session: None
+2026-10-25 15:49:30,538 | INFO     | mcp.server.lowlevel.server | Processing request of type ListToolsRequest
+2026-10-25 15:49:30,543 | INFO     | mcp.server.streamable_http | Terminating session: None
+2026-10-25 15:49:31,489 | INFO     | mcp.server.streamable_http | Terminating session: None
+2026-10-25 15:49:31,495 | INFO     | mcp.server.streamable_http | Terminating session: None
+2026-10-25 15:49:31,499 | INFO     | mcp.server.lowlevel.server | Processing request of type ListToolsRequest
+2026-10-25 15:49:31,501 | INFO     | mcp.server.streamable_http | Terminating session: None
+2026-10-25 15:49:32,312 | INFO     | mcp.server.streamable_http | Terminating session: None
+2026-10-25 15:49:32,315 | INFO     | mcp.server.streamable_http | Terminating session: None
+2026-10-25 15:49:32,318 | INFO     | mcp.server.lowlevel.server | Processing request of type ListToolsRequest
+2026-10-25 15:49:32,320 | INFO     | mcp.server.streamable_http | Terminating session: None
+2026-10-25 15:49:33,250 | INFO     | mcp.server.streamable_http | Terminating session: None
+2026-10-25 15:49:33,256 | INFO     | mcp.server.streamable_http | Terminating session: None
+2026-10-25 15:49:33,262 | INFO     | mcp.server.lowlevel.server | Processing request of type ListToolsRequest
+2026-10-25 15:49:33,266 | INFO     | mcp.server.streamable_http | Terminating session: None
+2026-10-25 15:49:33,975 | INFO     | mcp.server.streamable_http | Terminating session: None
+2026-10-25 15:49:33,978 | INFO     | mcp.server.streamable_http | Terminating session: None
+2026-10-25 15:49:33,987 | INFO     | mcp.server.lowlevel.server | Processing request of type ListToolsRequest
+2026-10-25 15:49:33,991 | INFO     | mcp.server.streamable_http | Terminating session: None
+2026-10-25 15:49:34,823 | INFO     | mcp.server.streamable_http | Terminating session: None
+2026-10-25 15:49:34,830 | INFO     | mcp.server.streamable_http | Terminating session: None
+2026-10-25 15:49:34,839 | INFO     | mcp.server.lowlevel.server | Processing request of type ListToolsRequest
+2026-10-25 15:49:34,844 | INFO     | mcp.server.streamable_http | Terminating session: None
+2026-10-25 15:49:35,572 | INFO     | mcp.server.streamable_http | Terminating session: None
+2026-10-25 15:49:35,581 | INFO     | mcp.server.streamable_http | Terminating session: None
+2026-10-25 15:49:35,591 | INFO     | mcp.server.lowlevel.server | Processing request of type ListToolsRequest
+2026-10-25 15:49:35,596 | INFO     | mcp.server.streamable_http | Terminating session: None
+2026-10-25 15:49:52,759 | INFO     | mcp.server.streamable_http | Terminating session: None
+2026-10-25 15:49:52,764 | INFO     | mcp.server.streamable_http | Terminating session: None
+2026-10-25 15:49:52,772 | INFO     | mcp.server.lowlevel.server | Processing request of type ListToolsRequest
+2026-10-25 15:49:52,778 | INFO     | mcp.server.streamable_http | Terminating session: None
+2026-10-25 15:49:53,460 | INFO     | mcp.server.streamable_http | Terminating session: None
+2026-10-25 15:49:53,467 | INFO     | mcp.server.streamable_http | Terminating session: None
+2026-10-25 15:49:53,475 | INFO     | mcp.server.lowlevel.server | Processing request of type ListToolsRequest
+2026-10-25 15:49:53,488 | INFO     | mcp.server.streamable_http | Terminating session: None
+2026-10-25 15:49:54,268 | INFO     | mcp.server.streamable_http | Terminating session: None
+2026-10-25 15:49:54,271 | INFO     | mcp.server.streamable_http | Terminating session: None
+2026-10-25 15:49:54,278 | INFO     | mcp.server.lowlevel.server | Processing request of type ListToolsRequest
+2026-10-25 15:49:54,282 | INFO     | mcp.server.streamable_http | Terminating session: None
+2026-10-25 15:49:54,783 | INFO     | mcp.server.streamable_http | Terminating session: None
+2026-10-25 15:49:54,786 | INFO     | mcp.server.streamable_http | Terminating session: None
+2026-10-25 15:49:54,789 | INFO     | mcp.server.lowlevel.server | Processing request of type ListToolsRequest
+2026-10-25 15:49:54,792 | INFO     | mcp.server.streamable_http | Terminating session: None
+2026-10-25 15:49:55,350 | INFO     | mcp.server.streamable_http | Terminating session: None
+2026-10-25 15:49:55,358 | INFO     | mcp.server.streamable_http | Terminating session: None
+2026-10-25 15:49:55,366 | INFO     | mcp.server.lowlevel.server | Processing request of type ListToolsRequest
+2026-10-25 15:49:55,377 | INFO     | mcp.server.streamable_http | Terminating session: None
+2026-10-25 15:49:56,303 | INFO     | mcp.server.streamable_http | Terminating session: None
+2026-10-25 15:49:56,310 | INFO     | mcp.server.streamable_http | Terminating session: None
+2026-10-25 15:49:56,317 | INFO     | mcp.server.lowlevel.server | Processing request of type ListToolsRequest
+2026-10-25 15:49:56,323 | INFO     | mcp.server.streamable_http | Terminating session: None

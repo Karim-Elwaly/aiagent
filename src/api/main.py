@@ -1470,6 +1470,37 @@ async def get_workflow_templates():
             ],
         },
     ]
+    # Dynamically surface stored Fleet Arenas as reusable templates
+    try:
+        from src.fleet.arena_store import FleetArenaStore
+        for item in FleetArenaStore().list_all():
+            if isinstance(item, dict):
+                dag = item.get("dag") or {}
+                tasks = dag.get("tasks") or []
+                arena_id = item.get("arena_id", "")
+                arena_name = item.get("arena_name", arena_id)
+                mission_prompt = item.get("mission_prompt", "")
+                units_len = len(item.get("units") or [])
+            else:
+                dag = item.dag or {}
+                tasks = dag.get("tasks", []) if isinstance(dag, dict) else []
+                arena_id = item.arena_id
+                arena_name = item.arena_name
+                mission_prompt = item.mission_prompt
+                units_len = len(item.units)
+            if dag and tasks:
+                templates.append({
+                    "id": f"fleet-{arena_id}",
+                    "name": f"🏟️ {arena_name}",
+                    "description": f"Reusable Autonomous Fleet ({units_len} units): {mission_prompt[:120]}...",
+                    "goal": mission_prompt,
+                    "tasks": tasks,
+                    "is_fleet_arena": True,
+                    "arena_id": arena_id,
+                })
+    except Exception as exc:
+        logger.debug("Failed to append fleet arena templates: %s", exc)
+    return templates
 
 
 @app.get("/solve/case1")
@@ -3128,6 +3159,45 @@ async def delete_fleet_profile_endpoint(profile_name: str):
     except Exception as e:
         logger.exception("Failed to delete fleet profile: %s", e)
         raise HTTPException(500, f"Delete failed: {e}")
+
+
+class CloneArenaRequest(BaseModel):
+    new_name: str | None = None
+    new_prompt: str | None = None
+
+
+@app.post("/api/fleet/arena/{arena_id}/clone")
+@app.post("/fleet/arena/{arena_id}/clone")
+async def clone_fleet_arena_endpoint(arena_id: str, payload: CloneArenaRequest | None = None):
+    """Clone an existing Fleet Arena into a fresh ready-to-run instance.
+
+    Reuses all pre-existing Hermes profiles with zero gateway restart needed.
+    """
+    from src.fleet.arena import FleetArenaComposer
+
+    composer = FleetArenaComposer(registry=getattr(app.state, "registry", None))
+    new_name = payload.new_name if payload else None
+    new_prompt = payload.new_prompt if payload else None
+    try:
+        manifest = composer.clone_arena(arena_id, new_name=new_name, new_prompt=new_prompt)
+        return manifest.to_serializable()
+    except ValueError as ve:
+        raise HTTPException(404, str(ve))
+    except Exception as e:
+        logger.exception("Failed to clone Fleet Arena '%s': %s", arena_id, e)
+        raise HTTPException(500, f"Clone failed: {e}")
+
+
+@app.delete("/api/fleet/arena/{arena_id}")
+@app.delete("/fleet/arena/{arena_id}")
+async def delete_fleet_arena_endpoint(arena_id: str):
+    """Delete a Fleet Arena manifest from disk."""
+    from src.fleet.arena_store import FleetArenaStore
+
+    store = FleetArenaStore()
+    if not store.delete(arena_id):
+        raise HTTPException(404, f"Fleet Arena '{arena_id}' not found")
+    return {"deleted": True, "arena_id": arena_id}
 
 
 # ── Mount Messaging Gateways ─────────────────────────────────────
