@@ -363,6 +363,153 @@ def verify_ui_and_performance():
     record_result("Backend 1.0s Status Cache TTL & Invalidation", True)
 
 
+# ─── SECTION 6: MISSION-TO-FLEET PLATFORM (PHASES 1-8) ──────────────────────
+
+
+def verify_mission_fleet_architecture():
+    print(f"\n{BOLD}{CYAN}=== 6. Verifying Mission-to-Fleet Architecture (Phases 1-8) ==={RESET}")
+
+    # 6.1 Enterprise Profile Whitelabeling
+    from src.hermes.profiles import generate_dynamic_profile_name, is_dynamic_profile
+    prof = generate_dynamic_profile_name("threat_triage")
+    assert prof.startswith("uaos-aeu-"), f"Expected uaos-aeu- prefix, got {prof}"
+    assert is_dynamic_profile(prof)
+    record_result("Enterprise uaos-aeu-* Profile Whitelabeling", True)
+
+    # 6.2 Environment Discovery Engine
+    from src.brain.environment_scanner import EnvironmentDiscoveryEngine
+    scanner = EnvironmentDiscoveryEngine()
+    env = scanner.scan_environment("Autonomous SOC Incident Triage & Response")
+    assert env.total_connectors_probed >= 10
+    assert 0.0 <= env.semantic_readiness_score <= 1.0
+    record_result("Environment Discovery Engine (13 Connectors & Readiness)", True)
+
+    # 6.3 Pre-Flight Clarification Gate
+    clarif = scanner.synthesize_clarification_manifest("Autonomous SOC Incident Triage & Response", env)
+    assert clarif.proposed_fleet_size >= 1
+    assert clarif.inferred_domain in ["cybersecurity", "general", "software_engineering", "procurement", "supply_chain"]
+    record_result("Pre-Flight Clarification Gate & Domain Inference", True)
+
+    # 6.4 Autonomous Mission-to-Fleet Architect & Competing Fleets
+    from src.fleet.fleet_composer import MissionFleetArchitect
+    architect = MissionFleetArchitect()
+    fleet = architect.expand_mission_to_fleet("Autonomous SOC Incident Triage & Response")
+    assert len(fleet.units) >= 3
+    assert all(u.unit_id.startswith("AEU-T") for u in fleet.units)
+    assert all(u.operational_stage in ["RECON_INGESTION", "DEEP_ANALYSIS", "CROSS_VERIFICATION", "EXECUTION_ACTION", "DELIVERABLE_SYNTHESIS"] for u in fleet.units)
+    record_result("Autonomous Mission-to-Fleet Architect (AEU-TX Expansion)", True)
+
+    competing = architect.synthesize_competing_fleets("Enterprise Supply Chain Bottleneck Audit")
+    assert "fleet_alpha_precision" in competing and "fleet_omega_velocity" in competing
+    record_result("Dual-Track Competing Fleets Synthesis", True)
+
+    # 6.5 Fleet Telemetry Tracker
+    from src.core.telemetry import FleetTelemetryTracker
+    with tempfile.NamedTemporaryFile(suffix=".db", delete=False) as f:
+        tmp_db = f.name
+    try:
+        tracker = FleetTelemetryTracker(db_path=tmp_db)
+        tracker.record_unit_execution("sess-1", "fleet-1", "AEU-T1", "RECON_INGESTION", 100, ["tool1"], "completed", 0.95, False)
+        summary = tracker.get_aggregate_summary()
+        assert summary["total_units_deployed"] == 1
+        record_result("Fleet Telemetry SQLite Tracker & Real-Time KPIs", True)
+    finally:
+        if os.path.exists(tmp_db):
+            os.remove(tmp_db)
+
+    # 6.6 Multi-Channel Deliverable Dispatcher
+    from src.core.output_dispatcher import OutputDispatcher
+    dispatcher = OutputDispatcher()
+    dossier = "# Test Dossier\n**Host**: 192.168.1.10\n**Severity**: HIGH\n**MITRE**: T1003"
+    form_res = dispatcher.compile_to_structured_form(dossier, "Test Mission")
+    assert "fields" in form_res and len(form_res["fields"]) >= 1
+    email_res = dispatcher.compile_to_email_payload(dossier, "Test Mission")
+    assert "styled_html_body" in email_res and "mailto_uri" in email_res and "eml_raw" in email_res
+    record_result("Multi-Channel Deliverable Dispatcher (Form, RFC 822 EML, mailto)", True)
+
+    # 6.7 UI Component Parity in index.html and app.js
+    index_html = (ROOT / "src" / "ui" / "index.html").read_text(encoding="utf-8")
+    app_js = (ROOT / "src" / "ui" / "js" / "app.js").read_text(encoding="utf-8")
+    assert "kpi-telemetry-ribbon" in index_html
+    assert "preflight-card" in index_html
+    assert "deliverable-studio" in index_html or "deliv-dossier" in index_html
+    assert "challenge-step-toggle" in index_html
+    assert "competing-fleets-toggle" in index_html
+    assert "preflight-launch-btn" in index_html
+    record_result("Mission Control UI Components (KPI Ribbon, Clarification, Studio)", True)
+
+
+def verify_fleet_arena():
+    print_header("Autonomous Fleet Arena (Reusable Named Hermes Agent Profiles)")
+
+    # 1. Deterministic naming & profile prefixes
+    from src.hermes.profiles import fleet_profile_name, is_fleet_profile_name, is_dynamic_profile_name
+
+    name = fleet_profile_name("soc-alert", "Telemetry Log Ingestion")
+    assert name == "fleet-soc-alert-telemetry-log-ingest", f"Unexpected name: {name}"
+    assert is_fleet_profile_name(name), "Should be recognized as fleet profile"
+    assert not is_dynamic_profile_name(name), "Fleet profile must NOT be considered dynamic (exempt from LRU eviction)"
+    record_result("Deterministic Fleet Profile Naming & Eviction Exemption", True)
+
+    # 2. Fleet Arena Models & Store
+    from src.core.models import FleetArenaManifest, FleetArenaUnit
+    from src.fleet.arena_store import FleetArenaStore
+
+    with tempfile.TemporaryDirectory() as tmpdir:
+        store = FleetArenaStore(root=Path(tmpdir))
+        unit = FleetArenaUnit(
+            profile_name=name,
+            unit_codename="LOG-INGESTION",
+            task_id="t1",
+            task_name="Telemetry Log Ingestion",
+            scoped_tools=["search_tool"],
+        )
+        manifest = FleetArenaManifest(
+            arena_id="arena-soc-alert-test",
+            arena_name="SOC Alert Test Arena",
+            arena_slug="soc-alert",
+            mission_prompt="Triage SOC alert #4521",
+            units=[unit],
+            dag={"tasks": [{"id": "t1", "name": "Telemetry Log Ingestion", "description": "Ingest logs"}]},
+            status="draft",
+            profiles_to_create=[name],
+            profiles_existing=[],
+        )
+        store.save(manifest)
+        loaded = store.load("arena-soc-alert-test")
+        assert loaded is not None and loaded.status == "draft"
+        assert len(loaded.units) == 1
+        assert loaded.units[0].profile_name == name
+
+        store.update_status("arena-soc-alert-test", "provisioned")
+        assert store.load("arena-soc-alert-test").status == "provisioned"
+        assert len(store.list_all()) == 1
+        record_result("Fleet Arena Manifest Models & Persistent JSON Store", True)
+
+        # 3. Fleet Arena Composer - Attach Files Lifecycle
+        from src.fleet.arena import FleetArenaComposer
+
+        composer = FleetArenaComposer(store=store)
+        composer.attach_files("arena-soc-alert-test", {
+            "t1": [{"filename": "alert.json", "file_path": "/var/log/alert.json", "extracted_text": '{"alert_id": 4521}'}]
+        })
+        enriched = composer.get_enriched_dag("arena-soc-alert-test")
+        assert "alert.json" in enriched["tasks"][0]["description"]
+        record_result("Fleet Arena File Attachment & Context Binding per Phase", True)
+
+        # 4. API Route Registration
+        from src.api.main import app
+
+        routes = [getattr(r, "path", "") for r in app.routes]
+        assert "/api/fleet/arena/plan" in routes or "/fleet/arena/plan" in routes
+        assert "/api/fleet/arenas" in routes or "/fleet/arenas" in routes
+        assert "/api/fleet/arena/{arena_id}/provision" in routes
+        assert "/api/fleet/arena/{arena_id}/attach" in routes
+        assert "/api/fleet/arena/{arena_id}/start" in routes
+        assert "/api/fleet/profiles" in routes
+        record_result("Fleet Arena REST API Endpoints (Plan, Provision, Attach, Start, Profiles)", True)
+
+
 # ─── MAIN RUNNER ─────────────────────────────────────────────────────────────
 
 
@@ -378,6 +525,8 @@ async def main():
         await verify_phase2()
         verify_phase3()
         verify_ui_and_performance()
+        verify_mission_fleet_architecture()
+        verify_fleet_arena()
     except Exception as e:
         print(f"\n{RED}[ERROR] Verification aborted due to unexpected exception:{RESET} {e}")
         import traceback

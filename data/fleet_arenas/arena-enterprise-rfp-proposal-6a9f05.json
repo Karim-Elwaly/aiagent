@@ -1,0 +1,163 @@
+{
+  "arena_id": "arena-enterprise-rfp-proposal-6a9f05",
+  "arena_name": "Enterprise RFP Proposal & Pricing Factory: Ingest uploade... Arena",
+  "arena_slug": "enterprise-rfp-proposal",
+  "mission_prompt": "Enterprise RFP Proposal & Pricing Factory: Ingest uploaded government cloud migration RFP, extract mandatory technical compliance criteria, model multi-tier labor pricing, and generate a winning executive proposal with compliance traceability matrix.",
+  "strategy_profile": "STANDARD",
+  "units": [
+    {
+      "profile_name": "fleet-enterprise-rfp-p-ingest-or-synthesize",
+      "unit_codename": "INGEST-OR-SYNTHESIZE-GOV",
+      "task_id": "t1",
+      "task_name": "Ingest or Synthesize Government Cloud Migration RFP",
+      "operational_stage": "RECON_INGESTION",
+      "scoped_tools": [
+        "execute_python",
+        "triage_security_alert"
+      ],
+      "required_skills": [
+        "data_analysis",
+        "code_execution",
+        "general_reasoning"
+      ],
+      "description": "If an RFP file is provided, load its text; otherwise autonomously generate a realistic government cloud migration RFP document containing typical sections (scope, technical requirements, compliance standards, evaluation criteria). Store the resulting content in a structured format for downstream analysis.",
+      "input_contract": "Requires verified outputs from upstream dependency nodes: [None - Initial Branch Node]",
+      "output_contract": "A plain\u2011text or JSON representation of the RFP with identifiable sections and metadata.",
+      "profile_exists": true,
+      "attached_files": [
+        {
+          "id": "att-811ee9e1",
+          "filename": "RFP.docx",
+          "file_path": "D:\\projects\\aiagent\\data\\uploads\\2d408679\\RFP.docx",
+          "file_type": "docx",
+          "size_bytes": 19867,
+          "extracted_text": "Request for Proposal (RFP)\nDevOps Server License Module Implementation\nMinistry of Education (MOE) \u2013 Roxy Data Center\n1. Introduction\nThe Ministry of Education (MOE) invites qualified\nvendors to submit proposals for the supply, implementation, and support of a DevOps\nServer License Module to be deployed at the Roxy Data Center.\nThe objective of this RFP is to establish a fully\nintegrated DevOps platform that enables end-to-end software lifecycle\nmanagement, including development, automation, security, deployment, and\noperational monitoring under a unified licensing model.\n2. Background\nMOE is undergoing a digital transformation initiative aimed\nat modernizing software development, deployment, and operational processes\nacross its platforms and services.\nTo support this transformation, MOE requires a centralized\nDevOps platform that:\nEliminates fragmented\ntooling\nEnhances collaboration\nacross development and operations teams\nIntegrates security\nwithin the development lifecycle\nProvides scalability to\nsupport national-level systems\nThe solution will be hosted within the Roxy Data Center\nand must align with enterprise-grade standards for performance, security, and\navailability.\n3. Scope of Work\nThe selected vendor shall:\nProvide software\nlicensing for the DevOps Server platform\nDesign and implement the\nsolution within Roxy Data Center\nConfigure all required\nDevOps, DevSecOps, and automation features\nIntegrate with existing\nMOE systems (identity, infrastructure, monitoring)\nProvide documentation,\nknowledge transfer, and training\nDeliver ongoing support\nand maintenance services\n4. Functional Requirements\n4.1 Source Code Management (SCM)\nThe solution shall provide:\nDistributed version\ncontrol repositories\nBranching, merging, and\npull/merge request workflows\nRole-based access\ncontrol for repositories\nWeb-based repository\nmanagement interface\nFull audit trail of code\nchanges\n4.2 CI/CD Pipeline Management\nThe solution shall support:\nDeclarative pipeline\ndefinitions (e.g., YAML-based)\nAutomated build, test,\nand deployment workflows\nEvent-based triggers\n(code commits, schedules, API calls)\nParallel and scalable\npipeline execution\nArtifact generation and\nretention\n4.3 Project and Work Management\nThe platform shall include:\nIssue and ticket\nmanagement system\nAgile boards (Scrum and\nKanban)\nSprint and milestone\ntracking\nCollaboration features\n(comments, mentions, notifications)\n4.4 Package and Artifact Repository\nThe solution shall provide:\nSupport for multiple\npackage formats (containers, binaries, libraries)\nVersion-controlled\nartifact storage\nDependency caching and\nproxy capabilities\n4.5 User and Access Management\nThe platform shall support:\nRole-Based Access\nControl (RBAC)\nIntegration with\nenterprise identity systems (LDAP / Active Directory)\nMulti-project and\nmulti-team isolation\nComprehensive audit\nlogging\n5. Advanced DevOps Requirements\n5.1 DevSecOps Capabilities\nThe solution shall include:\nStatic code security\nanalysis\nDynamic application\nsecurity testing\nOpen-source dependency\nvulnerability scanning\nSecret detection\nmechanisms\nContainer security\nscanning\n5.2 Infrastructure as Code (IaC)\nThe solution shall:\nSupport infrastructure\nprovisioning through code\nEnable version control\nof infrastructure definitions\nIntegrate IaC into CI/CD\npipelines\n5.3 Deployment and Environment Management\nThe platform shall provide:\nMulti-environment\nlifecycle management (Dev, Test, UAT, Production)\nDeployment strategies\nincluding:\nBlue/Green\nCanary\nRolling deployments\nEnvironment-specific\nconfiguration control\n5.4 Monitoring and Observability\nThe solution shall support:\nPipeline monitoring and\nexecution tracking\nIntegration with logging\nand monitoring systems\nAlerting and\nnotification mechanisms\nOperational dashboards\n5.5 API and Integration\nThe platform shall include:\nComprehensive REST APIs\nWebhook support for\nintegrations\nCompatibility with\nthird-party tools and cloud services\n6. Enterprise Requirements\n6.1 Governance and Compliance\nThe solution shall provide:\nPolicy enforcement for\npipelines and deployments\nApproval workflows and\nrelease gates\nCompliance reporting and\naudit trails\n6.2 Analytics and Reporting\nThe platform shall include:\nDevOps performance\nmetrics (e.g., deployment frequency, lead time)\nPipeline efficiency\nanalytics\nTeam productivity\ninsights\n6.3 High Availability and Scalability\nThe solution shall:\nSupport clustered\ndeployment architecture\nEnable horizontal\nscaling of workloads\nProvide load balancing\nand failover mechanisms\n6.4 Backup and Disaster Recovery\nThe platform shall include:\nAutomated backup\ncapabilities\nPoint-in-time recovery\nDisaster recovery\noptions across sites\n6.5 AI-Driven Capabilities (Optional)\nVendors are encouraged to provide:\nAI-assisted code\nanalysis and recommendations\nPredictive pipeline\nfailure detection\nIntelligent automation\nand optimization features\n7. Deployment Requirements\nThe solution must be\ndeployed on-premises at Roxy Data Center\nSupport for private\ncloud or hybrid architecture is preferred\nMust align with MOE\ninfrastructure standards (compute, storage, network)\n8. Security Requirements\nThe solution must:\nEnsure encryption of\ndata in transit and at rest\nSupport Single Sign-On\n(SSO), OAuth, and SAML\nProvide fine-grained\naccess controls\nMaintain detailed audit\nlogs for all activities\n9. Operational Requirements\nWeb-based user interface\nCLI and API access\nAutomated patching and\nupgrade mechanisms\nRole-based dashboards\nand views\n10. Licensing Requirements\nVendors must provide:\nFlexible licensing model\nbased on:\nNumber of users\nCompute/pipeline\ncapacity\nStorage usage\nTiered licensing options\n(Core / Advanced / Enterprise)\nClear definition of\nincluded features per tier\n11. Deliverables\nThe vendor shall deliver:\nFully deployed DevOps\nplatform at Roxy Data Center\nSoftware licenses and\nactivation\nConfiguration and\nintegration with MOE systems\nTechnical documentation\nTraining sessions for\nMOE teams\nSupport and maintenance\nservices",
+          "char_count": 5957,
+          "preview": "Request for Proposal (RFP)\nDevOps Server License Module Implementation\nMinistry of Education (MOE) \u2013 Roxy Data Center\n1. Introduction\nThe Ministry of Education (MOE) invites qualified\nvendors to submit proposals for the supply, implementation, and support of a DevOps\nServer License Module to be deployed at the Roxy Data Center.\nThe objective of this RFP is to establish a fully\nintegrated DevOps platform that enables end-to-end software lifecycle\nmanagement, including development, automation, security, deployment, and\noperational monitoring under a unified licensing model.\n2. Background\nMOE is..."
+        }
+      ]
+    },
+    {
+      "profile_name": "fleet-enterprise-rfp-p-extract-mandatory-te",
+      "unit_codename": "EXTRACT-MANDATORY-TECHNI",
+      "task_id": "t2",
+      "task_name": "Extract Mandatory Technical Compliance Criteria & Model Multi\u2011Tier Labor Pricing",
+      "operational_stage": "RECON_INGESTION",
+      "scoped_tools": [
+        "execute_python",
+        "triage_security_alert"
+      ],
+      "required_skills": [
+        "data_analysis",
+        "general_reasoning"
+      ],
+      "description": "Parse the RFP content to identify all mandatory technical compliance items (e.g., security controls, data residency, audit requirements). For each criterion, map it to a labor pricing tier (e.g., Tier 1: core services, Tier 2: advanced services, Tier 3: specialized consulting) and calculate unit costs based on typical industry rates. Produce a structured table of criteria, associated pricing tiers, and cost estimates.",
+      "input_contract": "Requires verified outputs from upstream dependency nodes: [t1]",
+      "output_contract": "A tabular dataset listing compliance criteria, assigned labor tier, hourly rate, estimated hours, and total cost per criterion.",
+      "profile_exists": true,
+      "attached_files": []
+    },
+    {
+      "profile_name": "fleet-enterprise-rfp-p-generate-executive-p",
+      "unit_codename": "GENERATE-EXECUTIVE-PROPO",
+      "task_id": "t3",
+      "task_name": "Generate Executive Proposal with Compliance Traceability Matrix",
+      "operational_stage": "DELIVERABLE_SYNTHESIS",
+      "scoped_tools": [
+        "compress_security_timeline",
+        "summarize_to_presentation",
+        "triage_security_alert"
+      ],
+      "required_skills": [
+        "summarization",
+        "general_reasoning"
+      ],
+      "description": "Using the RFP text, extracted criteria, and pricing model, craft a polished executive proposal. Include an executive summary, solution overview, detailed compliance traceability matrix linking each RFP requirement to our proposed solution and cost, and a concise pricing breakdown. Format the output as a structured document (e.g., Markdown or JSON) suitable for submission.",
+      "input_contract": "Requires verified outputs from upstream dependency nodes: [t2]",
+      "output_contract": "A complete proposal document with compliance traceability matrix and pricing summary.",
+      "profile_exists": true,
+      "attached_files": []
+    }
+  ],
+  "dag": {
+    "goal": "Create a comprehensive executive proposal for a government cloud migration RFP, including mandatory technical compliance criteria extraction, multi-tier labor pricing modeling, and a compliance traceability matrix.",
+    "reasoning": "The task requires three distinct phases: ingest or synthesize the RFP content, analyze it to extract compliance requirements and build a pricing model, then produce a polished proposal with traceability. Each phase is independent enough for parallel execution after its prerequisites are satisfied, and all operations are read\u2011only or internal data processing, so risk remains low.",
+    "tasks": [
+      {
+        "id": "t1",
+        "name": "Ingest or Synthesize Government Cloud Migration RFP",
+        "description": "If an RFP file is provided, load its text; otherwise autonomously generate a realistic government cloud migration RFP document containing typical sections (scope, technical requirements, compliance standards, evaluation criteria). Store the resulting content in a structured format for downstream analysis.\n\n\n---\n# Attached Files:\n### `RFP.docx`\n- **Path**: `D:\\projects\\aiagent\\data\\uploads\\2d408679\\RFP.docx`\n- **Content**:\n```\nRequest for Proposal (RFP)\nDevOps Server License Module Implementation\nMinistry of Education (MOE) \u2013 Roxy Data Center\n1. Introduction\nThe Ministry of Education (MOE) invites qualified\nvendors to submit proposals for the supply, implementation, and support of a DevOps\nServer License Module to be deployed at the Roxy Data Center.\nThe objective of this RFP is to establish a fully\nintegrated DevOps platform that enables end-to-end software lifecycle\nmanagement, including development, automation, security, deployment, and\noperational monitoring under a unified licensing model.\n2. Background\nMOE is undergoing a digital transformation initiative aimed\nat modernizing software development, deployment, and operational processes\nacross its platforms and services.\nTo support this transformation, MOE requires a centralized\nDevOps platform that:\nEliminates fragmented\ntooling\nEnhances collaboration\nacross development and operations teams\nIntegrates security\nwithin the development lifecycle\nProvides scalability to\nsupport national-level systems\nThe solution will be hosted within the Roxy Data Center\nand must align with enterprise-grade standards for performance, security, and\navailability.\n3. Scope of Work\nThe selected vendor shall:\nProvide software\nlicensing for the DevOps Server platform\nDesign and implement the\nsolution within Roxy Data Center\nConfigure all required\nDevOps, DevSecOps, and automation features\nIntegrate with existing\nMOE systems (identity, infrastructure, monitoring)\nProvide documentation,\nknowledge transfer, and training\nDeliver ongoing support\nand maintenance services\n4. Functional Requirements\n4.1 Source Code Management (SCM)\nThe solution shall provide:\nDistributed version\ncontrol repositories\nBranching, merging, and\npull/merge request workflows\nRole-based access\ncontrol for repositories\nWeb-based repository\nmanagement interface\nFull audit trail of code\nchanges\n4.2 CI/CD Pipeline Management\nThe solution shall support:\nDeclarative pipeline\ndefinitions (e.g., YAML-based)\nAutomated build, test,\nand deployment workflows\nEvent-based triggers\n(code commits, schedules, API calls)\nParallel and scalable\npipeline execution\nArtifact generation and\nretention\n4.3 Project and Work Management\nThe platform shall include:\nIssue and ticket\nmanagement system\nAgile boards (Scrum and\nKanban)\nSprint and milestone\ntracking\nCollaboration features\n(comments, mentions, notifications)\n4.4 Package and Artifact Repository\nThe solution shall provide:\nSupport for multiple\npackage formats (containers, binaries, libraries)\nVersion-controlled\nartifact storage\nDependency caching and\nproxy capabilities\n4.5 User and Access Management\nThe platform shall support:\nRole-Based Access\nControl (RBAC)\nIntegration with\nenterprise identity systems (LDAP / Active Directory)\nMulti-project and\nmulti-team isolation\nComprehensive audit\nlogging\n5. Advanced DevOps Requirements\n5.1 DevSecOps Capabilities\nThe solution shall include:\nStatic code security\nanalysis\nDynamic application\nsecurity testing\nOpen-source dependency\nvulnerability scanning\nSecret detection\nmechanisms\nContainer security\nscanning\n5.2 Infrastructure as Code (IaC)\nThe solution shall:\nSupport infrastructure\nprovisioning through code\nEnable version control\nof infrastructure definitions\nIntegrate IaC into CI/CD\npipelines\n5.3 Deployment and Environment Management\nThe platform shall provide:\nMulti-environment\nlifecycle management (Dev, Test, UAT, Production)\nDeployment strategies\nincluding:\nBlue/Green\nCanary\nRolling deployments\nEnvironment-specific\nconfiguration control\n5.4 Monitoring and Observability\nThe solution shall support:\nPipeline monitoring and\nexecution tracking\nIntegration with logging\nand monitoring systems\nAlerting and\nnotification mechanisms\nOperational dashboards\n5.5 API and Integration\nThe platform shall include:\nComprehensive REST APIs\nWebhook support for\nintegrations\nCompatibility with\nthird-party tools and cloud services\n6. Enterprise Requirements\n6.1 Governance and Compliance\nThe solution shall provide:\nPolicy enforcement for\npipelines and deployments\nApproval workflows and\nrelease gates\nCompliance reporting and\naudit trails\n6.2 Analytics and Reporting\nThe platform shall include:\nDevOps performance\nmetrics (e.g., deployment frequency, lead time)\nPipeline efficiency\nanalytics\nTeam productivity\ninsights\n6.3 High Availability and Scalability\nThe solution shall:\nSupport clustered\ndeployment architecture\nEnable horizontal\nscaling of workloads\nProvide load balancing\nand failover mechanisms\n6.4 Backup and Disaster Recovery\nThe platform shall include:\nAutomated backup\ncapabilities\nPoint-in-time recovery\nDisaster recovery\noptions across sites\n6.5 AI-Driven Capabilities (Optional)\nVendors are encouraged to provide:\nAI-assisted code\nanalysis and recommendations\nPredictive pipeline\nfailure detection\nIntelligent automation\nand optimization features\n7. Deployment Requirements\nThe solution must be\ndeployed on-premises at Roxy Data Center\nSupport for private\ncloud or hybrid architecture is preferred\nMust align with MOE\ninfrastructure standards (compute, storage, network)\n8. Security Requirements\nThe solution must:\nEnsure encryption of\ndata in transit and at rest\nSupport Single Sign-On\n(SSO), OAuth, and SAML\nProvide fine-grained\naccess controls\nMaintain detailed audit\nlogs for all activities\n9. Operational Requirements\nWeb-based user interface\nCLI and API access\nAutomated patching and\nupgrade mechanisms\nRole-based dashboards\nand views\n10. Licensing Requirements\nVendors must provide:\nFlexible licensing model\nbased on:\nNumber of users\nCompute/pipeline\ncapacity\nStorage usage\nTiered licensing options\n(Core / Advanced / Enterprise)\nClear definition of\nincluded features per tier\n11. Deliverables\nThe vendor shall deliver:\nFully deployed DevOps\nplatform at Roxy Data Center\nSoftware licenses and\nactivation\nConfiguration and\nintegration with MOE systems\nTechnical documentation\nTraining sessions for\nMOE teams\nSupport and maintenance\nservices\n```",
+        "required_skills": [
+          "data_analysis",
+          "code_execution",
+          "general_reasoning"
+        ],
+        "expected_output": "A plain\u2011text or JSON representation of the RFP with identifiable sections and metadata.",
+        "dependencies": [],
+        "risk_level": "low",
+        "max_retries": 2,
+        "timeout_seconds": 300,
+        "parameters": {},
+        "agent_id": null,
+        "hermes_profile": "fleet-enterprise-rfp-p-ingest-or-synthesize",
+        "specialist_spec": null,
+        "_hermes_profile": "fleet-enterprise-rfp-p-ingest-or-synthesize"
+      },
+      {
+        "id": "t2",
+        "name": "Extract Mandatory Technical Compliance Criteria & Model Multi\u2011Tier Labor Pricing",
+        "description": "Parse the RFP content to identify all mandatory technical compliance items (e.g., security controls, data residency, audit requirements). For each criterion, map it to a labor pricing tier (e.g., Tier 1: core services, Tier 2: advanced services, Tier 3: specialized consulting) and calculate unit costs based on typical industry rates. Produce a structured table of criteria, associated pricing tiers, and cost estimates.",
+        "required_skills": [
+          "data_analysis",
+          "general_reasoning"
+        ],
+        "expected_output": "A tabular dataset listing compliance criteria, assigned labor tier, hourly rate, estimated hours, and total cost per criterion.",
+        "dependencies": [
+          "t1"
+        ],
+        "risk_level": "low",
+        "max_retries": 2,
+        "timeout_seconds": 300,
+        "parameters": {},
+        "agent_id": null,
+        "hermes_profile": "fleet-enterprise-rfp-p-extract-mandatory-te",
+        "specialist_spec": null,
+        "_hermes_profile": "fleet-enterprise-rfp-p-extract-mandatory-te"
+      },
+      {
+        "id": "t3",
+        "name": "Generate Executive Proposal with Compliance Traceability Matrix",
+        "description": "Using the RFP text, extracted criteria, and pricing model, craft a polished executive proposal. Include an executive summary, solution overview, detailed compliance traceability matrix linking each RFP requirement to our proposed solution and cost, and a concise pricing breakdown. Format the output as a structured document (e.g., Markdown or JSON) suitable for submission.",
+        "required_skills": [
+          "summarization",
+          "general_reasoning"
+        ],
+        "expected_output": "A complete proposal document with compliance traceability matrix and pricing summary.",
+        "dependencies": [
+          "t2"
+        ],
+        "risk_level": "low",
+        "max_retries": 2,
+        "timeout_seconds": 300,
+        "parameters": {},
+        "agent_id": null,
+        "hermes_profile": "fleet-enterprise-rfp-p-generate-executive-p",
+        "specialist_spec": null,
+        "_hermes_profile": "fleet-enterprise-rfp-p-generate-executive-p"
+      }
+    ],
+    "estimated_completion_seconds": 60
+  },
+  "status": "files_attached",
+  "created_at": 1792926411.6118724,
+  "updated_at": 1792926623.4084885,
+  "profiles_to_create": [],
+  "profiles_existing": [
+    "fleet-enterprise-rfp-p-ingest-or-synthesize",
+    "fleet-enterprise-rfp-p-extract-mandatory-te",
+    "fleet-enterprise-rfp-p-generate-executive-p"
+  ],
+  "workflow_id": "fleet-arena-enterprise-rfp-proposal-6a9f05",
+  "agent_id": null,
+  "resilience": "standard"
+}

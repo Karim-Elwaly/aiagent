@@ -17,6 +17,7 @@ from __future__ import annotations
 import asyncio
 import inspect
 import logging
+import re
 from collections.abc import Callable
 from dataclasses import dataclass
 from typing import Any
@@ -235,6 +236,34 @@ class ToolRegistry:
         knows what capabilities exist.
         """
         return sorted(self._skill_index.keys())
+
+    def discover_mission_tools(self, mission_text: str, top_k: int = 15) -> list[ToolSpec]:
+        """Rank and return the top registered tools semantically relevant to the mission prompt."""
+        if not mission_text:
+            return list(self._tools.values())[:top_k]
+
+        terms = [t.lower() for t in re.findall(r"\w+", mission_text) if len(t) > 2]
+        scored_tools: list[tuple[float, ToolSpec]] = []
+
+        for spec in self._tools.values():
+            score = 0.0
+            desc_words = [t.lower() for t in re.findall(r"\w+", spec.description)]
+            skills = [s.lower() for s in spec.skills_provided]
+
+            for term in terms:
+                if term in spec.name.lower():
+                    score += 5.0
+                if any(term in skill for skill in skills):
+                    score += 4.0
+                if term in desc_words:
+                    score += 1.5
+
+            if score > 0:
+                scored_tools.append((score, spec))
+
+        scored_tools.sort(key=lambda x: x[0], reverse=True)
+        return [spec for _, spec in scored_tools[:top_k]]
+
 
     def get_tool(self, tool_id: str) -> ToolSpec | None:
         """Look up a tool by its ID."""

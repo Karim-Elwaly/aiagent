@@ -33,7 +33,54 @@ logger = logging.getLogger(__name__)
 
 PROFILE_PREFIX = "aiagent-"
 DEFAULT_PROFILE = "aiagent-default"
-DYNAMIC_PROFILE_PREFIX = "aiagent-dyn-"
+DYNAMIC_PROFILE_PREFIX = "uaos-aeu-"
+LEGACY_DYNAMIC_PROFILE_PREFIX = "aiagent-dyn-"
+FLEET_PROFILE_PREFIX = "fleet-"
+
+
+def is_dynamic_profile_name(name: str | None) -> bool:
+    """Return True if profile name matches either the enterprise AEU or legacy dynamic prefix.
+
+    Fleet profiles (``fleet-*``) are NOT considered dynamic — they are persistent
+    and reusable across missions.
+    """
+    if not name:
+        return False
+    return name.startswith(DYNAMIC_PROFILE_PREFIX) or name.startswith(LEGACY_DYNAMIC_PROFILE_PREFIX)
+
+
+def is_fleet_profile_name(name: str | None) -> bool:
+    """Return True if profile name is a reusable Fleet Arena profile."""
+    if not name:
+        return False
+    return name.startswith(FLEET_PROFILE_PREFIX)
+
+
+is_dynamic_profile = is_dynamic_profile_name
+
+
+def generate_dynamic_profile_name(seed: str = "") -> str:
+    """Generate an enterprise AEU dynamic profile name with optional seed."""
+    clean_seed = re.sub(r"[^a-zA-Z0-9_-]", "-", seed.strip().lower()).strip("-") if seed else ""
+    suffix = secrets.token_hex(4)
+    if clean_seed:
+        return f"{DYNAMIC_PROFILE_PREFIX}{clean_seed[:16]}-{suffix}"
+    return f"{DYNAMIC_PROFILE_PREFIX}{suffix}"
+
+
+def fleet_profile_name(arena_slug: str, task_name: str) -> str:
+    """Generate a human-readable, deterministic fleet profile name.
+
+    Format: ``fleet-<arena_slug>-<task_slug>``
+    Each segment is sanitized to lowercase alphanumeric + hyphens.
+    """
+    clean_arena = re.sub(r"[^a-z0-9]+", "-", arena_slug.lower()).strip("-")[:16]
+    clean_task = re.sub(r"[^a-z0-9]+", "-", task_name.lower()).strip("-")[:20]
+    name = f"{FLEET_PROFILE_PREFIX}{clean_arena}-{clean_task}"
+    # Hermes profile names have a practical limit; ensure we stay within it
+    return name[:48]
+
+
 # Runs aiagent's planner, supervisor and report model calls when the Hermes engine is on; has no aiagent tools.
 ORCHESTRATOR_PROFILE = "aiagent-orchestrator"
 ORCHESTRATOR_SOUL = (
@@ -156,7 +203,7 @@ class ProfileState:
         return [
             (name, entry)
             for name, entry in data.items()
-            if entry.get("is_dynamic") or name.startswith(DYNAMIC_PROFILE_PREFIX)
+            if entry.get("is_dynamic") or is_dynamic_profile_name(name)
         ]
 
     def by_token(self, token: str) -> dict[str, Any] | None:
@@ -292,7 +339,7 @@ class HermesProfiles:
         if getattr(self.settings, "hermes_enable_native_toolsets", True):
             # Hermes runs with its full native toolsets (terminal, file, skills, web, code_execution)
             wanted = default_toolsets | set(REQUIRED_TOOLSETS) | set(extra or []) | set(agent_toolsets or [])
-        elif name.startswith(DYNAMIC_PROFILE_PREFIX):
+        elif is_dynamic_profile_name(name):
             wanted = set(agent_toolsets or [])
         else:
             wanted = default_toolsets | set(REQUIRED_TOOLSETS) | set(extra or [])
@@ -325,7 +372,7 @@ class HermesProfiles:
         ``bundle`` selects a tool-group profile (tasks without an agent) instead of the agent's own profile.
         ``dynamic_tools`` & ``profile_name_override`` configure bespoke dynamic task profiles.
         """
-        is_dynamic = bool(profile_name_override and profile_name_override.startswith(DYNAMIC_PROFILE_PREFIX))
+        is_dynamic = bool(profile_name_override and is_dynamic_profile_name(profile_name_override))
         if profile_name_override:
             name = profile_name_override
             tools = sorted(dynamic_tools) if dynamic_tools is not None else []
@@ -465,9 +512,12 @@ class HermesProfiles:
         return ProfileInfo(name=name, api_key=api_key, changed=changed, restarted_at=restarted_at)
 
     def delete_profile(self, name: str) -> bool:
-        """Delete a dynamic profile from disk and state. Refuses to delete permanent profiles."""
-        if name in (DEFAULT_PROFILE, ORCHESTRATOR_PROFILE) or not name.startswith(DYNAMIC_PROFILE_PREFIX):
+        """Delete a dynamic or fleet profile from disk and state. Refuses to delete permanent profiles."""
+        if name in (DEFAULT_PROFILE, ORCHESTRATOR_PROFILE):
             logger.warning("Refusing to delete permanent profile %r", name)
+            return False
+        if not is_dynamic_profile_name(name) and not is_fleet_profile_name(name):
+            logger.warning("Refusing to delete non-deletable profile %r", name)
             return False
         pdir = self.home / "profiles" / name
         sdir = self.skills_root / name
@@ -497,7 +547,7 @@ class HermesProfiles:
         disk_profiles: dict[str, dict[str, Any]] = {}
         if p_root.is_dir():
             for p in p_root.iterdir():
-                if p.is_dir() and p.name.startswith(DYNAMIC_PROFILE_PREFIX):
+                if p.is_dir() and is_dynamic_profile_name(p.name):
                     try:
                         mtime = p.stat().st_mtime
                     except OSError:
@@ -516,7 +566,7 @@ class HermesProfiles:
 
         candidates = [
             (name, entry) for name, entry in all_dynamic.items()
-            if name not in active and name.startswith(DYNAMIC_PROFILE_PREFIX)
+            if name not in active and is_dynamic_profile_name(name)
         ]
         candidates.sort(
             key=lambda pair: float(pair[1].get("last_used_at") or pair[1].get("created_at") or 0.0)
@@ -942,7 +992,7 @@ class HermesProfiles:
             return 0
         updated = 0
         for p in list(p_root.iterdir()):
-            if p.is_dir() and p.name.startswith(DYNAMIC_PROFILE_PREFIX):
+            if p.is_dir() and is_dynamic_profile_name(p.name):
                 entry = self.state.get(p.name)
                 tools = entry.get("bundle", [])
                 skills = entry.get("task_skills")
@@ -958,7 +1008,7 @@ class HermesProfiles:
             return
         targets = [ORCHESTRATOR_PROFILE] + [
             p.name for p in p_root.iterdir()
-            if p.is_dir() and (p.name.startswith(DYNAMIC_PROFILE_PREFIX) or p.name.startswith("aiagent-bundle-"))
+            if p.is_dir() and (is_dynamic_profile_name(p.name) or p.name.startswith("aiagent-bundle-"))
         ]
         for name in targets:
             pdir = p_root / name
@@ -1113,7 +1163,7 @@ class HermesProfiles:
             return 0
         repaired = 0
         for p in list(p_root.iterdir()):
-            if p.is_dir() and p.name.startswith(DYNAMIC_PROFILE_PREFIX):
+            if p.is_dir() and is_dynamic_profile_name(p.name):
                 if not self.profile_has_model(p.name):
                     logger.info("Evicting model-less dynamic profile '%s' so it will be freshly cloned from default", p.name)
                     self.delete_profile(p.name)

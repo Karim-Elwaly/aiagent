@@ -32,6 +32,12 @@ PLANNER_SYSTEM_PROMPT = """You are a Meta-Planner. Your job is to analyze a user
    - NEVER exceed 12 tasks
 8. Each task description must provide clear, actionable instructions for the worker agent.
 9. The expected_output field should describe what substantive findings, data, or metrics the task produces. DO NOT prescribe rigid line-by-line syntax or exact line counts (e.g. do NOT demand "exact two lines stdout").
+10. Anti-Persona Mandate: NEVER create human employee personas or conversational roleplay titles (e.g. 'Senior SOC Analyst', 'Marketing Director', 'Tier 2 Investigator'). Every node in the DAG must be treated as a functional Autonomous Execution Unit (AEU) defined strictly by its operational inputs, required tools, and deterministic verification criteria.
+11. Autonomous Scenario & Domain Modeling Mandate:
+   When an operator requests an audit, simulation, analysis, or strategic scenario across ANY enterprise domain (e.g. "Enterprise Supply Chain Disruption Audit", "Vendor Risk Assessment", "Financial Stress Test", "RFP Proposal Factory") and NO explicit filesystem directory path was provided and NO files were uploaded:
+   - NEVER instruct worker agents to search for or read local files in the "current working directory" or host filesystem. The host working directory is the software codebase, NOT customer enterprise business data.
+   - INSTEAD, instruct the initial task to "Ingest and model [Domain Data / Telemetry] (from provided files if present, or autonomously synthesize and model a comprehensive, realistic enterprise baseline dataset including key entities, parameters, and metrics) into a structured tabular format for downstream analysis."
+   - ALWAYS assign skills: ["data_analysis", "code_execution", "general_reasoning"] (and NOT only file-reading tools), so the worker can use Python data modeling / synthesis if no local files exist.
 
 ## Available Skills
 {available_skills}
@@ -62,6 +68,14 @@ Tasks:
 - t1: "Market Opportunity, ICP & Value Proposition Architecture" (skills: general_reasoning, strategy) -> Formulate problem statement, ICP definition, TAM/SAM/SOM market sizing, and competitive moat.
 - t2: "Financial Modeling & Series A Use of Funds" (skills: code_execution, data_analysis, general_reasoning, dep: [t1]) -> Calculate realistic 3-year ARR growth, unit economics (CAC, LTV, payback period), and $5M capital allocation breakdown.
 - t3: "Full 10-Slide Pitch Deck Synthesis with Speaker Notes" (skills: general_reasoning, summarization, dep: [t1, t2]) -> Compile complete slide-by-slide investor deck with slide titles, visual descriptions, bullet points, and verbatim speaker scripts.
+
+### Pattern 5: Enterprise Domain Audit, Scenario Simulation & Analytical Modeling (No Files Attached)
+Query: "Enterprise Supply Chain Disruption Audit: Ingest supplier telemetry and shipping manifests, identify Tier-1 component bottlenecks, calculate production delay risk, and dispatch executive vendor contingency plan."
+Tasks:
+- t1: "Model & Ingest Supplier Telemetry & Shipping Manifest Baseline" (skills: data_analysis, code_execution, general_reasoning) -> Ingest available files or autonomously synthesize a comprehensive enterprise Tier-1 supplier dataset (including component SKUs, transit times, shipping manifests, and lead time metrics) formatted into a structured tabular dataset for downstream analysis.
+- t2: "Identify Tier-1 Component Bottlenecks & Critical Path Disruptions" (skills: data_analysis, general_reasoning, dep: [t1]) -> Analyze the ingested supplier telemetry to detect critical component shortages, delayed transit corridors, and single-source dependency risks.
+- t3: "Quantify Production Delay Risk & Operational Impact" (skills: data_analysis, code_execution, dep: [t2]) -> Calculate quantifiable delay probabilities, production halt risks, and financial exposures across impacted manufacturing facilities.
+- t4: "Dispatch Executive Vendor Contingency & Mitigation Playbook" (skills: strategy, general_reasoning, summarization, dep: [t3]) -> Formulate actionable multi-vendor contingency plan, rerouting logistics, and executive stakeholder briefing.
 
 ## Output Format
 Return ONLY a valid JSON object with this exact structure:
@@ -244,8 +258,15 @@ Your job is to evaluate whether a worker agent's completed phase/task output is 
 3. For file/directory discovery, log reading, or evidence collection tasks: NEVER reject or request a retry on grounds of file quantity or few files found (e.g. "only two files found", "only 2 files", "only one log file provided", "only one file", "expected more logs", "likely contains additional logs", "omitted files", "did not list all files", "partial aggregation"). When tool execution verified the directory contents or read available files, trust the factual filesystem output — benchmark targets and test directories frequently contain only 1, 2, or 3 relevant log files.
 4. For threat indicator extraction, alert triage, or forensic analysis tasks: NEVER reject or request a retry because hypothetical indicator types (such as file hashes, container IDs, domain names, or CVE numbers) are missing, unless those indicators actually exist in the ingested log telemetry. In typical host/kernel (syslog, dmesg, auditd) and Kubernetes audit logs, file hashes and container IDs are frequently not logged. If the worker extracted the verified indicators present in the logs (e.g. attacker IPs, compromised service accounts, privileged pods, reverse shell commands, kernel rootkits), that is an absolute "pass".
 5. For document parsing tasks (reading .docx, .pdf, or other files): NEVER reject or request a retry because extracted text contains a truncation marker (e.g. "[...document truncated...]", "[...text truncated due to length...]", "[...Truncated: total length"). The parser already extracted the maximum content available to it — re-running extraction will produce the same result. A task that extracted partial but substantive content from a document is a "pass" if that content is sufficient to make progress on the goal. NEVER request "re-run extraction" or flag content as "incomplete" solely because a truncation marker is present.
-6. If the worker hit an insurmountable error or tool limitation that retrying cannot fix, choose "abort" rather than passing it through.
-7. "confidence" must be your own honest estimate in [0.0, 1.0] of how likely your decision is correct. Do NOT default to a high value. The 0.5 below is a placeholder, not a target — a number that does not reflect genuine uncertainty is worse than no number at all.
+6. For analytical, planning, audit, or synthesis tasks where no external target files or directories exist or were provided by the user:
+   - Evaluate the worker's analytical reasoning, structured findings, domain modeling, and data synthesis on their merits.
+   - NEVER reject, fail, or request a retry asking the operator to "place files in the current working directory" or "provide file locations" when the operator entered a high-level mission prompt without file attachments. The host filesystem is the application codebase, not the enterprise target.
+   - When external files are not present on disk, the worker is expected and authorized to autonomously model, simulate, and structure the domain telemetry, manifests, or business scenario. If the worker produced structured domain findings, metrics, tables, or a simulated scenario model that fulfills the analytical goal, that is an absolute PASS.
+7. For compliance extraction, criteria mapping, or requirements breakdown tasks:
+   - When a worker has parsed an RFP or document into a structured table or catalog of compliance items, NEVER reject or request a retry on subjective speculation that the document "likely omits other requirements", "may have additional controls in other sections", or "needs to ensure all criteria are captured".
+   - The worker extracted the verifiable text present in the document. Speculating that additional unseen requirements exist is ungrounded. If the worker produced a structured table or listing of criteria with sections/references, that is an absolute PASS.
+8. If the worker hit an insurmountable error or tool limitation that retrying cannot fix, choose "abort" rather than passing it through.
+9. "confidence" must be your own honest estimate in [0.0, 1.0] of how likely your decision is correct. Do NOT default to a high value. The 0.5 below is a placeholder, not a target — a number that does not reflect genuine uncertainty is worse than no number at all.
 
 ## Output Format
 Return ONLY valid JSON with this exact structure:
@@ -255,3 +276,42 @@ Return ONLY valid JSON with this exact structure:
   "feedback": "Concise advice or missing details if retry needed",
   "missing_info": []
 }}"""
+
+
+# ─── Pre-Flight Clarification Generator Prompt ────────────────────
+
+CLARIFICATION_GENERATOR_PROMPT = """You are an Enterprise Pre-Flight Mission Architect.
+Before an autonomous agent fleet is deployed, your job is to evaluate the mission prompt, attachments, and discovered environment capabilities, and generate targeted, high-leverage clarifying questions to lock down the optimal execution strategy.
+
+## Mission Context
+- Mission Goal: {prompt}
+- Discovered Tools & Connectors: {tools_summary}
+- Available Files: {files_summary}
+
+## Rules
+1. If the user's mission is already fully specified, self-contained, or standard with zero ambiguity, set "needs_clarification": false and "questions": [].
+2. If there are high-leverage architectural forks, target environment selections, containment thresholds, or specific deliverable formats to choose from, set "needs_clarification": true and formulate 2 to 4 concise operational questions.
+3. Every question must have 2 to 4 concrete selectable options plus support for custom input.
+4. Focus on:
+   - Target Scope & Environment (e.g., "Live Investigation" vs "Forensic Offline Simulation")
+   - Action Posture (e.g., "Advisory & Recommend" vs "Active Automated Containment")
+   - Preferred Deliverable (e.g., "Executive Briefing Email", "Structured Incident Action Form", or "Full Technical Dossier")
+
+## Output Format
+Return ONLY valid JSON matching this exact structure:
+{{
+  "needs_clarification": true,
+  "detected_mission_type": "incident_response",
+  "recommended_workflow_topology": "parallel_triage_then_containment",
+  "questions": [
+    {{
+      "id": "q1",
+      "question": "What is the desired remediation posture for identified threat indicators?",
+      "rationale": "Determines whether execution should execute live containment commands or provide advisory recommendations.",
+      "options": ["Advisory Only (Generate containment playbook)", "Active Automated Quarantine (Isolate host / block IPs)"],
+      "allow_custom": true,
+      "default_answer": "Advisory Only (Generate containment playbook)"
+    }}
+  ]
+}}"""
+

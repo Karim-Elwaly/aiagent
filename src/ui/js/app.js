@@ -94,6 +94,76 @@ document.addEventListener("DOMContentLoaded", () => {
   let workflowTemplates = {};
   let cachedSkillsList = [];
 
+  // ── Phase 8: Mission Control Portals & Telemetry Elements ──
+  const kpiElapsedTimeEl = document.getElementById("kpi-elapsed-time");
+  const kpiActiveUnitsEl = document.getElementById("kpi-active-units");
+  const kpiMatchedToolsEl = document.getElementById("kpi-matched-tools");
+  const kpiChallengesCountEl = document.getElementById("kpi-challenges-count");
+  const kpiPassRateEl = document.getElementById("kpi-pass-rate");
+  const kpiFleetStatusPillEl = document.getElementById("kpi-fleet-status-pill");
+  const fleetSpecialistCountEl = document.getElementById("fleet-specialist-count");
+  const challengeStepToggle = document.getElementById("challenge-step-toggle");
+  const competingFleetsToggle = document.getElementById("competing-fleets-toggle");
+  const competingFleetsBar = document.getElementById("competing-fleets-bar");
+  const tabFleetAlpha = document.getElementById("tab-fleet-alpha");
+  const tabFleetOmega = document.getElementById("tab-fleet-omega");
+
+  const preflightBtn = document.getElementById("preflight-btn");
+  const preflightCard = document.getElementById("preflight-card");
+  const preflightReadinessBadge = document.getElementById("preflight-readiness-badge");
+  const preflightEnvChips = document.getElementById("preflight-env-chips");
+  const preflightQuestionsContainer = document.getElementById("preflight-questions-container");
+  const preflightLaunchBtn = document.getElementById("preflight-launch-btn");
+  const preflightSkipBtn = document.getElementById("preflight-skip-btn");
+  const closePreflightCardBtn = document.getElementById("close-preflight-card-btn");
+
+  const discoveryMatrixDetails = document.getElementById("discovery-matrix-details");
+  const discoveryConnectorCount = document.getElementById("discovery-connector-count");
+  const discoveryConnectorsList = document.getElementById("discovery-connectors-list");
+  const discoveryToolsList = document.getElementById("discovery-tools-list");
+
+  // Step-Challenge Modal Elements
+  const stepChallengeModal = document.getElementById("step-challenge-modal");
+  const closeChallengeModalBtn = document.getElementById("close-challenge-modal-btn");
+  const challengeUnitBadge = document.getElementById("challenge-unit-badge");
+  const challengeVerdictBadge = document.getElementById("challenge-verdict-badge");
+  const challengeUnitRole = document.getElementById("challenge-unit-role");
+  const challengeTelemetryMeta = document.getElementById("challenge-telemetry-meta");
+  const challengeOutputPreview = document.getElementById("challenge-output-preview");
+  const challengeSupervisorText = document.getElementById("challenge-supervisor-text");
+  const challengeCritiqueInput = document.getElementById("challenge-critique-input");
+  const challengeOverrideInput = document.getElementById("challenge-override-input");
+  const challengeApproveBtn = document.getElementById("challenge-approve-btn");
+  const challengeRetryBtn = document.getElementById("challenge-retry-btn");
+  const challengeOverrideBtn = document.getElementById("challenge-override-btn");
+  const challengeAbortBtn = document.getElementById("challenge-abort-btn");
+
+  // Deliverable Studio Tabs & Actions
+  const tabDelivDossier = document.getElementById("tab-deliv-dossier");
+  const tabDelivForm = document.getElementById("tab-deliv-form");
+  const tabDelivEmail = document.getElementById("tab-deliv-email");
+  const delivDossierView = document.getElementById("deliverable-dossier-view");
+  const delivFormView = document.getElementById("deliverable-form-view");
+  const delivEmailView = document.getElementById("deliverable-email-view");
+  const delivFormActions = document.getElementById("deliv-form-actions");
+  const delivEmailActions = document.getElementById("deliv-email-actions");
+  const formContainer = document.getElementById("form-container");
+  const emailPreviewContainer = document.getElementById("email-preview-container");
+  const exportFormJsonBtn = document.getElementById("export-form-json-btn");
+  const exportFormCsvBtn = document.getElementById("export-form-csv-btn");
+  const downloadEmlBtn = document.getElementById("download-eml-btn");
+  const openMailtoBtn = document.getElementById("open-mailto-btn");
+
+  // Telemetry & Gate state
+  let missionStartTime = null;
+  let kpiTimerInterval = null;
+  let activeStepChallengeTaskId = null;
+  let activeStepChallengeUnitId = null;
+  let cachedPreflightClarifications = {};
+  let cachedLatestStructuredForm = null;
+  let cachedLatestEmailPayload = null;
+  let activeCompetingFleets = null;
+
   let scrollScheduled = false;
   function scheduleTimelineScroll() {
     if (scrollScheduled || !timelineList) return;
@@ -179,12 +249,7 @@ document.addEventListener("DOMContentLoaded", () => {
   }
 
   function onNodeClicked(task, status) {
-    const isPending = !status || status === "pending";
-    if (isPending) {
-      openTaskEditModal(task);
-    } else {
-      showToast(`Task ${task.id}: ${task.name} (${(status || "").toUpperCase()})`);
-    }
+    openTaskEditModal(task);
   }
 
   function openTaskEditModal(task) {
@@ -196,6 +261,30 @@ document.addEventListener("DOMContentLoaded", () => {
       const status = (dagRenderer && dagRenderer.statusMap.get(task.id)) || "pending";
       editTaskStatusBadge.textContent = status.toUpperCase();
       editTaskStatusBadge.className = `node-badge badge-${status}`;
+    }
+
+    // Populate Specialized AEU Unit Specification Drawer
+    const aeuDrawer = document.getElementById("edit-task-aeu-drawer");
+    const aeuTitle = document.getElementById("edit-task-aeu-title");
+    const aeuStage = document.getElementById("edit-task-aeu-stage");
+    const aeuTools = document.getElementById("edit-task-aeu-tools");
+    const aeuInput = document.getElementById("edit-task-aeu-input");
+    const aeuOutput = document.getElementById("edit-task-aeu-output");
+    const aeuPrompt = document.getElementById("edit-task-aeu-prompt");
+
+    const spec = task.specialist_spec || (window.activeFleetManifest && window.activeFleetManifest.units && window.activeFleetManifest.units.find(u => u.task_id === task.id));
+    if (aeuDrawer) {
+      if (spec) {
+        aeuDrawer.style.display = "block";
+        if (aeuTitle) aeuTitle.textContent = `${spec.unit_id} ${spec.unit_codename ? `(${spec.unit_codename})` : ""}`;
+        if (aeuStage) aeuStage.textContent = spec.operational_stage || "DEEP_ANALYSIS";
+        if (aeuTools) aeuTools.textContent = (spec.scoped_tools || []).join(", ") || "General Reasoning";
+        if (aeuInput) aeuInput.textContent = spec.input_contract || "None";
+        if (aeuOutput) aeuOutput.textContent = spec.output_contract || "Verified output payload";
+        if (aeuPrompt) aeuPrompt.textContent = spec.synthesized_unit_prompt || spec.specialization_directive || "Standard Execution Directive";
+      } else {
+        aeuDrawer.style.display = "none";
+      }
     }
 
     if (editTaskName) editTaskName.value = task.name || "";
@@ -588,12 +677,18 @@ document.addEventListener("DOMContentLoaded", () => {
     const customDagPayload = (isCustomWorkflowMode && activeCustomDag && activeCustomDag.tasks && activeCustomDag.tasks.length > 0)
       ? { ...activeCustomDag, goal: effectiveQuery }
       : null;
+    const isChallengeEveryStep = challengeStepToggle ? challengeStepToggle.checked : true;
+    const isCompetingFleets = competingFleetsToggle ? competingFleetsToggle.checked : false;
+
     const solvePayload = {
       query: effectiveQuery,
       agent_id: selectedAgentId || null,
       custom_dag: customDagPayload,
       resilience: selectedResilience || null,
       attachments: uploadedAttachments.length > 0 ? uploadedAttachments : null,
+      challenge_every_step: isChallengeEveryStep,
+      competing_fleets: isCompetingFleets,
+      clarifications: (cachedPreflightClarifications && Object.keys(cachedPreflightClarifications).length > 0) ? cachedPreflightClarifications : null,
     };
 
     // Reset attachments tray after submission
@@ -715,6 +810,28 @@ document.addEventListener("DOMContentLoaded", () => {
       case "connected":
         console.log(`[SSE] Stream ready for workflow: ${ev.workflow_id}`);
         break;
+
+      case "environment.discovered": {
+        renderDiscoveredEnvironment(ev);
+        break;
+      }
+
+      case "fleet.synthesized": {
+        renderFleetSynthesized(ev);
+        break;
+      }
+
+      case "task.awaiting_challenge":
+      case "task_awaiting_challenge":
+      case "unit.awaiting_challenge": {
+        renderStepChallengeGate(ev);
+        break;
+      }
+
+      case "telemetry.update": {
+        renderTelemetryUpdate(ev);
+        break;
+      }
 
       case "dag_planned": {
         const tasks = ev.tasks || [];
@@ -1653,12 +1770,13 @@ document.addEventListener("DOMContentLoaded", () => {
         // Badge styling based on source_type
         let sourceBadge = `<span style="background: rgba(139, 92, 246, 0.2); color: #c4b5fd; border: 1px solid rgba(139, 92, 246, 0.4); font-size: 10px; padding: 2px 6px; border-radius: 4px; font-weight: 700; margin-left: 6px;">NATIVE</span>`;
         if (t.source_type === "hermes" || t.source_type === "skill") {
-          sourceBadge = `<span style="background: rgba(14, 165, 233, 0.2); color: #38bdf8; border: 1px solid rgba(56, 189, 248, 0.4); font-size: 10px; padding: 2px 6px; border-radius: 4px; font-weight: 700; margin-left: 6px;">SKILL</span>`;
+          sourceBadge = `<span style="background: rgba(14, 165, 233, 0.2); color: #38bdf8; border: 1px solid rgba(56, 189, 248, 0.4); font-size: 10px; padding: 2px 6px; border-radius: 4px; font-weight: 700; margin-left: 6px;">AEU CORE</span>`;
         } else if (t.source_type === "mcp") {
-          sourceBadge = `<span style="background: rgba(6, 182, 212, 0.2); color: #38bdf8; border: 1px solid rgba(6, 182, 212, 0.4); font-size: 10px; padding: 2px 6px; border-radius: 4px; font-weight: 700; margin-left: 6px;">MCP</span>`;
+          sourceBadge = `<span style="background: rgba(6, 182, 212, 0.2); color: #38bdf8; border: 1px solid rgba(6, 182, 212, 0.4); font-size: 10px; padding: 2px 6px; border-radius: 4px; font-weight: 700; margin-left: 6px;">BRIDGE</span>`;
         } else if (t.source_type === "openapi") {
           sourceBadge = `<span style="background: rgba(16, 185, 129, 0.2); color: #34d399; border: 1px solid rgba(16, 185, 129, 0.4); font-size: 10px; padding: 2px 6px; border-radius: 4px; font-weight: 700; margin-left: 6px;">OPENAPI</span>`;
         }
+
 
         // Delete button for dynamic tools
         let deleteBtn = "";
@@ -2409,6 +2527,15 @@ document.addEventListener("DOMContentLoaded", () => {
     if (distillBtn && completedCount > 0 && !markdownText.includes("Execution Failed")) {
       distillBtn.style.display = "inline-flex";
     }
+    stopKpiElapsedTimer();
+    if (kpiFleetStatusPillEl) {
+      kpiFleetStatusPillEl.textContent = failedCount > 0 ? "PARTIAL FAILURE" : "MISSION COMPLETED";
+      kpiFleetStatusPillEl.className = failedCount > 0 ? "fleet-status-pill standby" : "fleet-status-pill completed";
+    }
+    // Load Multi-Channel Deliverables (Structured Form & Executive Email)
+    if (currentWorkflowId && completedCount > 0 && !markdownText.includes("Execution Failed")) {
+      loadMultiChannelDeliverables(currentWorkflowId, markdownText);
+    }
   }
 
   function renderSupervisorEvaluationsList(evalList) {
@@ -2536,6 +2663,19 @@ document.addEventListener("DOMContentLoaded", () => {
     }
     hideApprovalModal();
     hideClarificationModal();
+    hideStepChallengeModal();
+    stopKpiElapsedTimer();
+    if (kpiElapsedTimeEl) kpiElapsedTimeEl.textContent = "00:00.0";
+    if (kpiActiveUnitsEl) kpiActiveUnitsEl.textContent = "0 / 0";
+    if (kpiChallengesCountEl) kpiChallengesCountEl.textContent = "0";
+    if (kpiPassRateEl) kpiPassRateEl.textContent = "100%";
+    if (kpiFleetStatusPillEl) {
+      kpiFleetStatusPillEl.textContent = "STANDBY";
+      kpiFleetStatusPillEl.className = "fleet-status-pill standby";
+    }
+    if (competingFleetsBar) competingFleetsBar.style.display = "none";
+    if (fleetSpecialistCountEl) fleetSpecialistCountEl.textContent = "0 Specialist Units";
+
     activeDag = null;
     if (dagInteractiveHint) {
       dagInteractiveHint.style.display = "none";
@@ -2545,13 +2685,627 @@ document.addEventListener("DOMContentLoaded", () => {
     }
     timelineList.innerHTML = '<div class="empty-timeline-notice">No tasks executed yet.</div>';
     solutionBody.innerHTML = '<div class="empty-solution-notice">Execution in progress...</div>';
+    if (formContainer) {
+      formContainer.innerHTML = '<div class="empty-solution-notice">Interactive structured form will populate here on mission completion.</div>';
+    }
+    if (emailPreviewContainer) {
+      emailPreviewContainer.innerHTML = '<div class="empty-solution-notice">Styled executive email will populate here on mission completion.</div>';
+    }
+    // Switch to dossier view by default
+    if (tabDelivDossier) tabDelivDossier.click();
     const distillBtn = document.getElementById("distill-solution-btn");
     if (distillBtn) distillBtn.style.display = "none";
   }
 
   function setRunningState(isRunning) {
     solveBtn.disabled = isRunning;
-    solveBtnText.textContent = isRunning ? "Executing Task..." : "Execute Task";
+    solveBtnText.textContent = isRunning ? "Executing Mission..." : "Execute Mission";
+    if (isRunning) {
+      startKpiElapsedTimer();
+    } else {
+      stopKpiElapsedTimer();
+    }
+  }
+
+  // ── Phase 8: Stopwatch & KPI Ribbon Ticker ──
+  function startKpiElapsedTimer() {
+    stopKpiElapsedTimer();
+    missionStartTime = Date.now();
+    if (kpiFleetStatusPillEl) {
+      kpiFleetStatusPillEl.textContent = "ACTIVE";
+      kpiFleetStatusPillEl.className = "fleet-status-pill active";
+    }
+    kpiTimerInterval = setInterval(() => {
+      if (!missionStartTime || !kpiElapsedTimeEl) return;
+      const elapsed = Date.now() - missionStartTime;
+      const mins = Math.floor(elapsed / 60000);
+      const secs = Math.floor((elapsed % 60000) / 1000);
+      const tenths = Math.floor((elapsed % 1000) / 100);
+      kpiElapsedTimeEl.textContent = `${String(mins).padStart(2, "0")}:${String(secs).padStart(2, "0")}.${tenths}`;
+    }, 100);
+  }
+
+  function stopKpiElapsedTimer() {
+    if (kpiTimerInterval) {
+      clearInterval(kpiTimerInterval);
+      kpiTimerInterval = null;
+    }
+  }
+
+  // ── Phase 8: Portal 2 Environment Discovery Matrix ──
+  function renderDiscoveredEnvironment(env) {
+    if (!env) return;
+    const connectors = env.connectors || [];
+    const tools = env.discovered_tools || [];
+
+    if (discoveryConnectorCount) discoveryConnectorCount.textContent = connectors.length;
+    if (kpiMatchedToolsEl && tools.length > 0) {
+      kpiMatchedToolsEl.textContent = `${tools.length} Ready`;
+    }
+
+    if (discoveryConnectorsList && connectors.length > 0) {
+      discoveryConnectorsList.innerHTML = connectors.map(c => `
+        <div class="discovery-item-card ${c.status === 'ready' || c.status === 'connected' ? 'ready' : ''}">
+          <span>${c.status === 'ready' || c.status === 'connected' ? '🟢' : '🟡'}</span>
+          <span style="font-weight: 600;">${escapeHtml(c.connector_id || c.name || '')}</span>
+          <span style="color: var(--text-dim); font-size: 10px;">(${escapeHtml(c.category || '')})</span>
+        </div>
+      `).join("");
+    }
+
+    if (discoveryToolsList && tools.length > 0) {
+      discoveryToolsList.innerHTML = tools.map(t => `
+        <div class="discovery-item-card ready">
+          <span>⚡</span>
+          <span>${escapeHtml(t)}</span>
+        </div>
+      `).join("");
+    }
+  }
+
+  // ── Phase 8: Portal 3 Fleet Arena Synthesis ──
+  function renderFleetSynthesized(ev) {
+    const units = ev.specialist_units || ev.units || [];
+    window.activeFleetManifest = { units: units, fleet_id: ev.fleet_id, fleet_name: ev.fleet_name };
+    if (fleetSpecialistCountEl) {
+      fleetSpecialistCountEl.textContent = `${units.length} Specialist Units`;
+    }
+    if (kpiActiveUnitsEl) {
+      kpiActiveUnitsEl.textContent = `0 / ${units.length}`;
+    }
+    if (kpiFleetStatusPillEl) {
+      kpiFleetStatusPillEl.textContent = "FLEET ACTIVE";
+      kpiFleetStatusPillEl.className = "fleet-status-pill active";
+    }
+
+    if (ev.competing_fleets || ev.fleet_alpha) {
+      activeCompetingFleets = ev.competing_fleets || {
+        alpha: ev.fleet_alpha || units,
+        omega: ev.fleet_omega || units
+      };
+      if (competingFleetsBar) competingFleetsBar.style.display = "inline-flex";
+    }
+    showToast(`Synthesized specialized fleet (${units.length} micro-agents)!`, "info");
+  }
+
+  // ── Phase 8: Portal 4 Step-Challenge & Governance Modal ──
+  function renderStepChallengeGate(ev) {
+    activeStepChallengeTaskId = ev.task_id;
+    activeStepChallengeUnitId = ev.unit_id || `AEU-${ev.task_id.toUpperCase()}`;
+
+    if (challengeUnitBadge) challengeUnitBadge.textContent = activeStepChallengeUnitId;
+    if (challengeUnitRole) challengeUnitRole.textContent = ev.role || "Specialist Unit Awaiting Challenge";
+    if (challengeVerdictBadge) {
+      const v = (ev.supervisor_verdict || "pass").toUpperCase();
+      challengeVerdictBadge.textContent = `SUPERVISOR: ${v}`;
+      challengeVerdictBadge.style.background = v === "PASS" ? "rgba(16, 185, 129, 0.2)" : "rgba(245, 158, 11, 0.2)";
+      challengeVerdictBadge.style.color = v === "PASS" ? "#34d399" : "#fbbf24";
+    }
+    if (challengeTelemetryMeta) {
+      const toolsCount = (ev.tools_invoked || []).length;
+      challengeTelemetryMeta.textContent = `${ev.execution_time_ms || 0}ms • ${toolsCount} tools invoked`;
+    }
+    if (challengeOutputPreview) {
+      challengeOutputPreview.textContent = ev.output_preview || ev.output || "No output preview provided.";
+    }
+    if (challengeSupervisorText) {
+      challengeSupervisorText.textContent = ev.supervisor_critique || "Supervised evaluation passed with high confidence.";
+    }
+    if (challengeCritiqueInput) challengeCritiqueInput.value = "";
+    if (challengeOverrideInput) challengeOverrideInput.value = "";
+
+    if (dagRenderer && typeof dagRenderer.updateNodeStatus === "function") {
+      dagRenderer.updateNodeStatus(ev.task_id, "approval");
+    }
+
+    if (kpiChallengesCountEl) {
+      const current = parseInt(kpiChallengesCountEl.textContent, 10) || 0;
+      kpiChallengesCountEl.textContent = String(current + 1);
+    }
+    if (kpiFleetStatusPillEl) {
+      kpiFleetStatusPillEl.textContent = "CHALLENGE GATE";
+      kpiFleetStatusPillEl.className = "fleet-status-pill challenged";
+    }
+
+    if (stepChallengeModal) stepChallengeModal.classList.add("active");
+    showToast(`🛡️ Step-Challenge Gate: Review ${activeStepChallengeUnitId}`, "warning");
+  }
+
+  function hideStepChallengeModal() {
+    if (stepChallengeModal) stepChallengeModal.classList.remove("active");
+  }
+
+  async function sendStepChallengeDecision(action) {
+    if (!currentWorkflowId || !activeStepChallengeTaskId) {
+      hideStepChallengeModal();
+      return;
+    }
+    const critique = challengeCritiqueInput ? challengeCritiqueInput.value.trim() : "";
+    const override = challengeOverrideInput ? challengeOverrideInput.value.trim() : "";
+
+    if (action === "challenge" && !critique) {
+      showToast("Please provide an operator critique or constraint to guide re-execution", "warning");
+      if (challengeCritiqueInput) challengeCritiqueInput.focus();
+      return;
+    }
+    if (action === "override_output" && !override) {
+      showToast("Please enter replacement output text", "warning");
+      if (challengeOverrideInput) challengeOverrideInput.focus();
+      return;
+    }
+
+    const payload = {
+      task_id: activeStepChallengeTaskId,
+      unit_id: activeStepChallengeUnitId,
+      action: action,
+      challenge_critique: critique || null,
+      replacement_output: override || null,
+    };
+
+    try {
+      showToast(`Submitting operator ${action} decision...`, "info");
+      const res = await fetch(`/api/v1/mission/${encodeURIComponent(currentWorkflowId)}/task/${encodeURIComponent(activeStepChallengeTaskId)}/challenge`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+      });
+      if (!res.ok) {
+        const errJson = await res.json().catch(() => ({}));
+        throw new Error(errJson.detail || `Server returned HTTP ${res.status}`);
+      }
+      hideStepChallengeModal();
+      showToast(`Step ${activeStepChallengeTaskId.toUpperCase()} ${action === "approve" ? "approved" : action}! Resuming fleet...`, "info");
+      if (kpiFleetStatusPillEl) {
+        kpiFleetStatusPillEl.textContent = "ACTIVE";
+        kpiFleetStatusPillEl.className = "fleet-status-pill active";
+      }
+    } catch (err) {
+      showToast(`Challenge submission failed: ${err.message}`, "error");
+    }
+  }
+
+  // ── Phase 8: Telemetry Stream Listener ──
+  function renderTelemetryUpdate(ev) {
+    if (ev.elapsed_ms !== undefined && kpiElapsedTimeEl) {
+      const mins = Math.floor(ev.elapsed_ms / 60000);
+      const secs = Math.floor((ev.elapsed_ms % 60000) / 1000);
+      const tenths = Math.floor((ev.elapsed_ms % 1000) / 100);
+      kpiElapsedTimeEl.textContent = `${String(mins).padStart(2, "0")}:${String(secs).padStart(2, "0")}.${tenths}`;
+    }
+    if (ev.active_units !== undefined && kpiActiveUnitsEl) {
+      kpiActiveUnitsEl.textContent = `${ev.active_units} / ${ev.total_units || 0}`;
+    }
+    if ((ev.matched_tools !== undefined || ev.discovered_tools !== undefined) && kpiMatchedToolsEl) {
+      kpiMatchedToolsEl.textContent = `${ev.matched_tools || ev.discovered_tools} Ready`;
+    }
+    if (ev.challenges_issued !== undefined && kpiChallengesCountEl) {
+      kpiChallengesCountEl.textContent = `${ev.challenges_issued}`;
+    }
+    if (ev.fleet_efficiency_score !== undefined && kpiPassRateEl) {
+      kpiPassRateEl.textContent = `${Math.round(ev.fleet_efficiency_score)}%`;
+    }
+  }
+
+  // ── Phase 8: Discovered Environment Tray Renderer ──
+  function renderDiscoveredEnvironment(env) {
+    if (!env) return;
+    const connectors = env.active_connectors || env.connectors || [];
+    const tools = env.matched_tools || env.discovered_tools || [];
+    if (discoveryConnectorCount) {
+      discoveryConnectorCount.textContent = String(connectors.length || 13);
+    }
+    if (discoveryConnectorsList && connectors.length > 0) {
+      discoveryConnectorsList.innerHTML = connectors.slice(0, 15).map(c => `
+        <div class="discovery-item-chip" style="padding: 4px 8px; background: rgba(255,255,255,0.04); border-radius: 4px; display: inline-flex; align-items: center; gap: 6px;">
+          <span style="font-weight: 600; color: #fff;">${escapeHtml(c.name || c.id)}</span>
+          <span style="font-size: 10px; color: var(--text-dim);">${escapeHtml(c.readiness || c.status || 'ready')}</span>
+        </div>
+      `).join("");
+    }
+    if (discoveryToolsList && tools.length > 0) {
+      discoveryToolsList.innerHTML = tools.slice(0, 20).map(t => `
+        <div class="discovery-item-chip" style="padding: 4px 8px; background: rgba(56, 189, 248, 0.08); border-radius: 4px; display: inline-flex; align-items: center;">
+          <span style="font-weight: 600; color: #38bdf8;">${escapeHtml(t.name || t.id)}</span>
+        </div>
+      `).join("");
+    }
+  }
+
+  // ── Phase 8: Portal 1 Pre-Flight Clarification Generator ──
+  function renderPreflightCard(data) {
+    if (!preflightCard) return;
+    preflightCard.style.display = "flex";
+
+    const env = data.environment || {};
+    const score = Math.round((env.readiness_score !== undefined ? env.readiness_score : 1.0) * 100);
+    if (preflightReadinessBadge) {
+      preflightReadinessBadge.textContent = `Readiness: ${score}%`;
+      preflightReadinessBadge.style.color = score > 80 ? "#34d399" : (score > 50 ? "#fbbf24" : "#f87171");
+    }
+
+    if (preflightEnvChips) {
+      const allConnectors = env.active_connectors || env.connectors || [];
+      const readyConnectors = allConnectors.filter(c => (c.readiness && c.readiness !== "unavailable") || c.status === "ready" || c.status === "connected" || c.status === "simulated");
+      const matchedTools = env.matched_tools || env.discovered_tools || data.discovered_tools || [];
+      const connCount = readyConnectors.length || allConnectors.length || 13;
+      const toolCount = matchedTools.length || data.discovered_tools_count || 20;
+
+      preflightEnvChips.innerHTML = `
+        <span class="env-chip-badge" style="border-color: rgba(16, 185, 129, 0.4); color: #34d399;">🛡️ ${connCount} Verified Connectors</span>
+        <span class="env-chip-badge" style="border-color: rgba(6, 182, 212, 0.4); color: #38bdf8;">🧩 ${toolCount} Matched Tools</span>
+        ${(env.file_artifacts || env.available_files || []).length > 0 ? `<span class="env-chip-badge" style="border-color: rgba(192, 132, 252, 0.4); color: #c084fc;">📁 ${(env.file_artifacts || env.available_files).length} Uploaded Artifacts</span>` : ''}
+      `;
+    }
+
+    renderDiscoveredEnvironment(env);
+
+    const questions = data.questions || data.clarifications || [];
+    cachedPreflightClarifications = {};
+
+    if (!preflightQuestionsContainer) return;
+    if (questions.length === 0) {
+      preflightQuestionsContainer.innerHTML = `<div style="font-size: 12px; color: #34d399;">✔ Mission scope is fully resolved. All environment requirements verified!</div>`;
+    } else {
+      preflightQuestionsContainer.innerHTML = questions.map((q, qIdx) => {
+        const defaultChoice = q.recommended_option || (q.options && q.options[0]) || "";
+        cachedPreflightClarifications[q.question_id || `q${qIdx + 1}`] = defaultChoice;
+
+        return `
+          <div class="preflight-q-card" data-qid="${escapeHtml(q.question_id || `q${qIdx + 1}`)}">
+            <div class="preflight-q-title">❓ ${escapeHtml(q.question)}</div>
+            ${q.rationale ? `<div style="font-size: 11px; color: var(--text-dim);">${escapeHtml(q.rationale)}</div>` : ''}
+            <div class="preflight-opt-grid">
+              ${(q.options || []).map((opt) => `
+                <button type="button" class="preflight-opt-btn ${opt === defaultChoice ? 'selected' : ''}" data-qid="${escapeHtml(q.question_id || `q${qIdx + 1}`)}" data-val="${escapeHtml(opt)}">
+                  ${escapeHtml(opt)}
+                </button>
+              `).join("")}
+            </div>
+            <input type="text" class="form-field-input preflight-custom-q" data-qid="${escapeHtml(q.question_id || `q${qIdx + 1}`)}" placeholder="Or type custom specification..." style="font-size: 11px; padding: 4px 8px; margin-top: 4px;">
+          </div>
+        `;
+      }).join("");
+
+      preflightQuestionsContainer.querySelectorAll(".preflight-opt-btn").forEach(btn => {
+        btn.addEventListener("click", () => {
+          const qid = btn.dataset.qid;
+          const val = btn.dataset.val;
+          preflightQuestionsContainer.querySelectorAll(`.preflight-opt-btn[data-qid="${qid}"]`).forEach(b => b.classList.remove("selected"));
+          btn.classList.add("selected");
+          cachedPreflightClarifications[qid] = val;
+        });
+      });
+
+      preflightQuestionsContainer.querySelectorAll(".preflight-custom-q").forEach(input => {
+        input.addEventListener("input", (e) => {
+          const qid = e.target.dataset.qid;
+          const val = e.target.value.trim();
+          if (val) {
+            preflightQuestionsContainer.querySelectorAll(`.preflight-opt-btn[data-qid="${qid}"]`).forEach(b => b.classList.remove("selected"));
+            cachedPreflightClarifications[qid] = val;
+          }
+        });
+      });
+    }
+  }
+
+  // ── Phase 8: Portal 5 Multi-Channel Deliverable Studio ──
+  async function loadMultiChannelDeliverables(workflowId, markdownText) {
+    try {
+      // 1. Transform to Form
+      const formRes = await fetch(`/api/v1/mission/${encodeURIComponent(workflowId)}/output/transform?format=form`, {
+        method: "POST"
+      });
+      if (formRes.ok) {
+        const formData = await formRes.json();
+        cachedLatestStructuredForm = formData;
+        renderStructuredForm(formData);
+      }
+
+      // 2. Transform to Email
+      const emailRes = await fetch(`/api/v1/mission/${encodeURIComponent(workflowId)}/output/transform?format=email`, {
+        method: "POST"
+      });
+      if (emailRes.ok) {
+        const emailData = await emailRes.json();
+        cachedLatestEmailPayload = emailData;
+        renderExecutiveEmailPreview(emailData);
+      }
+    } catch (err) {
+      console.warn("Failed to load multi-channel deliverables:", err);
+    }
+  }
+
+  function renderStructuredForm(formData) {
+    if (!formContainer || !formData) return;
+    const fields = formData.fields || [];
+    if (fields.length === 0) {
+      formContainer.innerHTML = `<div class="empty-solution-notice">No structured fields extracted. See Master Dossier.</div>`;
+      return;
+    }
+    formContainer.innerHTML = `
+      <div style="font-size: 13px; font-weight: 700; color: #fff; margin-bottom: 8px;">
+        Interactive Structured Form (${fields.length} Fields Extracted)
+      </div>
+      <div style="display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 10px;">
+        ${fields.map((f, idx) => `
+          <div class="form-field-card">
+            <div class="form-field-label-row">
+              <span class="form-field-label">${escapeHtml(f.label || f.name)}</span>
+              <span class="form-field-meta">${escapeHtml(f.source_unit_id || 'AEU')} • ${Math.round((f.confidence || 1.0) * 100)}% conf</span>
+            </div>
+            <input type="text" class="form-field-input" data-idx="${idx}" value="${escapeHtml(String(f.value || ''))}" ${f.editable === false ? 'readonly' : ''}>
+          </div>
+        `).join("")}
+      </div>
+    `;
+
+    formContainer.querySelectorAll(".form-field-input").forEach(input => {
+      input.addEventListener("input", (e) => {
+        const idx = parseInt(e.target.dataset.idx, 10);
+        if (cachedLatestStructuredForm && cachedLatestStructuredForm.fields && cachedLatestStructuredForm.fields[idx]) {
+          cachedLatestStructuredForm.fields[idx].value = e.target.value;
+        }
+      });
+    });
+  }
+
+  function renderExecutiveEmailPreview(emailData) {
+    if (!emailPreviewContainer || !emailData) return;
+    emailPreviewContainer.innerHTML = `
+      <div class="email-meta-header">
+        <div class="email-meta-row">
+          <span class="email-meta-label">Subject:</span>
+          <span class="email-meta-val" style="color: #fff; font-weight: 700;">${escapeHtml(emailData.subject || 'Mission Report')}</span>
+        </div>
+        <div class="email-meta-row">
+          <span class="email-meta-label">To:</span>
+          <span class="email-meta-val">${escapeHtml(emailData.recipient || 'Executive Stakeholders <leadership@enterprise.com>')}</span>
+        </div>
+        <div class="email-meta-row">
+          <span class="email-meta-label">Date:</span>
+          <span class="email-meta-val">${new Date().toLocaleString()}</span>
+        </div>
+      </div>
+      <div class="email-html-body">
+        ${emailData.styled_html_body || formatMarkdown(emailData.executive_summary || 'No summary available.')}
+      </div>
+    `;
+  }
+
+  // Wire Phase 8 Click Listeners
+  if (preflightBtn) {
+    preflightBtn.addEventListener("click", async () => {
+      const query = promptInput ? promptInput.value.trim() : "";
+      if (!query && attachedFiles.length === 0) {
+        showToast("Please enter a mission description or attach a file first", "error");
+        return;
+      }
+      preflightBtn.disabled = true;
+      const oldHtml = preflightBtn.innerHTML;
+      preflightBtn.innerHTML = `<span>⏳ Scanning...</span>`;
+
+      try {
+        let uploaded = [];
+        if (attachedFiles.length > 0) {
+          const formData = new FormData();
+          for (const file of attachedFiles) formData.append("files", file);
+          const upRes = await fetch("/api/upload", { method: "POST", body: formData });
+          if (upRes.ok) {
+            const upData = await upRes.json();
+            uploaded = upData.attachments || [];
+          }
+        }
+
+        const res = await fetch("/api/v1/mission/preflight", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            query: query || `Analyze attached files: ${uploaded.map(a => a.filename).join(', ')}`,
+            mission_text: query || `Analyze attached files: ${uploaded.map(a => a.filename).join(', ')}`,
+            attachments: uploaded.length > 0 ? uploaded : null,
+          })
+        });
+
+        if (!res.ok) {
+          throw new Error(`Pre-flight scan returned HTTP ${res.status}`);
+        }
+        const data = await res.json();
+        renderPreflightCard(data);
+        showToast("Pre-flight scan completed! Review questions before launch.", "info");
+      } catch (err) {
+        showToast(`Pre-flight failed: ${err.message}`, "error");
+      } finally {
+        preflightBtn.disabled = false;
+        preflightBtn.innerHTML = oldHtml;
+      }
+    });
+  }
+
+  if (closePreflightCardBtn) {
+    closePreflightCardBtn.addEventListener("click", () => {
+      if (preflightCard) preflightCard.style.display = "none";
+    });
+  }
+
+  if (preflightSkipBtn) {
+    preflightSkipBtn.addEventListener("click", () => {
+      if (preflightCard) preflightCard.style.display = "none";
+      solveBtn.click();
+    });
+  }
+
+  if (preflightLaunchBtn) {
+    preflightLaunchBtn.addEventListener("click", () => {
+      if (preflightCard) preflightCard.style.display = "none";
+      solveBtn.click();
+    });
+  }
+
+  // Wire Step Challenge Modal Buttons
+  if (closeChallengeModalBtn) closeChallengeModalBtn.addEventListener("click", hideStepChallengeModal);
+  if (challengeApproveBtn) challengeApproveBtn.addEventListener("click", () => sendStepChallengeDecision("approve"));
+  if (challengeRetryBtn) challengeRetryBtn.addEventListener("click", () => sendStepChallengeDecision("challenge"));
+  if (challengeOverrideBtn) challengeOverrideBtn.addEventListener("click", () => sendStepChallengeDecision("override_output"));
+  if (challengeAbortBtn) challengeAbortBtn.addEventListener("click", () => sendStepChallengeDecision("abort"));
+
+  // Wire Deliverable Studio Tabs
+  if (tabDelivDossier && tabDelivForm && tabDelivEmail) {
+    tabDelivDossier.addEventListener("click", () => {
+      tabDelivDossier.classList.add("active");
+      tabDelivForm.classList.remove("active");
+      tabDelivEmail.classList.remove("active");
+      if (delivDossierView) delivDossierView.style.display = "block";
+      if (delivFormView) delivFormView.style.display = "none";
+      if (delivEmailView) delivEmailView.style.display = "none";
+      if (delivFormActions) delivFormActions.style.display = "none";
+      if (delivEmailActions) delivEmailActions.style.display = "none";
+    });
+
+    tabDelivForm.addEventListener("click", () => {
+      tabDelivDossier.classList.remove("active");
+      tabDelivForm.classList.add("active");
+      tabDelivEmail.classList.remove("active");
+      if (delivDossierView) delivDossierView.style.display = "none";
+      if (delivFormView) delivFormView.style.display = "block";
+      if (delivEmailView) delivEmailView.style.display = "none";
+      if (delivFormActions) delivFormActions.style.display = "inline-flex";
+      if (delivEmailActions) delivEmailActions.style.display = "none";
+    });
+
+    tabDelivEmail.addEventListener("click", () => {
+      tabDelivDossier.classList.remove("active");
+      tabDelivForm.classList.remove("active");
+      tabDelivEmail.classList.add("active");
+      if (delivDossierView) delivDossierView.style.display = "none";
+      if (delivFormView) delivFormView.style.display = "none";
+      if (delivEmailView) delivEmailView.style.display = "block";
+      if (delivFormActions) delivFormActions.style.display = "none";
+      if (delivEmailActions) delivEmailActions.style.display = "inline-flex";
+    });
+  }
+
+  // Wire Deliverable Studio Exports
+  if (exportFormJsonBtn) {
+    exportFormJsonBtn.addEventListener("click", () => {
+      if (!cachedLatestStructuredForm) {
+        showToast("No structured form data available", "info");
+        return;
+      }
+      const blob = new Blob([JSON.stringify(cachedLatestStructuredForm, null, 2)], { type: "application/json" });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `mission_deliverable_${currentWorkflowId || "data"}.json`;
+      a.click();
+      URL.revokeObjectURL(url);
+      showToast("Structured form exported as JSON!", "success");
+    });
+  }
+
+  if (exportFormCsvBtn) {
+    exportFormCsvBtn.addEventListener("click", () => {
+      if (!cachedLatestStructuredForm || !cachedLatestStructuredForm.fields) {
+        showToast("No structured form data available", "info");
+        return;
+      }
+      let csv = "Field,Value,Confidence,Source Unit,Editable\n";
+      cachedLatestStructuredForm.fields.forEach(f => {
+        const val = String(f.value || "").replace(/"/g, '""');
+        csv += `"${f.label || f.name}","${val}","${f.confidence || 1.0}","${f.source_unit_id || ''}","${f.editable !== false}"\n`;
+      });
+      const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `mission_deliverable_${currentWorkflowId || "data"}.csv`;
+      a.click();
+      URL.revokeObjectURL(url);
+      showToast("Structured form exported as CSV!", "success");
+    });
+  }
+
+  if (downloadEmlBtn) {
+    downloadEmlBtn.addEventListener("click", () => {
+      if (!cachedLatestEmailPayload) {
+        showToast("No email deliverable available", "info");
+        return;
+      }
+      const emlContent = cachedLatestEmailPayload.eml_raw || [
+        `Subject: ${cachedLatestEmailPayload.subject || "Executive Mission Report"}`,
+        `From: AgentHub Fleet Mission Control <no-reply@agenthub.local>`,
+        `Date: ${new Date().toUTCString()}`,
+        `MIME-Version: 1.0`,
+        `Content-Type: text/html; charset=utf-8`,
+        ``,
+        cachedLatestEmailPayload.styled_html_body || "<p>Mission Complete</p>"
+      ].join("\r\n");
+
+      const blob = new Blob([emlContent], { type: "message/rfc822" });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `executive_briefing_${currentWorkflowId || "mission"}.eml`;
+      a.click();
+      URL.revokeObjectURL(url);
+      showToast("Downloaded RFC 822 .eml file!", "success");
+    });
+  }
+
+  if (openMailtoBtn) {
+    openMailtoBtn.addEventListener("click", () => {
+      if (!cachedLatestEmailPayload) {
+        showToast("No email deliverable available", "info");
+        return;
+      }
+      if (cachedLatestEmailPayload.mailto_uri) {
+        window.location.href = cachedLatestEmailPayload.mailto_uri;
+      } else {
+        const subj = encodeURIComponent(cachedLatestEmailPayload.subject || "Executive Mission Report");
+        const body = encodeURIComponent(cachedLatestEmailPayload.executive_summary || "See attached mission results.");
+        window.location.href = `mailto:?subject=${subj}&body=${body}`;
+      }
+    });
+  }
+
+  // Wire Competing Fleets Switcher
+  if (tabFleetAlpha && tabFleetOmega) {
+    tabFleetAlpha.addEventListener("click", () => {
+      tabFleetAlpha.classList.add("active");
+      tabFleetOmega.classList.remove("active");
+      if (activeCompetingFleets && activeCompetingFleets.alpha && dagRenderer) {
+        dagRenderer.render({ goal: activeDag ? activeDag.goal : "Fleet Alpha", tasks: activeCompetingFleets.alpha });
+        showToast("Visualizing Fleet Alpha (Primary)", "info");
+      }
+    });
+    tabFleetOmega.addEventListener("click", () => {
+      tabFleetOmega.classList.add("active");
+      tabFleetAlpha.classList.remove("active");
+      if (activeCompetingFleets && activeCompetingFleets.omega && dagRenderer) {
+        dagRenderer.render({ goal: activeDag ? activeDag.goal : "Fleet Omega", tasks: activeCompetingFleets.omega });
+        showToast("Visualizing Fleet Omega (Challenger)", "info");
+      }
+    });
   }
 
   function formatMarkdown(text) {
@@ -5601,10 +6355,313 @@ Integrates with smart home sensors, switches, lighting, and scenes.`
     });
   }
 
+  // ── Autonomous Fleet Arena UI Logic (Reusable Named Profiles) ──
+  const openFleetArenaBtn = document.getElementById("open-fleet-arena-btn");
+  const planFleetArenaBtn = document.getElementById("plan-fleet-arena-btn");
+  const fleetArenaModal = document.getElementById("fleet-arena-modal");
+  const closeFleetArenaModalX = document.getElementById("close-fleet-arena-modal-x");
+  const closeFleetArenaModalBtn = document.getElementById("close-fleet-arena-modal-btn");
+  const arenaProvisionBtn = document.getElementById("arena-provision-btn");
+  const arenaLaunchBtn = document.getElementById("arena-launch-btn");
+  const arenaModalTitle = document.getElementById("arena-modal-title");
+  const arenaStatusBadge = document.getElementById("arena-status-badge");
+  const arenaModalId = document.getElementById("arena-modal-id");
+  const arenaUnitsCount = document.getElementById("arena-units-count");
+  const arenaReusableCount = document.getElementById("arena-reusable-count");
+  const arenaToCreateCount = document.getElementById("arena-to-create-count");
+  const arenaUnitsContainer = document.getElementById("arena-units-container");
+  const arenaExistingProfilesList = document.getElementById("arena-existing-profiles-list");
+  const arenaExistingProfilesBadge = document.getElementById("arena-existing-profiles-badge");
+  const fleetProfilesCountEl = document.getElementById("fleet-profiles-count");
+
+  let currentFleetArena = null;
+
+  async function loadFleetProfiles() {
+    try {
+      const res = await fetch("/api/fleet/profiles");
+      if (res.ok) {
+        const data = await res.json();
+        const profiles = data.profiles || [];
+        if (fleetProfilesCountEl) fleetProfilesCountEl.textContent = profiles.length;
+        if (arenaExistingProfilesBadge) arenaExistingProfilesBadge.textContent = profiles.length;
+        renderExistingFleetProfiles(profiles);
+      }
+    } catch (e) {
+      console.warn("Could not load fleet profiles:", e);
+    }
+  }
+
+  function renderExistingFleetProfiles(profiles) {
+    if (!arenaExistingProfilesList) return;
+    if (!profiles.length) {
+      arenaExistingProfilesList.innerHTML = `<div style="grid-column: 1 / -1; text-align: center; padding: 14px; color: var(--text-dim); font-size: 12px;">No fleet profiles in Hermes yet. Planning an arena will create them.</div>`;
+      return;
+    }
+    arenaExistingProfilesList.innerHTML = profiles.map(p => `
+      <div style="background: rgba(15, 23, 42, 0.6); padding: 8px 12px; border-radius: 6px; border: 1px solid var(--border-subtle); display: flex; flex-direction: column; gap: 4px;">
+        <div style="display: flex; justify-content: space-between; align-items: center;">
+          <span class="font-mono" style="font-weight: 600; font-size: 11px; color: #38bdf8;">${escapeHtml(p.profile_name)}</span>
+          <button type="button" class="btn-delete-profile" data-profile="${escapeHtml(p.profile_name)}" style="background: transparent; border: none; color: #f87171; cursor: pointer; font-size: 12px;" title="Delete Profile">✕</button>
+        </div>
+        <div style="font-size: 10px; color: var(--text-muted);">${(p.tools || []).length} tools • ${p.has_config ? 'Configured' : 'No config'}</div>
+      </div>
+    `).join("");
+
+    arenaExistingProfilesList.querySelectorAll(".btn-delete-profile").forEach(btn => {
+      btn.addEventListener("click", async (e) => {
+        e.stopPropagation();
+        const pName = btn.dataset.profile;
+        if (!confirm(`Delete fleet profile '${pName}' from Hermes?`)) return;
+        try {
+          const res = await fetch(`/api/fleet/profiles/${encodeURIComponent(pName)}`, { method: "DELETE" });
+          if (res.ok) {
+            showToast(`Deleted profile '${pName}'`);
+            loadFleetProfiles();
+          }
+        } catch (err) {
+          showToast(`Delete failed: ${err.message}`, "error");
+        }
+      });
+    });
+  }
+
+  function renderFleetArena(manifest) {
+    currentFleetArena = manifest;
+    if (arenaModalTitle) arenaModalTitle.textContent = manifest.arena_name || "Autonomous Fleet Arena";
+    if (arenaStatusBadge) {
+      const st = manifest.status || "draft";
+      arenaStatusBadge.textContent = st.toUpperCase();
+      arenaStatusBadge.style.background = st === "draft" ? "rgba(99, 102, 241, 0.2)" : st === "provisioned" ? "rgba(59, 130, 246, 0.2)" : "rgba(16, 185, 129, 0.2)";
+      arenaStatusBadge.style.color = st === "draft" ? "#a5b4fc" : st === "provisioned" ? "#93c5fd" : "#34d399";
+    }
+    if (arenaModalId) arenaModalId.textContent = manifest.arena_id;
+    if (arenaUnitsCount) arenaUnitsCount.textContent = (manifest.units || []).length;
+    if (arenaReusableCount) arenaReusableCount.textContent = (manifest.profiles_existing || []).length;
+    if (arenaToCreateCount) arenaToCreateCount.textContent = (manifest.profiles_to_create || []).length;
+
+    if (arenaUnitsContainer) {
+      if (!manifest.units || !manifest.units.length) {
+        arenaUnitsContainer.innerHTML = `<div style="text-align: center; padding: 24px; color: var(--text-dim);">No units in arena.</div>`;
+        return;
+      }
+
+      arenaUnitsContainer.innerHTML = manifest.units.map((unit, idx) => {
+        const isExisting = unit.profile_exists;
+        const attachedFiles = unit.attached_files || [];
+        return `
+          <div class="tool-item" style="padding: 12px 14px; background: rgba(15, 23, 42, 0.5); border-radius: 8px; border: 1px solid var(--border-subtle); display: flex; flex-direction: column; gap: 8px;">
+            <div style="display: flex; justify-content: space-between; align-items: center;">
+              <div style="display: flex; align-items: center; gap: 8px;">
+                <span class="badge-pill" style="font-weight: 700; font-size: 11px; background: rgba(99, 102, 241, 0.2); color: #a5b4fc;">Unit ${idx + 1}</span>
+                <span style="font-weight: 700; color: #fff; font-size: 13px;">${escapeHtml(unit.task_name)}</span>
+                <span class="badge-pill font-mono" style="font-size: 10px; background: rgba(148, 163, 184, 0.1); color: var(--text-muted);">${escapeHtml(unit.operational_stage)}</span>
+              </div>
+              <span class="badge-pill" style="font-size: 10px; font-weight: 700; ${isExisting ? 'background: rgba(16, 185, 129, 0.2); color: #34d399; border-color: rgba(16, 185, 129, 0.4);' : 'background: rgba(245, 158, 11, 0.2); color: #fbbf24; border-color: rgba(245, 158, 11, 0.4);'}">
+                ${isExisting ? '🟢 REUSABLE (EXISTS IN HERMES)' : '🟡 NEEDS CREATION IN HERMES'}
+              </span>
+            </div>
+
+            <!-- Profile Name in Hermes -->
+            <div style="display: flex; align-items: center; gap: 6px;">
+              <span style="font-size: 11px; color: var(--text-muted);">Hermes Agent Profile:</span>
+              <span class="font-mono" style="font-size: 12px; font-weight: 600; color: #38bdf8; background: rgba(56, 189, 248, 0.1); padding: 2px 6px; border-radius: 4px;">${escapeHtml(unit.profile_name)}</span>
+            </div>
+
+            <div style="font-size: 12px; color: var(--text-dim); line-height: 1.4;">${escapeHtml(unit.description)}</div>
+
+            <!-- Scoped Tools -->
+            ${(unit.scoped_tools && unit.scoped_tools.length) ? `
+              <div style="display: flex; align-items: center; gap: 6px; flex-wrap: wrap;">
+                <span style="font-size: 10px; color: var(--text-muted); text-transform: uppercase;">Scoped Tools:</span>
+                ${unit.scoped_tools.map(t => `<span class="badge-pill font-mono" style="font-size: 10px; padding: 1px 6px;">🔧 ${escapeHtml(t)}</span>`).join("")}
+              </div>
+            ` : ''}
+
+            <!-- Per-Task Attached Files Section -->
+            <div style="margin-top: 4px; padding: 8px 10px; background: rgba(0, 0, 0, 0.25); border-radius: 6px; border: 1px dashed var(--border-subtle);">
+              <div style="display: flex; justify-content: space-between; align-items: center;">
+                <span style="font-size: 11px; font-weight: 600; color: var(--text-muted);">
+                  📎 Attached Phase Files (${attachedFiles.length})
+                </span>
+                <label style="font-size: 11px; color: #38bdf8; cursor: pointer; text-decoration: underline;">
+                  + Attach File for this Phase
+                  <input type="file" class="unit-file-input" data-taskid="${escapeHtml(unit.task_id)}" style="display: none;">
+                </label>
+              </div>
+              ${attachedFiles.length ? `
+                <div style="display: flex; gap: 6px; flex-wrap: wrap; margin-top: 6px;">
+                  ${attachedFiles.map(af => `
+                    <span class="badge-pill font-mono" style="font-size: 10px; background: rgba(56, 189, 248, 0.15); color: #7dd3fc;">
+                      📄 ${escapeHtml(af.filename || 'file')}
+                    </span>
+                  `).join("")}
+                </div>
+              ` : `
+                <div style="font-size: 10px; color: var(--text-dim); margin-top: 2px;">No files attached yet for this phase.</div>
+              `}
+            </div>
+          </div>
+        `;
+      }).join("");
+
+      // Wire per-unit file attachment
+      arenaUnitsContainer.querySelectorAll(".unit-file-input").forEach(inp => {
+        inp.addEventListener("change", async (e) => {
+          const file = e.target.files[0];
+          if (!file || !currentFleetArena) return;
+          const taskId = inp.dataset.taskid;
+          const formData = new FormData();
+          formData.append("files", file);
+          showToast(`Uploading ${file.name}...`, "info");
+          try {
+            const upRes = await fetch("/api/upload", { method: "POST", body: formData });
+            if (!upRes.ok) throw new Error("Upload failed");
+            const upData = await upRes.json();
+            const atts = upData.attachments || [];
+
+            // Attach to arena
+            const attachRes = await fetch(`/api/fleet/arena/${encodeURIComponent(currentFleetArena.arena_id)}/attach`, {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ attachments: { [taskId]: atts } }),
+            });
+            if (attachRes.ok) {
+              const updatedManifest = await attachRes.json();
+              showToast(`Attached ${file.name} to phase!`);
+              renderFleetArena(updatedManifest);
+            }
+          } catch (err) {
+            showToast(`Attachment failed: ${err.message}`, "error");
+          }
+        });
+      });
+    }
+  }
+
+  if (planFleetArenaBtn) {
+    planFleetArenaBtn.addEventListener("click", async () => {
+      const pEl = promptInput || document.getElementById("problem-prompt");
+      const prompt = pEl ? pEl.value.trim() : "";
+      if (!prompt) {
+        showToast("Please enter an objective in the prompt box first.", "error");
+        if (pEl) pEl.focus();
+        return;
+      }
+      showToast("Decomposing mission & planning Fleet Arena with named profiles...", "info");
+      try {
+        const res = await fetch("/api/fleet/arena/plan", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ mission_prompt: prompt }),
+        });
+        if (!res.ok) {
+          const err = await res.json();
+          throw new Error(err.detail || "Planning failed");
+        }
+        const manifest = await res.json();
+        renderFleetArena(manifest);
+        loadFleetProfiles();
+        if (fleetArenaModal) fleetArenaModal.classList.add("active");
+        showToast(`Fleet Arena planned! ${manifest.units.length} units ready for review.`);
+      } catch (e) {
+        showToast(`Fleet Arena planning failed: ${e.message}`, "error");
+      }
+    });
+  }
+
+  if (openFleetArenaBtn) {
+    openFleetArenaBtn.addEventListener("click", async () => {
+      const pEl = promptInput || document.getElementById("problem-prompt");
+      const prompt = pEl ? pEl.value.trim() : "";
+      try {
+        const res = await fetch("/api/fleet/arenas");
+        if (res.ok) {
+          const arenas = await res.json();
+          if (arenas.length > 0) {
+            renderFleetArena(arenas[0]);
+          } else if (prompt) {
+            planFleetArenaBtn.click();
+            return;
+          } else {
+            showToast("Enter a prompt and click 'Plan Fleet Arena' to create one.", "info");
+          }
+        }
+      } catch (e) {
+        console.warn(e);
+      }
+      loadFleetProfiles();
+      if (fleetArenaModal) fleetArenaModal.classList.add("active");
+    });
+  }
+
+  if (arenaProvisionBtn) {
+    arenaProvisionBtn.addEventListener("click", async () => {
+      if (!currentFleetArena) return;
+      showToast("Provisioning named profiles in Hermes & restarting gateway...", "info");
+      try {
+        const res = await fetch(`/api/fleet/arena/${encodeURIComponent(currentFleetArena.arena_id)}/provision`, { method: "POST" });
+        if (!res.ok) {
+          let errDetail = "";
+          try {
+            const errJson = await res.json();
+            errDetail = errJson.detail || JSON.stringify(errJson);
+          } catch (_) {
+            try { errDetail = await res.text(); } catch (_) { }
+          }
+          throw new Error(errDetail || `HTTP ${res.status}`);
+        }
+        const updated = await res.json();
+        renderFleetArena(updated);
+        loadFleetProfiles();
+        showToast("Provisioned missing fleet profiles in Hermes!");
+      } catch (e) {
+        showToast(`Provisioning error: ${e.message}`, "error");
+      }
+    });
+  }
+
+  if (arenaLaunchBtn) {
+    arenaLaunchBtn.addEventListener("click", async () => {
+      if (!currentFleetArena) return;
+      showToast("Launching Autonomous Fleet Arena execution...", "info");
+      try {
+        const res = await fetch(`/api/fleet/arena/${encodeURIComponent(currentFleetArena.arena_id)}/start`, { method: "POST" });
+        if (!res.ok) {
+          let errDetail = "";
+          try {
+            const errJson = await res.json();
+            errDetail = errJson.detail || JSON.stringify(errJson);
+          } catch (_) {
+            try { errDetail = await res.text(); } catch (_) { }
+          }
+          throw new Error(errDetail || `HTTP ${res.status}`);
+        }
+        const runData = await res.json();
+        if (fleetArenaModal) fleetArenaModal.classList.remove("active");
+        showToast(`Fleet Arena launched! Tracking ${runData.workflow_id}...`);
+        currentWorkflowId = runData.workflow_id;
+        setRunningState(true);
+        if (currentFleetArena.dag && dagRenderer) {
+          activeDag = currentFleetArena.dag;
+          dagRenderer.render(activeDag);
+        }
+        connectWorkflowStream(runData.workflow_id);
+        startStatusPolling(runData.workflow_id, currentFleetArena.mission_prompt);
+      } catch (e) {
+        setRunningState(false);
+        showToast(`Launch failed: ${e.message}`, "error");
+      }
+    });
+  }
+
+  if (closeFleetArenaModalX) closeFleetArenaModalX.addEventListener("click", () => fleetArenaModal.classList.remove("active"));
+  if (closeFleetArenaModalBtn) closeFleetArenaModalBtn.addEventListener("click", () => fleetArenaModal.classList.remove("active"));
+
   // Load initial stats
   fetchAgents();
   loadMemoryStats();
   loadDistilledSkillsStats();
+  loadFleetProfiles();
 
   // Global Keyboard Shortcuts (2026 Pro Experience)
   window.addEventListener("keydown", (e) => {

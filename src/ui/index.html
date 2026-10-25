@@ -35,9 +35,9 @@
           <span class="dot"></span>
           <span class="status-label">LLM Ready</span>
         </div>
-        <div id="temporal-status" class="status-pill online" title="Temporal Workflow Engine">
+        <div id="temporal-status" class="status-pill online" title="Durable State Engine">
           <span class="dot"></span>
-          <span class="status-label">Temporal Online</span>
+          <span class="status-label">Durable Engine Online</span>
         </div>
 
         <div class="divider-v"></div>
@@ -66,6 +66,14 @@
           </svg>
           <span>Agents</span>
           <span id="agents-count" class="badge-pill">0</span>
+        </button>
+
+        <button id="open-fleet-arena-btn" class="header-btn" title="Autonomous Fleet Arena — Reusable Named Agent Profiles">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5"/>
+          </svg>
+          <span>Fleet Arena</span>
+          <span id="fleet-profiles-count" class="badge-pill">0</span>
         </button>
 
         <button id="open-workflow-builder-btn" class="header-btn" title="Build custom workflows or load pipeline templates">
@@ -108,13 +116,59 @@
           <span id="distilled-skills-badge" class="badge-pill" style="display: none; background: rgba(236, 72, 153, 0.25); color: #f472b6; border-color: rgba(236, 72, 153, 0.5);">0</span>
         </button>
 
-        <a href="http://localhost:8234" target="_blank" class="header-btn icon-only" title="Open Temporal Web UI">
+        <a href="http://localhost:8234" target="_blank" class="header-btn icon-only" title="Open Durable State Dashboard">
           <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
             <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6M15 3h6v6M10 14L21 3"/>
           </svg>
         </a>
       </div>
     </header>
+
+    <!-- TOP KPI TELEMETRY RIBBON (Always Visible) -->
+    <section id="kpi-telemetry-ribbon" class="kpi-ribbon">
+      <div class="kpi-item">
+        <div class="kpi-icon">⏱️</div>
+        <div class="kpi-meta">
+          <span class="kpi-label">MISSION ELAPSED</span>
+          <span id="kpi-elapsed-time" class="kpi-value font-mono">00:00.0</span>
+        </div>
+      </div>
+      <div class="kpi-divider"></div>
+      <div class="kpi-item">
+        <div class="kpi-icon">🤖</div>
+        <div class="kpi-meta">
+          <span class="kpi-label">ACTIVE UNITS</span>
+          <span id="kpi-active-units" class="kpi-value font-mono">0 / 0</span>
+        </div>
+      </div>
+      <div class="kpi-divider"></div>
+      <div class="kpi-item">
+        <div class="kpi-icon">🧩</div>
+        <div class="kpi-meta">
+          <span class="kpi-label">MATCHED TOOLS</span>
+          <span id="kpi-matched-tools" class="kpi-value font-mono">0 Ready</span>
+        </div>
+      </div>
+      <div class="kpi-divider"></div>
+      <div class="kpi-item">
+        <div class="kpi-icon">🛡️</div>
+        <div class="kpi-meta">
+          <span class="kpi-label">CHALLENGES ISSUED</span>
+          <span id="kpi-challenges-count" class="kpi-value font-mono">0</span>
+        </div>
+      </div>
+      <div class="kpi-divider"></div>
+      <div class="kpi-item">
+        <div class="kpi-icon">🎯</div>
+        <div class="kpi-meta">
+          <span class="kpi-label">FLEET PASS RATE</span>
+          <span id="kpi-pass-rate" class="kpi-value font-mono">100%</span>
+        </div>
+      </div>
+      <div class="kpi-item kpi-status-container" style="margin-left: auto;">
+        <span id="kpi-fleet-status-pill" class="fleet-status-pill standby">STANDBY</span>
+      </div>
+    </section>
 
     <!-- Main Workspace -->
     <main class="main-workspace">
@@ -179,7 +233,37 @@
             <!-- Hidden mode toggle for backwards compatibility -->
             <input type="checkbox" id="mode-async" checked style="display: none;">
 
+            <!-- Governance Toggles -->
+            <div class="governance-toggles-row" style="display: flex; align-items: center; gap: 14px; margin-right: auto;">
+              <label class="gov-checkbox-label" title="When enabled, execution pauses after every step for operator challenge, critique or override before moving downstream">
+                <input type="checkbox" id="challenge-step-toggle" checked>
+                <span class="gov-check-custom"></span>
+                <span>🛡️ Step-Challenge Gate</span>
+              </label>
+              <label class="gov-checkbox-label" title="When enabled, synthesizes dual competing fleets (Alpha vs Omega) with distinct specialist strategies">
+                <input type="checkbox" id="competing-fleets-toggle">
+                <span class="gov-check-custom"></span>
+                <span>⚔️ Competing Fleets Arena</span>
+              </label>
+            </div>
+
             <span class="keyboard-hint">Press <strong>Enter ↵</strong> to run</span>
+
+            <!-- Pre-Flight Clarification Button -->
+            <button id="preflight-btn" type="button" class="btn-secondary" title="Scan environment connectors, discover tools, and generate pre-flight clarification questions">
+              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <circle cx="12" cy="12" r="10"/><path d="M12 16v-4M12 8h.01"/>
+              </svg>
+              <span>Scan &amp; Clarify</span>
+            </button>
+
+            <!-- Plan Fleet Arena Button (Reusable Named Profiles) -->
+            <button id="plan-fleet-arena-btn" type="button" class="btn-secondary" style="border-color: rgba(99, 102, 241, 0.5); color: #a5b4fc; background: rgba(99, 102, 241, 0.1);" title="Plan Autonomous Fleet Arena with reusable named Hermes profiles (review before running)">
+              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5"/>
+              </svg>
+              <span>🏟️ Plan Fleet Arena</span>
+            </button>
 
             <!-- Hidden File Input for document attachments -->
             <input type="file" id="prompt-file-input" multiple accept=".txt,.pdf,.docx,.doc,.csv,.json,.log,.md,.xml,.yaml,.yml,.py" style="position: absolute; left: -9999px; opacity: 0; pointer-events: none;">
@@ -197,10 +281,55 @@
               <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                 <polygon points="5 3 19 12 5 21 5 3"/>
               </svg>
-              <span id="solve-btn-text">Execute Task</span>
+              <span id="solve-btn-text">Execute Mission</span>
             </button>
           </div>
         </div>
+
+        <!-- PORTAL 1 & 2 DYNAMIC CARDS -->
+        <!-- Pre-Flight Clarification Inline Card -->
+        <div id="preflight-card" class="preflight-card" style="display: none;">
+          <div class="preflight-header">
+            <div style="display: flex; align-items: center; gap: 8px;">
+              <span class="preflight-badge">PRE-FLIGHT GATE</span>
+              <span class="preflight-title">Mission Clarification &amp; Readiness</span>
+            </div>
+            <div style="display: flex; align-items: center; gap: 8px;">
+              <span id="preflight-readiness-badge" class="readiness-score-badge">Readiness: 100%</span>
+              <button id="close-preflight-card-btn" type="button" class="modal-close-icon" title="Dismiss card">✕</button>
+            </div>
+          </div>
+          <div id="preflight-env-chips" class="preflight-env-chips"></div>
+          <div id="preflight-questions-container" class="preflight-questions-container"></div>
+          <div class="preflight-actions">
+            <button id="preflight-skip-btn" type="button" class="btn-reject" style="background: rgba(255, 255, 255, 0.05); color: var(--text-dim);">⚡ Use Defaults</button>
+            <button id="preflight-launch-btn" type="button" class="btn-approve">🚀 Launch Specialized Fleet</button>
+          </div>
+        </div>
+
+        <!-- Environment & Tool Discovery Matrix Collapsible Tray -->
+        <details id="discovery-matrix-details" class="discovery-matrix-details">
+          <summary>
+            <span>🌐 Environment &amp; Tool Discovery Matrix (<span id="discovery-connector-count">13</span> Connectors Active)</span>
+            <span id="discovery-matrix-status" class="discovery-pill">Verified Ready</span>
+          </summary>
+          <div class="discovery-matrix-content">
+            <div class="discovery-matrix-columns">
+              <div class="discovery-col">
+                <div class="discovery-col-title">Enterprise Connectors Probed</div>
+                <div id="discovery-connectors-list" class="discovery-items-grid">
+                  <!-- Populated dynamically via environment discovery -->
+                </div>
+              </div>
+              <div class="discovery-col">
+                <div class="discovery-col-title">Dynamically Scoped Tools for Mission</div>
+                <div id="discovery-tools-list" class="discovery-items-grid">
+                  <!-- Populated dynamically via tool registry scoring -->
+                </div>
+              </div>
+            </div>
+          </div>
+        </details>
       </section>
 
       <!-- Workflow DAG Visualizer Card -->
@@ -210,10 +339,16 @@
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
               <rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/>
             </svg>
-            <span>Workflow Execution Plan</span>
-            <span id="dag-interactive-hint" class="dag-interactive-hint" style="display: none;">💡 Click any pending node to edit parameters & guidance</span>
+            <span>Autonomous Fleet Arena</span>
+            <span id="fleet-specialist-count" class="badge-pill" style="background: rgba(99, 102, 241, 0.2); color: #a5b4fc; border-color: rgba(99, 102, 241, 0.4);">0 Specialist Units</span>
+            <span id="dag-interactive-hint" class="dag-interactive-hint" style="display: none;">💡 Click any pending node to edit parameters &amp; guidance</span>
           </div>
           <div style="display: flex; align-items: center; gap: 12px;">
+            <!-- Competing Fleets Toggle (hidden unless enabled) -->
+            <div id="competing-fleets-bar" style="display: none; align-items: center; gap: 6px; background: rgba(15, 23, 42, 0.7); padding: 2px 6px; border-radius: 20px; border: 1px solid var(--border-subtle);">
+              <button type="button" id="tab-fleet-alpha" class="fleet-tab active">Fleet Alpha</button>
+              <button type="button" id="tab-fleet-omega" class="fleet-tab">Fleet Omega</button>
+            </div>
             <button id="load-template-dag-btn" type="button" class="copy-btn" style="background: rgba(99, 102, 241, 0.15); border-color: rgba(99, 102, 241, 0.4); color: #a5b4fc;" title="Load a pipeline template into visualizer to inspect and edit before execution">
               <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                 <polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/>
@@ -254,7 +389,7 @@
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                 <polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/>
               </svg>
-              <span>Activity & Steps</span>
+              <span>Activity &amp; Steps</span>
             </div>
           </div>
 
@@ -265,16 +400,34 @@
           </div>
         </section>
 
-        <!-- Solution & Results -->
-        <section class="panel solution-panel">
-          <div class="panel-header">
+        <!-- PORTAL 5: Multi-Channel Deliverable Studio -->
+        <section class="panel solution-panel deliverable-studio-panel">
+          <div class="panel-header" style="flex-wrap: wrap; gap: 8px;">
             <div class="panel-title">
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                 <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/><polyline points="10 9 9 9 8 9"/>
               </svg>
-              <span>Agent Solution</span>
+              <span>Deliverable Studio</span>
             </div>
-            <div style="display: flex; gap: 8px;">
+
+            <!-- Deliverable Channel Tabs -->
+            <div class="deliverable-tabs-bar">
+              <button type="button" id="tab-deliv-dossier" class="deliv-tab active">📄 Master Dossier</button>
+              <button type="button" id="tab-deliv-form" class="deliv-tab">📋 Interactive Form</button>
+              <button type="button" id="tab-deliv-email" class="deliv-tab">📧 Executive Email</button>
+            </div>
+
+            <div style="display: flex; gap: 8px; margin-left: auto;">
+              <!-- Export buttons for form -->
+              <div id="deliv-form-actions" style="display: none; gap: 6px;">
+                <button id="export-form-json-btn" class="copy-btn" title="Export structured form data as JSON">💾 Export JSON</button>
+                <button id="export-form-csv-btn" class="copy-btn" title="Export table data as CSV">📊 Export CSV</button>
+              </div>
+              <!-- Export buttons for email -->
+              <div id="deliv-email-actions" style="display: none; gap: 6px;">
+                <button id="download-eml-btn" class="copy-btn" title="Download RFC 822 .eml file">📥 Download .eml</button>
+                <button id="open-mailto-btn" class="copy-btn" title="Open in default desktop mail client">✉️ Open in Mail</button>
+              </div>
               <button id="distill-solution-btn" class="copy-btn" style="display: none; background: rgba(16, 185, 129, 0.15); border-color: rgba(16, 185, 129, 0.4); color: #34d399;" title="Distill solution into a permanent Python tool (Autonomous Self-Learning)">
                 <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                   <polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/>
@@ -289,15 +442,105 @@
               </button>
             </div>
           </div>
-          <div id="solution-body" class="solution-body">
-            <div class="empty-solution-notice">
-              Final synthesized solution will be rendered here once the workflow finishes.
+
+          <!-- Channel 1: Master Markdown Dossier View -->
+          <div id="deliverable-dossier-view" class="deliverable-view-content">
+            <div id="solution-body" class="solution-body">
+              <div class="empty-solution-notice">
+                Final synthesized solution will be rendered here once the workflow finishes.
+              </div>
+            </div>
+          </div>
+
+          <!-- Channel 2: Interactive Structured Form View -->
+          <div id="deliverable-form-view" class="deliverable-view-content" style="display: none;">
+            <div id="form-container" class="form-container">
+              <div class="empty-solution-notice">Interactive structured form will populate here on mission completion.</div>
+            </div>
+          </div>
+
+          <!-- Channel 3: Executive Email View -->
+          <div id="deliverable-email-view" class="deliverable-view-content" style="display: none;">
+            <div id="email-preview-container" class="email-preview-container">
+              <div class="empty-solution-notice">Styled executive email will populate here on mission completion.</div>
             </div>
           </div>
         </section>
 
       </div>
     </main>
+  </div>
+
+  <!-- PORTAL 4: Interactive Step-Challenge & Governance Modal -->
+  <div id="step-challenge-modal" class="modal-overlay">
+    <div class="modal-card modal-large" style="max-width: 780px;">
+      <div class="modal-header">
+        <div class="brand-icon icon-circle" style="background: rgba(245, 158, 11, 0.2); border: 1px solid rgba(245, 158, 11, 0.5); color: #fbbf24;">
+          <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2">
+            <polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/>
+          </svg>
+        </div>
+        <div style="flex: 1;">
+          <div style="display: flex; justify-content: space-between; align-items: center;">
+            <div style="display: flex; align-items: center; gap: 8px;">
+              <span id="challenge-unit-badge" class="phase-badge" style="background: rgba(99, 102, 241, 0.25); color: #a5b4fc; border: 1px solid rgba(99, 102, 241, 0.5);">AEU-T1</span>
+              <div class="modal-title">Step-Challenge Gate &amp; Governance</div>
+            </div>
+            <div style="display: flex; align-items: center; gap: 8px;">
+              <span id="challenge-verdict-badge" class="badge-pill" style="background: rgba(16, 185, 129, 0.2); color: #34d399; border-color: rgba(16, 185, 129, 0.4);">SUPERVISOR: PASS</span>
+              <button id="close-challenge-modal-btn" type="button" class="modal-close-icon" title="Close modal">✕</button>
+            </div>
+          </div>
+          <div style="display: flex; justify-content: space-between; align-items: center; margin-top: 4px;">
+            <div id="challenge-unit-role" class="modal-subtitle" style="color: #cbd5e1; font-weight: 500;">Specialist Unit Finished Execution</div>
+            <div id="challenge-telemetry-meta" style="font-size: 11px; color: var(--text-dim); font-family: var(--font-mono);">0ms • 0 tools</div>
+          </div>
+        </div>
+      </div>
+
+      <div class="modal-body-scroll" style="display: flex; flex-direction: column; gap: 12px; margin-top: 14px; max-height: 62vh; overflow-y: auto; padding-right: 4px;">
+        <!-- Output text preview -->
+        <div>
+          <label style="font-size: 12px; font-weight: 600; color: var(--text-main); display: flex; justify-content: space-between;">
+            <span>Unit Output Preview</span>
+            <span style="font-size: 11px; color: var(--text-dim);">Task result before unlocking downstream</span>
+          </label>
+          <div id="challenge-output-preview" class="font-mono" style="background: rgba(15, 23, 42, 0.8); border: 1px solid var(--border-subtle); border-radius: 8px; padding: 12px; font-size: 12px; max-height: 180px; overflow-y: auto; color: #f1f5f9; white-space: pre-wrap; margin-top: 4px;"></div>
+        </div>
+
+        <!-- Supervisor critique preview -->
+        <div id="challenge-supervisor-box" style="background: rgba(16, 185, 129, 0.08); border: 1px solid rgba(16, 185, 129, 0.25); border-radius: 8px; padding: 10px 12px; font-size: 12px; line-height: 1.4;">
+          <div style="font-weight: 700; color: #34d399; margin-bottom: 2px;">🛡️ Supervisor Assessment</div>
+          <div id="challenge-supervisor-text" style="color: #cbd5e1;">Evaluated as complete and accurate.</div>
+        </div>
+
+        <!-- Operator critique input -->
+        <div style="display: flex; flex-direction: column; gap: 6px;">
+          <label style="font-size: 12px; font-weight: 600; color: var(--text-main); display: flex; justify-content: space-between;">
+            <span>Operator Critique / Constraints (Required if challenging step)</span>
+            <span style="font-size: 11px; color: #fbbf24;">Injected into unit instructions</span>
+          </label>
+          <textarea id="challenge-critique-input" class="prompt-box modal-input" rows="2" placeholder="e.g. Findings are too generic. Specifically verify whether port 445 SMB connections correlate with the Cobalt Strike beacon."></textarea>
+        </div>
+
+        <!-- Override output textarea (collapsible) -->
+        <details class="param-override-details">
+          <summary>✏️ Override Unit Output Directly (Manual Intervention)</summary>
+          <div style="margin-top: 8px;">
+            <textarea id="challenge-override-input" class="prompt-box modal-input font-mono" rows="3" placeholder="Enter replacement text to bypass agent re-run and pass custom output directly to downstream units..."></textarea>
+          </div>
+        </details>
+      </div>
+
+      <div class="modal-actions" style="margin-top: 16px; justify-content: space-between;">
+        <button id="challenge-abort-btn" class="btn-reject" type="button" style="background: rgba(239, 68, 68, 0.15); border-color: rgba(239, 68, 68, 0.4); color: #f87171;">⛔ Abort</button>
+        <div style="display: flex; gap: 8px;">
+          <button id="challenge-override-btn" class="btn-secondary" type="button">✏️ Override &amp; Unlock</button>
+          <button id="challenge-retry-btn" class="btn-challenge" type="button" style="background: rgba(245, 158, 11, 0.2); border: 1px solid rgba(245, 158, 11, 0.5); color: #fbbf24; padding: 8px 16px; border-radius: var(--radius-sm); font-weight: 600; cursor: pointer;">⚡ Challenge Step</button>
+          <button id="challenge-approve-btn" class="btn-approve" type="button">✔ Approve Step</button>
+        </div>
+      </div>
+    </div>
   </div>
 
   <!-- Interactive HITL Approval Modal -->
@@ -381,6 +624,21 @@
       </div>
 
       <div class="modal-body-scroll" style="display: flex; flex-direction: column; gap: 14px; margin-top: 14px; max-height: 65vh; overflow-y: auto; padding-right: 4px;">
+        <!-- Specialized AEU Unit Specification Drawer / Inspector -->
+        <div id="edit-task-aeu-drawer" style="display: none; background: rgba(30, 41, 59, 0.5); border: 1px solid rgba(99, 102, 241, 0.3); border-radius: 6px; padding: 10px 12px; font-size: 11.5px;">
+          <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px;">
+            <span style="font-weight: 700; color: #a5b4fc;" id="edit-task-aeu-title">AEU Unit Specification</span>
+            <span style="font-size: 10px; background: rgba(56, 189, 248, 0.15); border: 1px solid rgba(56, 189, 248, 0.35); color: #38bdf8; padding: 2px 6px; border-radius: 4px; font-weight: 600;" id="edit-task-aeu-stage">DEEP_ANALYSIS</span>
+          </div>
+          <div style="color: #cbd5e1; font-size: 11px; margin-bottom: 4px;"><strong>Scoped Tools:</strong> <span id="edit-task-aeu-tools" style="color: #fbbf24;">None</span></div>
+          <div style="color: #cbd5e1; font-size: 11px; margin-bottom: 4px;"><strong>Input Contract:</strong> <span id="edit-task-aeu-input" style="color: #94a3b8;">None</span></div>
+          <div style="color: #cbd5e1; font-size: 11px; margin-bottom: 4px;"><strong>Output Contract:</strong> <span id="edit-task-aeu-output" style="color: #34d399;">None</span></div>
+          <details style="margin-top: 6px;">
+            <summary style="cursor: pointer; color: #818cf8; font-weight: 600;">View Synthesized Unit Prompt (Bespoke Directive)</summary>
+            <div id="edit-task-aeu-prompt" class="font-mono" style="margin-top: 4px; padding: 6px 8px; background: rgba(0,0,0,0.4); border-radius: 4px; color: #e2e8f0; font-size: 10.5px; white-space: pre-wrap; max-height: 140px; overflow-y: auto;"></div>
+          </details>
+        </div>
+
         <!-- Task Name -->
         <div style="display: flex; flex-direction: column; gap: 6px;">
           <label style="font-size: 12px; font-weight: 600; color: var(--text-main);">Task Name</label>
@@ -559,12 +817,12 @@
 
       <!-- Worker engine -->
       <div style="display: flex; flex-direction: column; gap: 6px;">
-        <label class="field-label" for="llm-input-worker-engine">Worker Engine</label>
+        <label class="field-label" for="llm-input-worker-engine">Execution Unit Engine</label>
         <select id="llm-input-worker-engine" class="model-select" style="width: 100%;">
-          <option value="universal">Universal ReAct (aiagent's own loop)</option>
-          <option value="hermes">Hermes Agent (tasks run inside Hermes)</option>
+          <option value="universal">Deterministic Task Unit (DTU Engine)</option>
+          <option value="hermes">Native Core Runtime (Autonomous Execution Unit - AEU)</option>
         </select>
-        <span class="field-tip">Hermes Agent runs on its API server (127.0.0.1:8642) with aiagent's tools over MCP. Agents can override this in Agent Studio.</span>
+        <span class="field-tip">Native Core Runtime executes tasks inside dedicated Autonomous Execution Units with native tools and skills. Can be configured per-agent.</span>
       </div>
 
       <!-- Test connection status display -->
@@ -583,7 +841,7 @@
     </div>
   </div>
 
-  <!-- Tools & Integrations Modal (Installed Tools, MCP & OpenAPI) -->
+  <!-- Tools & Integrations Modal (Installed Tools, Universal Tool Bridge & OpenAPI) -->
   <div id="integrations-modal" class="modal-overlay">
     <div class="modal-card modal-integrations">
       <div class="modal-header">
@@ -597,26 +855,26 @@
             <div class="modal-title">Tools & Integrations</div>
             <button id="close-integrations-modal-x" type="button" class="modal-close-icon" title="Close modal">✕</button>
           </div>
-          <div class="modal-subtitle">Manage agent capabilities, Model Context Protocol (MCP) & REST APIs</div>
+          <div class="modal-subtitle">Manage agent capabilities, Universal Tool Bridge & Enterprise Connectors</div>
         </div>
       </div>
 
       <!-- Clean Tab Switcher -->
       <div class="tabs-header">
         <button type="button" id="tab-btn-connectors" class="tab-btn active">
-          🛡️ Security Connectors (13)
+          🛡️ Enterprise Connectors (13)
         </button>
         <button type="button" id="tab-btn-tools" class="tab-btn">
           🧩 Installed Tools
         </button>
         <button type="button" id="tab-btn-mcp" class="tab-btn">
-          ⚡ Model Context Protocol (MCP)
+          ⚡ Universal Tool Bridge
         </button>
         <button type="button" id="tab-btn-openapi" class="tab-btn">
           🌐 OpenAPI / Swagger
         </button>
         <button type="button" id="tab-btn-hermes-agent" class="tab-btn">
-          🪽 Hermes Agent
+          ⚡ Native Core Runtime
         </button>
       </div>
 
@@ -1405,6 +1663,83 @@
 
       <div class="modal-actions" style="justify-content: flex-end; margin-top: 14px;">
         <button type="button" id="close-memory-modal-btn" class="btn-reject">Close</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Autonomous Fleet Arena Modal (Reusable Named Hermes Agent Profiles) -->
+  <div id="fleet-arena-modal" class="modal-overlay">
+    <div class="modal-card modal-large" style="max-width: 960px; max-height: 90vh; display: flex; flex-direction: column;">
+      <div class="modal-header">
+        <div class="brand-icon icon-circle" style="background: linear-gradient(135deg, #6366f1, #8b5cf6);">
+          <span style="font-size: 20px;">🏟️</span>
+        </div>
+        <div style="flex: 1;">
+          <div style="display: flex; justify-content: space-between; align-items: center;">
+            <div class="modal-title" id="arena-modal-title">Autonomous Fleet Arena</div>
+            <div style="display: flex; align-items: center; gap: 8px;">
+              <span id="arena-status-badge" class="badge-pill" style="background: rgba(99, 102, 241, 0.2); color: #a5b4fc; border-color: #6366f1; font-weight: 700;">DRAFT</span>
+              <button id="close-fleet-arena-modal-x" type="button" class="modal-close-icon" title="Close modal">✕</button>
+            </div>
+          </div>
+          <div class="modal-subtitle">Reusable, named Hermes agent profiles. Review plan, provision in Hermes, attach files per phase, and launch.</div>
+        </div>
+      </div>
+
+      <!-- Arena Stats Ribbon -->
+      <div style="display: flex; gap: 12px; padding: 10px 16px; background: rgba(15, 23, 42, 0.7); border-bottom: 1px solid var(--border-subtle); align-items: center; flex-wrap: wrap;">
+        <div>
+          <span style="font-size: 11px; color: var(--text-muted); text-transform: uppercase; font-weight: 600;">Arena ID:</span>
+          <span id="arena-modal-id" class="font-mono" style="font-size: 12px; color: #fff; margin-left: 4px;">-</span>
+        </div>
+        <div style="width: 1px; height: 16px; background: var(--border-subtle);"></div>
+        <div>
+          <span style="font-size: 11px; color: var(--text-muted); text-transform: uppercase; font-weight: 600;">Units:</span>
+          <span id="arena-units-count" style="font-size: 12px; color: #38bdf8; font-weight: 700; margin-left: 4px;">0</span>
+        </div>
+        <div style="width: 1px; height: 16px; background: var(--border-subtle);"></div>
+        <div>
+          <span style="font-size: 11px; color: var(--text-muted); text-transform: uppercase; font-weight: 600;">Reusable in Hermes:</span>
+          <span id="arena-reusable-count" style="font-size: 12px; color: #34d399; font-weight: 700; margin-left: 4px;">0</span>
+        </div>
+        <div style="width: 1px; height: 16px; background: var(--border-subtle);"></div>
+        <div>
+          <span style="font-size: 11px; color: var(--text-muted); text-transform: uppercase; font-weight: 600;">To Provision:</span>
+          <span id="arena-to-create-count" style="font-size: 12px; color: #fbbf24; font-weight: 700; margin-left: 4px;">0</span>
+        </div>
+      </div>
+
+      <div class="modal-body" style="flex: 1; overflow-y: auto; padding: 16px;">
+        <!-- Units Container -->
+        <div id="arena-units-container" style="display: flex; flex-direction: column; gap: 12px;">
+          <!-- Dynamically populated unit cards with per-phase file attachments -->
+        </div>
+
+        <!-- Persistent Hermes Fleet Profiles Section -->
+        <div style="margin-top: 24px; border-top: 1px solid var(--border-subtle); padding-top: 14px;">
+          <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
+            <h4 style="font-size: 13px; font-weight: 700; color: #fff; display: flex; align-items: center; gap: 6px;">
+              <span>🤖 Reusable Fleet Profiles in Hermes</span>
+              <span id="arena-existing-profiles-badge" class="badge-pill">0</span>
+            </h4>
+            <span style="font-size: 11px; color: var(--text-muted);">Exempt from LRU eviction • Reusable across missions</span>
+          </div>
+          <div id="arena-existing-profiles-list" style="display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 8px;">
+            <!-- Rendered profiles -->
+          </div>
+        </div>
+      </div>
+
+      <div class="modal-actions" style="display: flex; justify-content: space-between; align-items: center; padding: 14px 16px; border-top: 1px solid var(--border-subtle); background: rgba(15, 23, 42, 0.85);">
+        <button type="button" id="close-fleet-arena-modal-btn" class="btn-reject">Close</button>
+        <div style="display: flex; gap: 10px;">
+          <button type="button" id="arena-provision-btn" class="btn-secondary" style="border-color: #3b82f6; color: #93c5fd;">
+            <span>🔧 Provision in Hermes</span>
+          </button>
+          <button type="button" id="arena-launch-btn" class="btn-approve" style="background: linear-gradient(135deg, #6366f1, #4f46e5);">
+            <span>🚀 Start Fleet Arena</span>
+          </button>
+        </div>
       </div>
     </div>
   </div>

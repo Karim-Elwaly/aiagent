@@ -21,9 +21,11 @@ from src.hermes.client import profile_prefix
 from src.hermes.profiles import (
     DEFAULT_PROFILE,
     DYNAMIC_PROFILE_PREFIX,
+    FLEET_PROFILE_PREFIX,
     ORCHESTRATOR_PROFILE,
     HermesError,
     HermesProfiles,
+    is_fleet_profile_name,
 )
 
 logger = logging.getLogger(__name__)
@@ -150,6 +152,11 @@ def provision_dag_profiles(
     for task in dag_dict.get("tasks", []):
         # Tasks with an explicit custom agent retain that agent's own profile
         if task.get("agent_id"):
+            continue
+
+        # Tasks already bound to a named, persistent Fleet Arena profile retain it
+        existing_prof = task.get("hermes_profile") or task.get("_hermes_profile")
+        if is_fleet_profile_name(existing_prof):
             continue
 
         skills = task.get("required_skills", [])

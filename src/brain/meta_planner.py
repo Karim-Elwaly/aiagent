@@ -18,13 +18,20 @@ import re
 from pydantic import ValidationError
 
 from src.brain.prompts import (
+    CLARIFICATION_GENERATOR_PROMPT,
     PLANNER_SYSTEM_PROMPT,
     REPLAN_SYSTEM_PROMPT,
 )
 from src.core.config import get_settings
 from src.core.exceptions import JSONParseError
 from src.core.llm_client import LocalLLMClient
-from src.core.models import Task, TaskDAG
+from src.core.models import (
+    ClarificationManifest,
+    ClarificationQuestion,
+    MissionEnvironmentManifest,
+    Task,
+    TaskDAG,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -385,3 +392,52 @@ class MetaPlanner:
                 )
             ],
         )
+
+    async def generate_clarification_questions(
+        self,
+        prompt: str,
+        env_manifest: MissionEnvironmentManifest | None = None,
+        session_id: str = "",
+    ) -> ClarificationManifest:
+        """Analyze mission prompt & environment to generate targeted pre-flight clarifying questions."""
+        tools_summary = "None detected"
+        files_summary = "None attached"
+
+        if env_manifest:
+            active_c = [c.name for c in env_manifest.active_connectors if c.readiness.value == "ready"]
+            matched_t = [t.name for t in env_manifest.matched_tools[:8]]
+            tools_summary = f"Active Connectors: {', '.join(active_c) or 'None'} | Matched Tools: {', '.join(matched_t) or 'Standard'}"
+            if env_manifest.available_files:
+                files_summary = ", ".join(env_manifest.available_files[:10])
+
+        system_prompt = CLARIFICATION_GENERATOR_PROMPT.format(
+            prompt=prompt,
+            tools_summary=tools_summary,
+            files_summary=files_summary,
+        )
+
+        messages = [
+            {"role": "system", "content": system_prompt},
+            {"role": "user", "content": f"Analyze this mission and determine if pre-flight clarification is needed: {prompt}"},
+        ]
+
+        try:
+            response = await self.llm.chat(messages)
+            json_str = self._extract_json(response)
+            data = json.loads(json_str)
+            manifest = ClarificationManifest.model_validate(data)
+            manifest.session_id = session_id or "default"
+            if env_manifest:
+                manifest.discovered_tools_count = len(env_manifest.matched_tools)
+            return manifest
+        except Exception as e:
+            logger.info("Pre-flight clarification check produced no questions (error or clean bypass: %s)", e)
+            return ClarificationManifest(
+                session_id=session_id or "default",
+                needs_clarification=False,
+                detected_mission_type="general_operation",
+                recommended_workflow_topology="sequential",
+                discovered_tools_count=len(env_manifest.matched_tools) if env_manifest else 0,
+                questions=[],
+            )
+

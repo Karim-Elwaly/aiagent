@@ -129,6 +129,9 @@ def _longest_existing_prefix(raw: str) -> str | None:
             candidate = f"{candidate}\\"
         try:
             p = Path(candidate)
+            # Must be an absolute path or drive root to prevent matching arbitrary relative words in cwd
+            if not p.is_absolute() and not re.match(r"^[a-zA-Z]:[\\/]", candidate):
+                continue
             if p.exists():
                 return str(p.resolve())
         except Exception:
@@ -140,7 +143,7 @@ def extract_target_path(text: str) -> str | None:
     """Extract and heal a target filesystem path from a user query or prompt string.
     
     Looks for:
-      - Windows paths (e.g. D:\\Security-logs-test\\..., C:\\Logs, D:\\, D:, D:/...)
+      - Windows paths (e.g. D:\\Security-logs-test\\..., C:\\Logs, D:\\, D:/...)
       - Unix absolute paths (e.g. /var/log/..., /tmp/...)
     """
     if not text:
@@ -152,17 +155,21 @@ def extract_target_path(text: str) -> str | None:
         if esc_char in healed_text:
             healed_text = healed_text.replace(esc_char, replacement)
 
-    # Windows drive root or subpath: e.g. D:\, D:, D:/, D:\ai_gpu
-    m_win = re.search(r'([a-zA-Z]:(?:[\\/][^"\'\n\r\t<>|]*)?)', healed_text)
+    # Windows drive root or subpath: e.g. D:\, D:/, D:\Security-logs-test, "D:"
+    # Enforces negative lookbehind (?<![a-zA-Z0-9]) so word endings like "Audit:" or "Note:" never match.
+    # Requires path separator [\\/] or quoted drive letter.
+    m_win = re.search(r'(?<![a-zA-Z0-9])([a-zA-Z]:[\\/][^"\'\n\r\t<>|]*|["\']([a-zA-Z]:)["\'])', healed_text)
     if m_win:
-        raw_p = m_win.group(1).rstrip(",;.:)]}")
+        raw_p = (m_win.group(2) if m_win.group(2) else m_win.group(1)).rstrip(",;.:)]}")
         if re.match(r"^[a-zA-Z]:$", raw_p):
             raw_p = f"{raw_p}\\"
         existing = _longest_existing_prefix(raw_p)
         if existing:
             return existing
         resolved = resolve_target_path(raw_p)
-        return str(resolved)
+        # Ensure it is an absolute path with valid drive structure, never relative fallback
+        if resolved.is_absolute() and (resolved.exists() or re.match(r"^[a-zA-Z]:[\\/]", str(resolved))):
+            return str(resolved)
 
     # Unix absolute path: require either known unix root (/var, /tmp, /etc, /usr, /home) or at least 2 directory segments
     m_unix = re.search(r'((?:/(?:var|tmp|etc|usr|opt|home|root|bin|proc|sys|Users|private)/[a-zA-Z0-9._/-]+|/(?:[a-zA-Z0-9._-]+/){2,}[a-zA-Z0-9._-]+))', healed_text)
@@ -172,7 +179,8 @@ def extract_target_path(text: str) -> str | None:
         if existing:
             return existing
         resolved = resolve_target_path(raw_u)
-        return str(resolved)
+        if resolved.is_absolute() and (resolved.exists() or str(resolved).startswith("/")):
+            return str(resolved)
 
     return None
 

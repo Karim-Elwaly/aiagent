@@ -93,6 +93,10 @@ class Task(BaseModel):
         default=None,
         description="Bespoke dynamic Hermes profile assigned to this task",
     )
+    specialist_spec: TaskSpecialistSpec | None = Field(
+        default=None,
+        description="Dedicated synthesized Autonomous Execution Unit (AEU) specification",
+    )
 
 
 class TaskDAG(BaseModel):
@@ -274,9 +278,222 @@ class SupervisorEvaluation(BaseModel):
         return cls.model_validate(data)
 
 
+# ─── Environment & Capability Discovery Models ───────────────────
+
+
+class ConnectorReadiness(str, Enum):
+    READY = "ready"
+    CONFIGURED_OFFLINE = "configured_offline"
+    UNAVAILABLE = "unavailable"
+
+
+class DiscoveredCapability(BaseModel):
+    name: str
+    source_type: str = "native"  # native | bridge | connector | openapi
+    readiness: ConnectorReadiness = ConnectorReadiness.READY
+    relevance_score: float = 1.0
+    rationale: str = ""
+    skills_provided: list[str] = Field(default_factory=list)
+
+
+class MissionEnvironmentManifest(BaseModel):
+    session_id: str
+    readiness_score: float = 1.0
+    active_connectors: list[DiscoveredCapability] = Field(default_factory=list)
+    matched_tools: list[DiscoveredCapability] = Field(default_factory=list)
+    available_files: list[str] = Field(default_factory=list)
+    timestamp: float = Field(default_factory=lambda: 0.0)
+
+    def to_serializable(self) -> dict:
+        return json.loads(self.model_dump_json())
+
+
+# ─── Pre-Flight Clarification Models ──────────────────────────────
+
+
+class ClarificationQuestion(BaseModel):
+    id: str
+    question: str
+    rationale: str = ""
+    options: list[str] = Field(default_factory=list)
+    allow_custom: bool = True
+    default_answer: str | None = None
+    # Backwards-compatible alias
+    question_id: str | None = None
+
+
+class ClarificationManifest(BaseModel):
+    session_id: str
+    inferred_domain: str = "general_enterprise"
+    needs_clarification: bool = False
+    proposed_fleet_size: int = 4
+    recommended_workflow_topology: str = "sequential"
+    discovered_tools: list[dict[str, Any]] = Field(default_factory=list)
+    discovered_tools_count: int = 0
+    detected_mission_type: str = "general_operation"
+    questions: list[ClarificationQuestion] = Field(default_factory=list)
+    environment: dict[str, Any] | None = None
+
+    def to_serializable(self) -> dict:
+        return json.loads(self.model_dump_json())
+
+
+# ─── Task-Bound Specialized Fleet Models ──────────────────────────
+
+
+class TaskSpecialistSpec(BaseModel):
+    unit_id: str                                  # e.g., 'AEU-01-TELEMETRY-EXTRACTOR'
+    unit_codename: str = ""                       # Functional title, NEVER human persona
+    task_id: str                                  # Maps 1:1 to Task.id
+    operational_stage: str = "DEEP_ANALYSIS"      # RECON_INGESTION | DEEP_ANALYSIS | CROSS_VERIFICATION | EXECUTION_ACTION | DELIVERABLE_SYNTHESIS
+    synthesized_unit_prompt: str = ""             # Dedicated system prompt written specifically for this unit's task
+    specialization_directive: str = ""            # Functional directive alias
+    scoped_tools: list[str] = Field(default_factory=list)  # Exact subset of environment tools bound to this unit
+    input_contract: str = ""                      # Exact data expected from upstream units
+    output_contract: str = ""                     # Exact structured data this unit must produce
+    verification_criteria: str = ""               # How the Supervisor & Operator challenge this unit
+    timeout_seconds: int = 300
+
+
+class SpecializedFleetManifest(BaseModel):
+    fleet_id: str
+    mission_title: str = ""
+    fleet_name: str = ""                          # Friendly name alias
+    inferred_domain: str = "general_enterprise"
+    strategy_profile: str = "STANDARD"            # STANDARD | COMPETITOR_PRECISION | COMPETITOR_VELOCITY | COMPETITOR_ADVERSARIAL
+    fleet_rationale: str = ""
+    units: list[TaskSpecialistSpec] = Field(default_factory=list)
+    dag: TaskDAG
+
+    def to_serializable(self) -> dict:
+        return json.loads(self.model_dump_json())
+
+
+# ─── Step Challenge Governance Models ─────────────────────────────
+
+
+class StepChallengeState(str, Enum):
+    PENDING_CHALLENGE = "pending_challenge"
+    PASSED = "passed"
+    CHALLENGED_RETRY = "challenged_retry"
+    OVERRIDDEN = "overridden"
+
+
+class StepChallengePayload(BaseModel):
+    task_id: str
+    unit_id: str = ""
+    action: str = "approve"  # approve | challenge | override_output | abort
+    challenge_critique: str | None = None
+    injected_constraints: str | None = None
+    replacement_output: str | None = None
+
+
+# ─── Fleet Arena Models (Reusable Named Agent Profiles) ──────────
+
+
+class FleetArenaUnit(BaseModel):
+    """A single named, reusable unit in the Fleet Arena.
+
+    Each unit maps 1:1 to a TaskDAG task and a persistent Hermes profile.
+    The profile_name is human-readable and deterministic so it can be
+    reused across different missions without re-creation.
+    """
+
+    profile_name: str = Field(
+        description="Hermes profile name, e.g. 'fleet-soc-telemetry-extractor'"
+    )
+    unit_codename: str = Field(
+        default="", description="Functional title, e.g. 'TELEMETRY-EXTRACTOR'"
+    )
+    task_id: str = Field(description="Maps 1:1 to Task.id in the DAG")
+    task_name: str = Field(description="Human-readable task name")
+    operational_stage: str = Field(
+        default="DEEP_ANALYSIS",
+        description="RECON_INGESTION | DEEP_ANALYSIS | CROSS_VERIFICATION | EXECUTION_ACTION | DELIVERABLE_SYNTHESIS",
+    )
+    scoped_tools: list[str] = Field(
+        default_factory=list, description="Exact tool subset for this unit"
+    )
+    required_skills: list[str] = Field(
+        default_factory=list, description="Abstract skill names needed"
+    )
+    description: str = Field(default="", description="What this unit does")
+    input_contract: str = Field(default="", description="Expected input from upstream")
+    output_contract: str = Field(default="", description="Expected output")
+    profile_exists: bool = Field(
+        default=False, description="Whether the Hermes profile already exists on disk"
+    )
+    attached_files: list[dict[str, Any]] = Field(
+        default_factory=list,
+        description="Files attached for this unit's phase: [{filename, file_path, extracted_text}]",
+    )
+
+
+class FleetArenaManifest(BaseModel):
+    """The complete Fleet Arena plan — reviewable before execution.
+
+    Lifecycle: draft → provisioned → files_attached → running → completed | failed
+    Fleet profiles use the prefix 'fleet-' and are persistent, reusable
+    across different missions (exempt from LRU eviction).
+    """
+
+    arena_id: str = Field(description="Unique arena identifier")
+    arena_name: str = Field(
+        default="", description="e.g. 'SOC Alert Investigation Arena'"
+    )
+    arena_slug: str = Field(
+        default="", description="URL-safe slug, e.g. 'soc-alert'"
+    )
+    mission_prompt: str = Field(description="Original user prompt")
+    strategy_profile: str = Field(
+        default="STANDARD",
+        description="STANDARD | PRECISION | SPEED",
+    )
+    units: list[FleetArenaUnit] = Field(default_factory=list)
+    dag: dict[str, Any] = Field(
+        default_factory=dict, description="The underlying TaskDAG (serialized)"
+    )
+    status: str = Field(
+        default="draft",
+        description="draft | provisioned | files_attached | running | completed | failed",
+    )
+    created_at: float = Field(default=0.0)
+    updated_at: float = Field(default=0.0)
+    profiles_to_create: list[str] = Field(
+        default_factory=list,
+        description="Profile names that need creation in Hermes",
+    )
+    profiles_existing: list[str] = Field(
+        default_factory=list,
+        description="Profile names already present in Hermes",
+    )
+    workflow_id: str | None = Field(
+        default=None, description="Temporal workflow ID once execution starts"
+    )
+    agent_id: str | None = Field(
+        default=None, description="Optional agent profile for orchestration"
+    )
+    resilience: str = Field(
+        default="standard", description="Outage tolerance level"
+    )
+
+    def to_serializable(self) -> dict:
+        return json.loads(self.model_dump_json())
+
+
 # Rebuild models to resolve type annotations under __future__.annotations
 Task.model_rebuild()
 TaskDAG.model_rebuild()
 TaskResult.model_rebuild()
 SupervisorEvaluation.model_rebuild()
+DiscoveredCapability.model_rebuild()
+MissionEnvironmentManifest.model_rebuild()
+ClarificationQuestion.model_rebuild()
+ClarificationManifest.model_rebuild()
+TaskSpecialistSpec.model_rebuild()
+SpecializedFleetManifest.model_rebuild()
+StepChallengePayload.model_rebuild()
+FleetArenaUnit.model_rebuild()
+FleetArenaManifest.model_rebuild()
+
 

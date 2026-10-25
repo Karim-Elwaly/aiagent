@@ -19,6 +19,8 @@ from typing import Any
 from temporalio import activity
 from temporalio.exceptions import ApplicationError
 
+from pathlib import Path
+
 from src.brain.meta_planner import MetaPlanner
 from src.brain.prompts import (
     ASSEMBLER_SYSTEM_PROMPT,
@@ -30,6 +32,7 @@ from src.core.config import get_settings
 from src.core.exceptions import TransientLLMError
 from src.core.llm_client import LocalLLMClient
 from src.core.models import Task, TaskDAG
+from src.core.path_utils import extract_target_path
 from src.orchestrator.event_bus import get_event_bus
 from src.persona.synthesizer import PersonaSynthesizer
 from src.registry.auto_discover import register_all_tools
@@ -200,6 +203,17 @@ async def plan_tasks(user_query: str, agent_id: str = "") -> dict:
     )
 
     serialized = dag.to_serializable()
+
+    # Inject target path into tasks if detected in query and verified to exist on disk
+    target_path = extract_target_path(user_query)
+    if target_path and Path(target_path).exists():
+        logger.info("Plan tasks detected target investigation path: %s", target_path)
+        for t in serialized.get("tasks", []):
+            params = t.setdefault("parameters", {})
+            if "target_path" not in params:
+                params["target_path"] = target_path
+            if "[Investigation Target Path]" not in t.get("description", ""):
+                t["description"] = f"{t.get('description', '')}\n\n[Investigation Target Path]: {target_path}"
 
     # Record each task's assigned risk level for offline evaluation. This is the
     # value that fires the human approval gate, and the planner emits it as one
@@ -557,7 +571,16 @@ async def replan_tasks(
         "Re-plan created: %d new tasks", len(dag.tasks)
     )
 
-    return dag.to_serializable()
+    serialized = dag.to_serializable()
+    target_path = extract_target_path(user_query)
+    if target_path and Path(target_path).exists():
+        for t in serialized.get("tasks", []):
+            params = t.setdefault("parameters", {})
+            if "target_path" not in params:
+                params["target_path"] = target_path
+            if "[Investigation Target Path]" not in t.get("description", ""):
+                t["description"] = f"{t.get('description', '')}\n\n[Investigation Target Path]: {target_path}"
+    return serialized
 
 
 @activity.defn

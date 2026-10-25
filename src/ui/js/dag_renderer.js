@@ -237,28 +237,31 @@ class DAGRenderer {
     sep.setAttribute("stroke-width", "1");
     g.appendChild(sep);
 
-    // Task ID Pill Background
+    // Task / Specialist Unit ID Pill Background (AEU-TX)
+    const unitCode = node.task.specialist_unit_id || `AEU-${node.task.id.toUpperCase()}`;
+    const idPillWidth = unitCode.length > 5 ? 58 : 42;
+
     const idPill = document.createElementNS("http://www.w3.org/2000/svg", "rect");
     idPill.setAttribute("x", "12");
     idPill.setAttribute("y", "7");
-    idPill.setAttribute("width", "34");
+    idPill.setAttribute("width", String(idPillWidth));
     idPill.setAttribute("height", "15");
     idPill.setAttribute("rx", "3");
-    idPill.setAttribute("fill", "rgba(99, 102, 241, 0.2)");
-    idPill.setAttribute("stroke", "rgba(99, 102, 241, 0.4)");
+    idPill.setAttribute("fill", "rgba(99, 102, 241, 0.25)");
+    idPill.setAttribute("stroke", "rgba(99, 102, 241, 0.5)");
     idPill.setAttribute("stroke-width", "0.8");
     g.appendChild(idPill);
 
     // Task ID Text
     const textId = document.createElementNS("http://www.w3.org/2000/svg", "text");
-    textId.setAttribute("x", "29");
+    textId.setAttribute("x", String(12 + idPillWidth / 2));
     textId.setAttribute("y", "18");
     textId.setAttribute("text-anchor", "middle");
     textId.setAttribute("fill", "#a5b4fc");
     textId.setAttribute("font-family", "JetBrains Mono");
-    textId.setAttribute("font-size", "9.5");
+    textId.setAttribute("font-size", "9");
     textId.setAttribute("font-weight", "700");
-    textId.textContent = node.task.id.toUpperCase();
+    textId.textContent = unitCode;
     g.appendChild(textId);
 
     // Custom Parameter Override Pill (in header)
@@ -269,7 +272,7 @@ class DAGRenderer {
 
     if (isCustomized) {
       const customPill = document.createElementNS("http://www.w3.org/2000/svg", "rect");
-      customPill.setAttribute("x", "50");
+      customPill.setAttribute("x", String(18 + idPillWidth));
       customPill.setAttribute("y", "7");
       customPill.setAttribute("width", "52");
       customPill.setAttribute("height", "15");
@@ -280,7 +283,7 @@ class DAGRenderer {
       g.appendChild(customPill);
 
       const customText = document.createElementNS("http://www.w3.org/2000/svg", "text");
-      customText.setAttribute("x", "76");
+      customText.setAttribute("x", String(18 + idPillWidth + 26));
       customText.setAttribute("y", "18");
       customText.setAttribute("text-anchor", "middle");
       customText.setAttribute("fill", "#d8b4fe");
@@ -359,15 +362,19 @@ class DAGRenderer {
       g.appendChild(textName2);
     }
 
-    // Skills preview subtitle (truncated cleanly with ellipsis)
+    // Skills / Specialization preview subtitle (truncated cleanly with ellipsis)
     const textSkill = document.createElementNS("http://www.w3.org/2000/svg", "text");
     textSkill.setAttribute("x", "12");
     textSkill.setAttribute("y", "72");
     textSkill.setAttribute("fill", "#64748b");
     textSkill.setAttribute("font-family", "JetBrains Mono");
     textSkill.setAttribute("font-size", "9");
-    const subtitle = agentLabel ? `${agentLabel} · ${skillList}` : `⚙ ${skillList}`;
-    textSkill.textContent = subtitle.length > 26 ? subtitle.substring(0, 24) + "…" : subtitle;
+    const role = node.task.specialization_role || node.task.role || "";
+    const toolsScope = (node.task.scoped_tools && node.task.scoped_tools.length > 0)
+      ? node.task.scoped_tools.join(", ")
+      : skillList;
+    const subtitle = role ? `🛡️ ${role}` : (agentLabel ? `${agentLabel} · ${toolsScope}` : `⚙ ${toolsScope}`);
+    textSkill.textContent = subtitle.length > 28 ? subtitle.substring(0, 26) + "…" : subtitle;
     g.appendChild(textSkill);
 
     // Status Badge Pill (Bottom right)
