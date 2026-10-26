@@ -1,0 +1,63 @@
+{
+  "incident_id": "CASE-1-APT-ENTERPRISE-INTRUSION",
+  "incident_type": "APT_MULTI_STAGE_ENTERPRISE_INTRUSION",
+  "severity": "SEV-1-CRITICAL",
+  "affected_domain": "corp.contoso.com",
+  "compromised_assets": [
+    {
+      "hostname": "WKSTN-FIN-04.corp.contoso.com",
+      "ip": "10.20.10.45",
+      "role": "Initial Foothold & Credential Harvesting Host",
+      "status": "QUARANTINED"
+    },
+    {
+      "hostname": "DC01.corp.contoso.com",
+      "ip": "10.20.10.10",
+      "role": "Primary Domain Controller / Persistence Target",
+      "status": "REMEDIATED"
+    }
+  ],
+  "compromised_accounts": [
+    "CONTOSO\\jdoe",
+    "CONTOSO\\da_admin",
+    "svc_backup_admin"
+  ],
+  "neutralized_iocs": {
+    "c2_servers": [
+      "185.220.101.45:80",
+      "185.220.101.45:8443"
+    ],
+    "exfiltration_drop": "198.51.100.240:443",
+    "phishing_mailer": "203.0.113.119",
+    "attachment_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "rogue_service": "PSEXESVC",
+    "backdoor_account": "svc_backup_admin"
+  },
+  "automated_containment_actions": [
+    {
+      "platform": "ACTIVE_DIRECTORY",
+      "action": "DISABLE_AND_DELETE_BACKDOOR_ADMIN",
+      "target": "svc_backup_admin",
+      "status": "ENFORCED"
+    },
+    {
+      "platform": "ACTIVE_DIRECTORY",
+      "action": "RESET_DOMAIN_ADMIN_PASSWORDS_AND_PURGE_KERBEROS",
+      "target": "CONTOSO\\da_admin, CONTOSO\\jdoe",
+      "status": "ENFORCED"
+    },
+    {
+      "platform": "PALO_ALTO_NGFW",
+      "action": "DROP_C2_AND_EXFIL_IPS",
+      "target": "185.220.101.45/32, 198.51.100.240/32, 203.0.113.119/32",
+      "status": "ENFORCED"
+    },
+    {
+      "platform": "ENDPOINT_EDR",
+      "action": "HOST_MICROSEGMENTATION_AND_KILL_PROCESSES",
+      "target": "10.20.10.45",
+      "status": "QUARANTINED"
+    }
+  ],
+  "governance_gate_status": "DECISION_ROOM_DISPOSITION_RECORDED"
+}

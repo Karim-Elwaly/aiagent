@@ -1,0 +1,43 @@
+{
+  "incident_id": "CASE-5-DNS-TUNNELING-DATA-EXFILTRATION",
+  "incident_type": "DNS_TUNNELING_DATA_EXFILTRATION",
+  "severity": "SEV-1-CRITICAL",
+  "target_resolver": "dns-core-01.corp.internal (10.0.0.2)",
+  "compromised_host": "workstation-eng-42.corp.internal (10.0.4.42)",
+  "total_queries_analyzed": 8412,
+  "exfiltrated_volume_bytes": 4404019,
+  "status": "CONTAINMENT_ENFORCED",
+  "neutralized_iocs": {
+    "c2_apex_domains": [
+      "tunnel-infra.darkops.cc",
+      "darkops.cc"
+    ],
+    "c2_nameserver_ips": [
+      "198.51.100.188",
+      "203.0.113.195"
+    ],
+    "exfiltration_payload_entropy": 4.68,
+    "average_query_length_bytes": 74.6
+  },
+  "automated_containment_actions": [
+    {
+      "platform": "BIND9_DNS_RESOLVER",
+      "action": "RPZ_SINKHOLE_ENFORCEMENT",
+      "target": "tunnel-infra.darkops.cc",
+      "status": "APPLIED"
+    },
+    {
+      "platform": "PALO_ALTO_NGFW",
+      "action": "DROP_C2_IP_AND_DIRECT_UDP53",
+      "target": "198.51.100.188/32, 203.0.113.195/32",
+      "status": "ENFORCED"
+    },
+    {
+      "platform": "ENDPOINT_MICROSEGMENTATION",
+      "action": "ISOLATE_HOST_AND_KILL_DNSCAT2",
+      "target": "10.0.4.42",
+      "status": "QUARANTINED"
+    }
+  ],
+  "governance_gate_status": "DECISION_ROOM_DISPOSITION_RECORDED"
+}

@@ -1,0 +1,171 @@
+{
+  "arena_id": "arena-write-authoritative-full-60818e",
+  "arena_name": "Project Management Plan",
+  "arena_slug": "write-authoritative-full",
+  "mission_prompt": "write an authoritative, fully compliant technical and commercial Project Management Plan responding to the provided pmp.\nStructure the response to address all functional, architectural, security, licensing, and implementation requirements with clear deliverable tables and a comprehensive compliance matrix.",
+  "strategy_profile": "STANDARD",
+  "units": [
+    {
+      "profile_name": "fleet-write-authoritat-model-ingest-baselin",
+      "unit_codename": "RECON_INGESTION",
+      "task_id": "t--baselin",
+      "task_name": "Model & Ingest Baseline Project Parameters",
+      "operational_stage": "RECON_INGESTION",
+      "scoped_tools": [
+        "execute_python",
+        "triage_security_alert"
+      ],
+      "required_skills": [
+        "data_analysis",
+        "code_execution",
+        "general_reasoning"
+      ],
+      "description": "Create a realistic tabular dataset that captures typical project attributes such as scope, stakeholders, functional requirements, architectural constraints, security controls, licensing models, regulatory domains, and implementation milestones. This synthetic data will serve as the foundation for all subsequent planning.",
+      "input_contract": "",
+      "output_contract": "",
+      "profile_exists": true,
+      "attached_files": [
+        {
+          "id": "att-7ff8a697",
+          "filename": "pmp.docx",
+          "file_path": "D:\\projects\\aiagent\\data\\uploads\\arena-write-authoritative-full-60818e\\pmp.docx",
+          "file_type": "docx",
+          "size_bytes": 21931,
+          "extracted_text": "Request for Proposal / Deliverable Submission: Project Management Plan (PMP)\nDocument Reference: RFP-PMP-2026-V1\nProject Title: Enterprise Digital Systems & Infrastructure Implementation\nIssuing Authority: Project Management Office (PMO)\nDistribution: Confidential // Enterprise Delivery Partners\n1. Executive Summary & Objective\nThe Project Management Office (PMO) formally requests the submission of a comprehensive Project Management Plan (PMP) from the Lead Delivery Partner / Systems Integrator.\nThe purpose of this document is to establish the baseline execution strategy, governance model, controls, resource allocations, and operational frameworks required to manage project execution through delivery, validation, and transition to operations on time, within approved budget, and in adherence to defined quality benchmarks.\n2. Scope of the Request\nThe selected delivery partner must submit a fully articulated Project Management Plan covering all primary knowledge areas and management subsidiaries aligned with standard PMI (PMBOK) and Prince2 frameworks. The PMP must address the entire system development and deployment lifecycle across the following phases:\nInitiation & Baseline Discovery\nArchitecture, Engineering & Configuration\nIntegration, Quality Assurance & Security Hardening\nUser Acceptance Testing (UAT) & Pilot Rollout\nFinal Cutover, Operational Handover & Close-Out\n3. Required PMP Subsidiary Plans & Core Deliverables\nThe submitted Project Management Plan must contain the following itemized sections and subsidiaries:\n3.1 Scope Management & Baseline\nScope Baseline Definition: Clear Work Breakdown Structure (WBS) down to Work Package level (Level 4/5) accompanied by a detailed WBS Dictionary.\nScope Verification & Validation: Formal procedure for deliverable inspection, review gates, and formal stakeholder sign-off criteria.\nChange Control Process: Integrated Change Control (ICC) workflow, evaluation timelines, impact analysis templates, and escalation protocols for change requests (CRs).\n3.2 Schedule Baseline & Milestone Management\nCritical Path Method (CPM) Schedule: Integrated master schedule (IMS) in Gantt format detailing activity dependencies (FS, SS, FF, SF), leads, lags, and float analysis.\nMilestone Table: Summary of major contractual, design, testing, and operational handover gates.\nSchedule Monitoring: Schedule Variance (SV) and Schedule Performance Index (SPI) monitoring cadences, cadence of baseline resets, and variance recovery mechanisms.\n3.3 Cost Baseline & Financial Management\nCost Estimation & Allocation: Work package-level cost breakdown, capital expenditures (CapEx), operational expenditures (OpEx), and license fee schedules.\nEarned Value Management (EVM): Formulae and reporting cadences for Planned Value (PV), Earned Value (EV), Actual Cost (AC), Cost Variance (CV), and Cost Performance Index (CPI).\nContingency & Reserves: Definition and governance of Management Reserves vs. Project Contingency Reserves.\n3.4 Quality Management & Assurance (QA/QC)\nQuality Standards & Metrics: Defect severity classifications (Critical, Major, Minor, Cosmetic) and resolution turn-around times (TAT).\nQuality Gates & Stage Reviews: Entrance and exit criteria for Architecture Review Boards (ARB), Test Readiness Reviews (TRR), and Operational Readiness Reviews (ORR).\nAudit Schedules: Cadence of internal process quality audits and external compliance verifications.\n3.5 Resource & Staffing Management\nOrganizational Breakdown Structure (OBS): Hierarchical governance structure, staffing ramp-up/ramp-down curves, and project organogram.\nRACI Matrix: Detailed Responsible, Accountable, Consulted, and Informed matrix mapped across all major milestones and lifecycle deliverables.\nSkill Matrix & Key Personnel: Minimum qualifications, certifications, security clearance levels, and backup replacement commitments for key named personnel.\n3.6 Communications & Stakeholder Governance\nStakeholder Register: Matrix detailing stakeholder influence, interest levels, communication cadence, and reporting formats.\nGovernance Meeting Cadence:\nDaily: Technical stand-ups and operational blockers.\nWeekly: Project Manager / Lead Engineer progress status reviews.\nBi-Weekly / Monthly: Steering Committee executive oversight sessions.\nInformation Radiators & Dashboards: Automated tooling, executive summaries, and real-time sprint/milestone burndown reporting.\n3.7 Risk, Issue & Opportunity Management\nRisk Management Framework: Qualitative assessment criteria (Probability vs. Impact matrix) and Quantitative Risk Analysis (EMV/Monte Carlo methodology).\nRisk Register: Initial log capturing technical, architectural, vendor, dependency, and regulatory risks, complete with assigned owners and mitigation/fallback plans.\nIssue & Escalation Protocols: Severity-based escalation ladder with defined service-level objectives (SLOs) for blocker resolution.\n3.8 Procurement & Subcontractor Oversight\nVendor & Third-Party Dependencies: Inventory of all subcontractor services, third-party software licenses, and external APIs.\nProcurement Schedule: Lead-time tracking for hardware, compute provisioning, and license activations.\nSubcontractor Quality Audits: Evaluation criteria and performance tracking protocols for subcontracted labor.\n4. Required Milestone Schedule\n5. Submission Requirements & Format Guidelines\nSubmissions must comply with the following structural parameters:\nDocument Format: Deliverable must be provided in editable document format (.docx) and archived PDF (.pdf), accompanied by the native schedule file (.mpp or .xml).\nLanguage: English (all technical specifications, architecture diagrams, and commercial models).\nTraceability: Cross-reference table indicating exact sections where each RFP requirement and subsidiary plan is satisfied.\nSign-Off Sheet: Dedicated signature page for the Lead Project Manager, Delivery Director, Enterprise Architect, and Client Steering Committee Lead.\nMilestone Code | Deliverable / Gate Description | Target Due Date\nM-01 | Draft Project Management Plan (PMP) Initial Review | T + 10 Business Days\nM-02 | Final Approved PMP Baseline & Steering Committee Sign-off | T + 20 Business Days\nM-03 | Completion of Technical Discovery & WBS Dictionary Sign-off | Phase 1 Completion\nM-04 | Mid-Term Progress Review & Earned Value Assessment (EVM Gate 1) | Phase 2 Midpoint\nM-05 | Integrated UAT & Security Quality Sign-off (TRR) | Pre-Cutover\nM-06 | Final Operational Transition, Handover Runbooks & Close-out Review | Project Conclusion",
+          "char_count": 6528,
+          "preview": "Request for Proposal / Deliverable Submission: Project Management Plan (PMP)\nDocument Reference: RFP-PMP-2026-V1\nProject Title: Enterprise Digital Systems & Infrastructure Implementation\nIssuing Authority: Project Management Office (PMO)\nDistribution: Confidential // Enterprise Delivery Partners\n1. Executive Summary & Objective\nThe Project Management Office (PMO) formally requests the submission of a comprehensive Project Management Plan (PMP) from the Lead Delivery Partner / Systems Integrator.\nThe purpose of this document is to establish the baseline execution strategy, governance model, con..."
+        }
+      ]
+    },
+    {
+      "profile_name": "fleet-write-authoritat-generate-pmp-structu",
+      "unit_codename": "DEEP_ANALYSIS",
+      "task_id": "t--structu",
+      "task_name": "Generate PMP Structure and Content",
+      "operational_stage": "DEEP_ANALYSIS",
+      "scoped_tools": [
+        "execute_python",
+        "triage_security_alert"
+      ],
+      "required_skills": [
+        "general_reasoning",
+        "data_analysis"
+      ],
+      "description": "Using the baseline dataset from t1, produce a detailed Project Management Plan that includes: Executive Summary, Scope Statement, Functional Architecture Overview, Security & Compliance Strategy, Licensing & Legal Considerations, Implementation Roadmap, Risk Management Plan, Communication Plan, Quality Assurance Approach, and Change Control Process. Each section should reference specific entries from the baseline data.",
+      "input_contract": "",
+      "output_contract": "",
+      "profile_exists": true,
+      "attached_files": []
+    },
+    {
+      "profile_name": "fleet-write-authoritat-create-deliverable-t",
+      "unit_codename": "DELIVERABLE_SYNTHESIS",
+      "task_id": "t-erable-t",
+      "task_name": "Create Deliverable Tables and Compliance Matrix",
+      "operational_stage": "DELIVERABLE_SYNTHESIS",
+      "scoped_tools": [
+        "execute_python",
+        "triage_security_alert"
+      ],
+      "required_skills": [
+        "data_analysis",
+        "general_reasoning"
+      ],
+      "description": "Populate two key tables: (1) Deliverables Table \u2013 listing each deliverable, owner, due date, acceptance criteria, and status; (2) Compliance Matrix \u2013 mapping regulatory requirements, security controls, licensing obligations, and architectural constraints to corresponding PMP sections and deliverables. Ensure the matrix is exhaustive and cross\u2011referenced.",
+      "input_contract": "",
+      "output_contract": "",
+      "profile_exists": true,
+      "attached_files": []
+    }
+  ],
+  "dag": {
+    "goal": "Generate a comprehensive, authoritative Project Management Plan (PMP) that fully addresses functional, architectural, security, licensing, and implementation requirements, including clear deliverable tables and a compliance matrix.",
+    "reasoning": "The user has not supplied any files or specific data. According to the guidelines for enterprise domain audits without provided input, we must first synthesize a realistic baseline dataset representing typical project parameters (scope, stakeholders, risk factors, regulatory constraints). Once this model is in place, we can construct the PMP structure and populate it with deliverables and compliance details.",
+    "tasks": [
+      {
+        "id": "t1",
+        "name": "Model & Ingest Baseline Project Parameters",
+        "description": "Ingest and model all baseline parameters from the provided PMP/RFP document (scope, stakeholders, functional requirements, architectural constraints, security controls, licensing models, regulatory domains, and implementation milestones).\n\n---\n# Attached Document Source:\n- **File Name**: `pmp.docx`\n- **File Path**: `D:\\projects\\aiagent\\data\\uploads\\arena-write-authoritative-full-60818e\\pmp.docx`\n- **Size**: 0 bytes\n- Note: File is stored at `D:\\projects\\aiagent\\data\\uploads\\arena-write-authoritative-full-60818e\\pmp.docx` for inspection with file tools.\n",
+        "required_skills": [
+          "data_analysis",
+          "code_execution",
+          "general_reasoning"
+        ],
+        "expected_output": "A structured CSV/JSON table named `baseline_project_parameters` containing key entities from the provided document.",
+        "dependencies": [],
+        "risk_level": "low",
+        "max_retries": 2,
+        "timeout_seconds": 300,
+        "parameters": {
+          "target_path": "D:\\projects\\aiagent\\data\\uploads\\arena-write-authoritative-full-60818e\\pmp.docx",
+          "attached_file": "D:\\projects\\aiagent\\data\\uploads\\arena-write-authoritative-full-60818e\\pmp.docx"
+        },
+        "agent_id": null,
+        "hermes_profile": "fleet-write-authoritat-model-ingest-baselin",
+        "specialist_spec": null,
+        "_hermes_profile": "fleet-write-authoritat-model-ingest-baselin"
+      },
+      {
+        "id": "t2",
+        "name": "Generate PMP Structure and Content",
+        "description": "Using the extracted parameters from t1, produce an authoritative, fully compliant Project Management Plan adhering strictly to the provided document requirements.\n\n---\n# Attached Document Source:\n- **File Name**: `pmp.docx`\n- **File Path**: `D:\\projects\\aiagent\\data\\uploads\\arena-write-authoritative-full-60818e\\pmp.docx`\n- **Size**: 0 bytes\n- Note: File is stored at `D:\\projects\\aiagent\\data\\uploads\\arena-write-authoritative-full-60818e\\pmp.docx` for inspection with file tools.\n",
+        "required_skills": [
+          "general_reasoning",
+          "data_analysis"
+        ],
+        "expected_output": "A detailed Project Management Plan addressing all functional, architectural, security, licensing, and implementation requirements.",
+        "dependencies": [
+          "t1"
+        ],
+        "risk_level": "low",
+        "max_retries": 2,
+        "timeout_seconds": 300,
+        "parameters": {
+          "target_path": "D:\\projects\\aiagent\\data\\uploads\\arena-write-authoritative-full-60818e\\pmp.docx",
+          "attached_file": "D:\\projects\\aiagent\\data\\uploads\\arena-write-authoritative-full-60818e\\pmp.docx"
+        },
+        "agent_id": null,
+        "hermes_profile": "fleet-write-authoritat-generate-pmp-structu",
+        "specialist_spec": null,
+        "_hermes_profile": "fleet-write-authoritat-generate-pmp-structu"
+      },
+      {
+        "id": "t3",
+        "name": "Create Deliverable Tables and Compliance Matrix",
+        "description": "Populate two key tables strictly matching the provided RFP/PMP document: (1) Deliverables Table \u2013 listing deliverable, owner, due date, acceptance criteria, and status; (2) Compliance Matrix \u2013 mapping all RFP regulatory requirements, security controls, licensing obligations, and architectural constraints to PMP deliverables with 100% compliance traceability.\n\n---\n# Attached Document Source:\n- **File Name**: `pmp.docx`\n- **File Path**: `D:\\projects\\aiagent\\data\\uploads\\arena-write-authoritative-full-60818e\\pmp.docx`\n- **Size**: 0 bytes\n- Note: File is stored at `D:\\projects\\aiagent\\data\\uploads\\arena-write-authoritative-full-60818e\\pmp.docx` for inspection with file tools.\n",
+        "required_skills": [
+          "data_analysis",
+          "general_reasoning"
+        ],
+        "expected_output": "Two structured tables: `deliverables_table` and `compliance_matrix`, plus a consolidated final deliverable report.",
+        "dependencies": [
+          "t2"
+        ],
+        "risk_level": "low",
+        "max_retries": 2,
+        "timeout_seconds": 300,
+        "parameters": {
+          "target_path": "D:\\projects\\aiagent\\data\\uploads\\arena-write-authoritative-full-60818e\\pmp.docx",
+          "attached_file": "D:\\projects\\aiagent\\data\\uploads\\arena-write-authoritative-full-60818e\\pmp.docx"
+        },
+        "agent_id": null,
+        "hermes_profile": "fleet-write-authoritat-create-deliverable-t",
+        "specialist_spec": null,
+        "_hermes_profile": "fleet-write-authoritat-create-deliverable-t"
+      }
+    ],
+    "estimated_completion_seconds": 60
+  },
+  "status": "completed",
+  "created_at": 1793042737.2356272,
+  "updated_at": 1793050432.0046148,
+  "profiles_to_create": [
+    "fleet-write-authoritat-create-deliverable-t",
+    "fleet-write-authoritat-generate-pmp-structu",
+    "fleet-write-authoritat-model-ingest-baselin"
+  ],
+  "profiles_existing": [],
+  "workflow_id": "fleet-arena-write-authoritative-full-60818e-9488ee",
+  "agent_id": null,
+  "resilience": "standard"
+}

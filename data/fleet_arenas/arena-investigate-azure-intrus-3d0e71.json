@@ -1,0 +1,195 @@
+{
+  "arena_id": "arena-investigate-azure-intrus-3d0e71",
+  "arena_name": "Case 3: Azure AD Intrusion SOC Investigation",
+  "arena_slug": "investigate-azure-intrus",
+  "mission_prompt": "Investigate the Azure AD intrusion in D:\\Security-logs-test\\attack-cases-benchmark\\case-3-identity-takeover-impossible-travel\\raw-logs. Reconstruct the full attack kill chain across authentication logs, process executions, and network flows. Extract all C2 indicators of compromise (IOCs), map MITRE ATT&CK techniques, and generate automated containment policies.\n",
+  "strategy_profile": "STANDARD",
+  "units": [
+    {
+      "profile_name": "fleet-investigate-azur-ingest-structure-raw",
+      "unit_codename": "RECON_INGESTION",
+      "task_id": "t-ture-raw",
+      "task_name": "Ingest & Structure Raw Logs",
+      "operational_stage": "RECON_INGESTION",
+      "scoped_tools": [
+        "execute_python",
+        "triage_security_alert"
+      ],
+      "required_skills": [
+        "data_analysis",
+        "code_execution",
+        "general_reasoning"
+      ],
+      "description": "Read all files under the specified directory, parse authentication logs (e.g., Azure AD sign\u2011in events), process execution logs, and network flow logs. Convert each into a structured tabular format (CSV or Pandas DataFrame) with consistent timestamp, source/destination, event type, and relevant metadata.",
+      "input_contract": "",
+      "output_contract": "",
+      "profile_exists": true,
+      "attached_files": []
+    },
+    {
+      "profile_name": "fleet-investigate-azur-reconstruct-attack-k",
+      "unit_codename": "RECON_INGESTION",
+      "task_id": "t-attack-k",
+      "task_name": "Reconstruct Attack Kill Chain",
+      "operational_stage": "RECON_INGESTION",
+      "scoped_tools": [
+        "execute_python",
+        "triage_security_alert"
+      ],
+      "required_skills": [
+        "data_analysis",
+        "code_execution",
+        "general_reasoning"
+      ],
+      "description": "Using the structured datasets, perform temporal correlation to map the sequence of events from initial compromise (e.g., phishing or credential theft) through lateral movement and persistence. Identify key stages such as Initial Access, Execution, Persistence, Privilege Escalation, Defense Evasion, Credential Access, Discovery, Lateral Movement, Collection, Command & Control, Exfiltration.",
+      "input_contract": "",
+      "output_contract": "",
+      "profile_exists": true,
+      "attached_files": []
+    },
+    {
+      "profile_name": "fleet-investigate-azur-extract-c2-iocs-map-",
+      "unit_codename": "RECON_INGESTION",
+      "task_id": "t-ocs-map-",
+      "task_name": "Extract C2 IOCs & Map ATT&CK Techniques",
+      "operational_stage": "RECON_INGESTION",
+      "scoped_tools": [
+        "execute_python",
+        "triage_security_alert"
+      ],
+      "required_skills": [
+        "data_analysis",
+        "general_reasoning"
+      ],
+      "description": "From the kill\u2011chain analysis, pull out all indicators of compromise such as IP addresses, domain names, file hashes, registry keys, and command strings. For each IOC, map it to the corresponding MITRE ATT&CK technique(s) using available mapping resources or heuristics.",
+      "input_contract": "",
+      "output_contract": "",
+      "profile_exists": true,
+      "attached_files": []
+    },
+    {
+      "profile_name": "fleet-investigate-azur-generate-automated-c",
+      "unit_codename": "DELIVERABLE_SYNTHESIS",
+      "task_id": "t-omated-c",
+      "task_name": "Generate Automated Containment Policies",
+      "operational_stage": "DELIVERABLE_SYNTHESIS",
+      "scoped_tools": [
+        "execute_python",
+        "triage_security_alert"
+      ],
+      "required_skills": [
+        "general_reasoning",
+        "data_analysis"
+      ],
+      "description": "Based on the identified IOCs and mapped ATT&CK techniques, produce a set of containment actions suitable for Azure AD and associated infrastructure. This includes firewall rules, conditional access policies, device isolation commands, and alerting configurations. Output should be in a machine\u2011readable format (e.g., JSON or PowerShell scripts) ready to deploy.",
+      "input_contract": "",
+      "output_contract": "",
+      "profile_exists": true,
+      "attached_files": []
+    }
+  ],
+  "dag": {
+    "goal": "Investigate the Azure AD intrusion in D:\\Security-logs-test\\attack-cases-benchmark\\case-3-identity-takeover-impossible-travel\\raw-logs by reconstructing the full attack kill chain across authentication logs, process executions, and network flows; extract all C2 indicators of compromise (IOCs), map them to MITRE ATT&CK techniques, and generate automated containment policies.",
+    "reasoning": "The request requires multi\u2011step forensic analysis: ingest raw logs, parse them into structured data, correlate events across authentication, process execution, and network flow streams, identify kill\u2011chain stages, extract IOCs, map those to ATT&CK, and finally produce containment rules. This aligns with the enterprise audit pattern and demands at least four distinct phases.",
+    "tasks": [
+      {
+        "id": "t1",
+        "name": "Ingest & Structure Raw Logs",
+        "description": "Read all files under the specified directory, parse authentication logs (e.g., Azure AD sign\u2011in events), process execution logs, and network flow logs. Convert each into a structured tabular format (CSV or Pandas DataFrame) with consistent timestamp, source/destination, event type, and relevant metadata.",
+        "required_skills": [
+          "data_analysis",
+          "code_execution",
+          "general_reasoning"
+        ],
+        "expected_output": "Three structured datasets: AuthLogs, ProcessExecLogs, NetworkFlowLogs ready for correlation.",
+        "dependencies": [],
+        "risk_level": "low",
+        "max_retries": 2,
+        "timeout_seconds": 600,
+        "parameters": {},
+        "agent_id": null,
+        "hermes_profile": "fleet-investigate-azur-ingest-structure-raw",
+        "specialist_spec": null,
+        "_hermes_profile": "fleet-investigate-azur-ingest-structure-raw"
+      },
+      {
+        "id": "t2",
+        "name": "Reconstruct Attack Kill Chain",
+        "description": "Using the structured datasets, perform temporal correlation to map the sequence of events from initial compromise (e.g., phishing or credential theft) through lateral movement and persistence. Identify key stages such as Initial Access, Execution, Persistence, Privilege Escalation, Defense Evasion, Credential Access, Discovery, Lateral Movement, Collection, Command & Control, Exfiltration.",
+        "required_skills": [
+          "data_analysis",
+          "code_execution",
+          "general_reasoning"
+        ],
+        "expected_output": "A chronological kill\u2011chain timeline with annotated event IDs and involved entities.",
+        "dependencies": [
+          "t1"
+        ],
+        "risk_level": "low",
+        "max_retries": 2,
+        "timeout_seconds": 600,
+        "parameters": {},
+        "agent_id": null,
+        "hermes_profile": "fleet-investigate-azur-reconstruct-attack-k",
+        "specialist_spec": null,
+        "_hermes_profile": "fleet-investigate-azur-reconstruct-attack-k"
+      },
+      {
+        "id": "t3",
+        "name": "Extract C2 IOCs & Map ATT&CK Techniques",
+        "description": "From the kill\u2011chain analysis, pull out all indicators of compromise such as IP addresses, domain names, file hashes, registry keys, and command strings. For each IOC, map it to the corresponding MITRE ATT&CK technique(s) using available mapping resources or heuristics.",
+        "required_skills": [
+          "data_analysis",
+          "general_reasoning"
+        ],
+        "expected_output": "A table of IOCs with columns: IOC_Type, Value, Associated_Technique_IDs, Technique_Name, Confidence_Score.",
+        "dependencies": [
+          "t2"
+        ],
+        "risk_level": "low",
+        "max_retries": 2,
+        "timeout_seconds": 600,
+        "parameters": {},
+        "agent_id": null,
+        "hermes_profile": "fleet-investigate-azur-extract-c2-iocs-map-",
+        "specialist_spec": null,
+        "_hermes_profile": "fleet-investigate-azur-extract-c2-iocs-map-"
+      },
+      {
+        "id": "t4",
+        "name": "Generate Automated Containment Policies",
+        "description": "Based on the identified IOCs and mapped ATT&CK techniques, produce a set of containment actions suitable for Azure AD and associated infrastructure. This includes firewall rules, conditional access policies, device isolation commands, and alerting configurations. Output should be in a machine\u2011readable format (e.g., JSON or PowerShell scripts) ready to deploy.",
+        "required_skills": [
+          "general_reasoning",
+          "data_analysis"
+        ],
+        "expected_output": "A collection of containment policy artifacts with clear implementation guidance.",
+        "dependencies": [
+          "t3"
+        ],
+        "risk_level": "low",
+        "max_retries": 2,
+        "timeout_seconds": 600,
+        "parameters": {},
+        "agent_id": null,
+        "hermes_profile": "fleet-investigate-azur-generate-automated-c",
+        "specialist_spec": null,
+        "_hermes_profile": "fleet-investigate-azur-generate-automated-c"
+      }
+    ],
+    "estimated_completion_seconds": 60
+  },
+  "status": "completed",
+  "created_at": 1793018934.0888782,
+  "updated_at": 1793019552.692281,
+  "profiles_to_create": [
+    "fleet-investigate-azur-extract-c2-iocs-map-",
+    "fleet-investigate-azur-generate-automated-c",
+    "fleet-investigate-azur-ingest-structure-raw",
+    "fleet-investigate-azur-reconstruct-attack-k"
+  ],
+  "profiles_existing": [],
+  "workflow_id": "fleet-arena-investigate-azure-intrus-3d0e71-1a7029",
+  "agent_id": null,
+  "resilience": "standard"
+}

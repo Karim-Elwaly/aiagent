@@ -1,0 +1,278 @@
+{
+  "arena_id": "arena-investigate-critical-sec-401a91",
+  "arena_name": "Case A: APT Enterprise Intrusion SOC Investigation",
+  "arena_slug": "investigate-critical-sec",
+  "mission_prompt": "Investigate critical security logs in D:\\Security-logs-test\\attack-cases-benchmark\\case-1-apt-enterprise-intrusion\\raw-logs: Triage alert false-positive likelihood, gather evidence on threat indicators, discover impact, compress timeline, and propose containment firewall rules.",
+  "strategy_profile": "STANDARD",
+  "units": [
+    {
+      "profile_name": "fleet-investigate-crit-ingest-raw-security-",
+      "unit_codename": "RECON_INGESTION",
+      "task_id": "t-ecurity-",
+      "task_name": "Ingest Raw Security Logs",
+      "operational_stage": "RECON_INGESTION",
+      "scoped_tools": [
+        "execute_python",
+        "gather_log_evidence",
+        "read_file"
+      ],
+      "required_skills": [
+        "file_reading",
+        "data_analysis"
+      ],
+      "description": "Read all log files from the specified directory (D:\\Security-logs-test\\attack-cases-benchmark\\case-1-apt-enterprise-intrusion\\raw-logs) into memory, preserving file names and timestamps. Convert each log entry into a structured format suitable for downstream analysis.",
+      "input_contract": "",
+      "output_contract": "",
+      "profile_exists": true,
+      "attached_files": []
+    },
+    {
+      "profile_name": "fleet-investigate-crit-triage-alerts-and-es",
+      "unit_codename": "DEEP_ANALYSIS",
+      "task_id": "t-s-and-es",
+      "task_name": "Triage Alerts and Estimate False\u2011Positive Likelihood",
+      "operational_stage": "DEEP_ANALYSIS",
+      "scoped_tools": [
+        "execute_python",
+        "triage_security_alert"
+      ],
+      "required_skills": [
+        "data_analysis",
+        "general_reasoning"
+      ],
+      "description": "Analyze the ingested logs to identify alert events, compute a false\u2011positive probability for each based on known benign patterns, and flag high\u2011confidence alerts.",
+      "input_contract": "",
+      "output_contract": "",
+      "profile_exists": true,
+      "attached_files": []
+    },
+    {
+      "profile_name": "fleet-investigate-crit-extract-threat-indic",
+      "unit_codename": "RECON_INGESTION",
+      "task_id": "t-at-indic",
+      "task_name": "Extract Threat Indicators (IOCs)",
+      "operational_stage": "RECON_INGESTION",
+      "scoped_tools": [
+        "execute_python",
+        "triage_security_alert"
+      ],
+      "required_skills": [
+        "data_analysis",
+        "general_reasoning"
+      ],
+      "description": "Search the structured logs for indicators such as IP addresses, domain names, file hashes, registry keys, and command\u2011line arguments that signal malicious activity.",
+      "input_contract": "",
+      "output_contract": "",
+      "profile_exists": true,
+      "attached_files": []
+    },
+    {
+      "profile_name": "fleet-investigate-crit-assess-operational-i",
+      "unit_codename": "DEEP_ANALYSIS",
+      "task_id": "t-tional-i",
+      "task_name": "Assess Operational Impact",
+      "operational_stage": "DEEP_ANALYSIS",
+      "scoped_tools": [
+        "execute_python",
+        "triage_security_alert"
+      ],
+      "required_skills": [
+        "data_analysis",
+        "general_reasoning"
+      ],
+      "description": "Determine the scope of compromise by mapping affected hosts, services, and data. Estimate potential damage such as data exfiltration volume or service downtime.",
+      "input_contract": "",
+      "output_contract": "",
+      "profile_exists": true,
+      "attached_files": []
+    },
+    {
+      "profile_name": "fleet-investigate-crit-compress-event-timel",
+      "unit_codename": "DEEP_ANALYSIS",
+      "task_id": "t-nt-timel",
+      "task_name": "Compress Event Timeline",
+      "operational_stage": "DEEP_ANALYSIS",
+      "scoped_tools": [
+        "execute_python",
+        "triage_security_alert"
+      ],
+      "required_skills": [
+        "data_analysis",
+        "general_reasoning"
+      ],
+      "description": "Create a concise, chronological timeline of key events (e.g., initial compromise, lateral movement, data exfiltration) derived from the logs and impact assessment.",
+      "input_contract": "",
+      "output_contract": "",
+      "profile_exists": true,
+      "attached_files": []
+    },
+    {
+      "profile_name": "fleet-investigate-crit-propose-containment-",
+      "unit_codename": "DELIVERABLE_SYNTHESIS",
+      "task_id": "t-ainment-",
+      "task_name": "Propose Containment Firewall Rules",
+      "operational_stage": "DELIVERABLE_SYNTHESIS",
+      "scoped_tools": [
+        "execute_python",
+        "triage_security_alert"
+      ],
+      "required_skills": [
+        "general_reasoning",
+        "data_analysis"
+      ],
+      "description": "Based on the identified IOCs and compromised network segments, draft a set of firewall rules (allow/deny) to block malicious traffic while preserving legitimate business flows.",
+      "input_contract": "",
+      "output_contract": "",
+      "profile_exists": true,
+      "attached_files": []
+    }
+  ],
+  "dag": {
+    "goal": "Investigate critical security logs located at D:\\Security-logs-test\\attack-cases-benchmark\\case-1-apt-enterprise-intrusion\\raw-logs, performing triage to assess false\u2011positive likelihood, extracting threat indicators, determining impact, compressing the event timeline, and proposing containment firewall rules.",
+    "reasoning": "The request requires a multi\u2011step forensic investigation of local log files. We must read the logs, analyze them for indicators of compromise (IOCs), evaluate whether alerts are likely false positives, assess the operational impact, summarize the sequence of events in a compressed timeline, and finally recommend firewall rules to contain any ongoing threat. This aligns with the SOC investigator domain and requires sequential dependency between data ingestion, analysis, and recommendation phases.",
+    "tasks": [
+      {
+        "id": "t1",
+        "name": "Ingest Raw Security Logs",
+        "description": "Read all log files from the specified directory (D:\\Security-logs-test\\attack-cases-benchmark\\case-1-apt-enterprise-intrusion\\raw-logs) into memory, preserving file names and timestamps. Convert each log entry into a structured format suitable for downstream analysis.",
+        "required_skills": [
+          "file_reading",
+          "data_analysis"
+        ],
+        "expected_output": "A list of structured log entries with metadata (filename, timestamp, raw content).",
+        "dependencies": [],
+        "risk_level": "low",
+        "max_retries": 2,
+        "timeout_seconds": 600,
+        "parameters": {},
+        "agent_id": null,
+        "hermes_profile": "fleet-investigate-crit-ingest-raw-security-",
+        "specialist_spec": null,
+        "_hermes_profile": "fleet-investigate-crit-ingest-raw-security-"
+      },
+      {
+        "id": "t2",
+        "name": "Triage Alerts and Estimate False\u2011Positive Likelihood",
+        "description": "Analyze the ingested logs to identify alert events, compute a false\u2011positive probability for each based on known benign patterns, and flag high\u2011confidence alerts.",
+        "required_skills": [
+          "data_analysis",
+          "general_reasoning"
+        ],
+        "expected_output": "A table of alerts with associated false\u2011positive likelihood scores and confidence flags.",
+        "dependencies": [
+          "t1"
+        ],
+        "risk_level": "low",
+        "max_retries": 2,
+        "timeout_seconds": 600,
+        "parameters": {},
+        "agent_id": null,
+        "hermes_profile": "fleet-investigate-crit-triage-alerts-and-es",
+        "specialist_spec": null,
+        "_hermes_profile": "fleet-investigate-crit-triage-alerts-and-es"
+      },
+      {
+        "id": "t3",
+        "name": "Extract Threat Indicators (IOCs)",
+        "description": "Search the structured logs for indicators such as IP addresses, domain names, file hashes, registry keys, and command\u2011line arguments that signal malicious activity.",
+        "required_skills": [
+          "data_analysis",
+          "general_reasoning"
+        ],
+        "expected_output": "A list of identified IOCs with context (source log, timestamp, description).",
+        "dependencies": [
+          "t1"
+        ],
+        "risk_level": "low",
+        "max_retries": 2,
+        "timeout_seconds": 600,
+        "parameters": {},
+        "agent_id": null,
+        "hermes_profile": "fleet-investigate-crit-extract-threat-indic",
+        "specialist_spec": null,
+        "_hermes_profile": "fleet-investigate-crit-extract-threat-indic"
+      },
+      {
+        "id": "t4",
+        "name": "Assess Operational Impact",
+        "description": "Determine the scope of compromise by mapping affected hosts, services, and data. Estimate potential damage such as data exfiltration volume or service downtime.",
+        "required_skills": [
+          "data_analysis",
+          "general_reasoning"
+        ],
+        "expected_output": "Impact assessment summary including number of compromised systems, critical assets affected, and estimated business impact metrics.",
+        "dependencies": [
+          "t2",
+          "t3"
+        ],
+        "risk_level": "low",
+        "max_retries": 2,
+        "timeout_seconds": 600,
+        "parameters": {},
+        "agent_id": null,
+        "hermes_profile": "fleet-investigate-crit-assess-operational-i",
+        "specialist_spec": null,
+        "_hermes_profile": "fleet-investigate-crit-assess-operational-i"
+      },
+      {
+        "id": "t5",
+        "name": "Compress Event Timeline",
+        "description": "Create a concise, chronological timeline of key events (e.g., initial compromise, lateral movement, data exfiltration) derived from the logs and impact assessment.",
+        "required_skills": [
+          "data_analysis",
+          "general_reasoning"
+        ],
+        "expected_output": "A compressed timeline table or narrative summarizing critical timestamps and actions.",
+        "dependencies": [
+          "t4"
+        ],
+        "risk_level": "low",
+        "max_retries": 2,
+        "timeout_seconds": 600,
+        "parameters": {},
+        "agent_id": null,
+        "hermes_profile": "fleet-investigate-crit-compress-event-timel",
+        "specialist_spec": null,
+        "_hermes_profile": "fleet-investigate-crit-compress-event-timel"
+      },
+      {
+        "id": "t6",
+        "name": "Propose Containment Firewall Rules",
+        "description": "Based on the identified IOCs and compromised network segments, draft a set of firewall rules (allow/deny) to block malicious traffic while preserving legitimate business flows.",
+        "required_skills": [
+          "general_reasoning",
+          "data_analysis"
+        ],
+        "expected_output": "A list of suggested firewall rule statements with rationale for each rule.",
+        "dependencies": [
+          "t3",
+          "t5"
+        ],
+        "risk_level": "low",
+        "max_retries": 2,
+        "timeout_seconds": 600,
+        "parameters": {},
+        "agent_id": null,
+        "hermes_profile": "fleet-investigate-crit-propose-containment-",
+        "specialist_spec": null,
+        "_hermes_profile": "fleet-investigate-crit-propose-containment-"
+      }
+    ],
+    "estimated_completion_seconds": 60
+  },
+  "status": "completed",
+  "created_at": 1793027380.6309187,
+  "updated_at": 1793027400.0530875,
+  "profiles_to_create": [
+    "fleet-investigate-crit-assess-operational-i",
+    "fleet-investigate-crit-compress-event-timel",
+    "fleet-investigate-crit-extract-threat-indic",
+    "fleet-investigate-crit-ingest-raw-security-",
+    "fleet-investigate-crit-propose-containment-",
+    "fleet-investigate-crit-triage-alerts-and-es"
+  ],
+  "profiles_existing": [],
+  "workflow_id": "fleet-arena-investigate-critical-sec-401a91-341500",
+  "agent_id": null,
+  "resilience": "standard"
+}

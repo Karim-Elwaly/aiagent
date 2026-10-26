@@ -1,0 +1,212 @@
+[
+  {
+    "domain": "HIPAA",
+    "control": "TLS 1.3 everywhere",
+    "deliverables": "Security baseline",
+    "pmp_section": "Security Controls"
+  },
+  {
+    "domain": "HIPAA",
+    "control": "OAuth2 + OIDC authentication",
+    "deliverables": "Security baseline",
+    "pmp_section": "Security Controls"
+  },
+  {
+    "domain": "HIPAA",
+    "control": "Hardware Security Module (HSM) for key storage",
+    "deliverables": "Compliance engine, Audit logs",
+    "pmp_section": "Security Controls"
+  },
+  {
+    "domain": "HIPAA",
+    "control": "Encrypted at rest using AES\u2011256",
+    "deliverables": "Microservices, Compliance engine",
+    "pmp_section": "Security Controls"
+  },
+  {
+    "domain": "HIPAA",
+    "control": "Regular penetration testing",
+    "deliverables": "Penetration test report",
+    "pmp_section": "Security & Compliance Strategy"
+  },
+  {
+    "domain": "HIPAA",
+    "control": "Incident response plan with SANS guidelines",
+    "deliverables": "Security baseline",
+    "pmp_section": "Security & Compliance Strategy"
+  },
+  {
+    "domain": "HIPAA",
+    "control": "Data loss prevention (DLP) integration",
+    "deliverables": "DLP integration",
+    "pmp_section": "Security & Compliance Strategy"
+  },
+  {
+    "domain": "GDPR",
+    "control": "TLS 1.3 everywhere",
+    "deliverables": "Security baseline",
+    "pmp_section": "Security Controls"
+  },
+  {
+    "domain": "GDPR",
+    "control": "OAuth2 + OIDC authentication",
+    "deliverables": "Security baseline",
+    "pmp_section": "Security Controls"
+  },
+  {
+    "domain": "GDPR",
+    "control": "Hardware Security Module (HSM) for key storage",
+    "deliverables": "Compliance engine, Audit logs",
+    "pmp_section": "Security Controls"
+  },
+  {
+    "domain": "GDPR",
+    "control": "Encrypted at rest using AES\u2011256",
+    "deliverables": "Microservices, Compliance engine",
+    "pmp_section": "Security Controls"
+  },
+  {
+    "domain": "GDPR",
+    "control": "Regular penetration testing",
+    "deliverables": "Penetration test report",
+    "pmp_section": "Security & Compliance Strategy"
+  },
+  {
+    "domain": "GDPR",
+    "control": "Incident response plan with SANS guidelines",
+    "deliverables": "Security baseline",
+    "pmp_section": "Security & Compliance Strategy"
+  },
+  {
+    "domain": "GDPR",
+    "control": "Data loss prevention (DLP) integration",
+    "deliverables": "DLP integration",
+    "pmp_section": "Security & Compliance Strategy"
+  },
+  {
+    "domain": "FedRAMP High",
+    "control": "TLS 1.3 everywhere",
+    "deliverables": "Security baseline",
+    "pmp_section": "Security Controls"
+  },
+  {
+    "domain": "FedRAMP High",
+    "control": "OAuth2 + OIDC authentication",
+    "deliverables": "Security baseline",
+    "pmp_section": "Security Controls"
+  },
+  {
+    "domain": "FedRAMP High",
+    "control": "Hardware Security Module (HSM) for key storage",
+    "deliverables": "Compliance engine, Audit logs",
+    "pmp_section": "Security Controls"
+  },
+  {
+    "domain": "FedRAMP High",
+    "control": "Encrypted at rest using AES\u2011256",
+    "deliverables": "Microservices, Compliance engine",
+    "pmp_section": "Security Controls"
+  },
+  {
+    "domain": "FedRAMP High",
+    "control": "Regular penetration testing",
+    "deliverables": "Penetration test report",
+    "pmp_section": "Security & Compliance Strategy"
+  },
+  {
+    "domain": "FedRAMP High",
+    "control": "Incident response plan with SANS guidelines",
+    "deliverables": "Security baseline",
+    "pmp_section": "Security & Compliance Strategy"
+  },
+  {
+    "domain": "FedRAMP High",
+    "control": "Data loss prevention (DLP) integration",
+    "deliverables": "DLP integration",
+    "pmp_section": "Security & Compliance Strategy"
+  },
+  {
+    "domain": "ISO/IEC 27001",
+    "control": "TLS 1.3 everywhere",
+    "deliverables": "Security baseline",
+    "pmp_section": "Security Controls"
+  },
+  {
+    "domain": "ISO/IEC 27001",
+    "control": "OAuth2 + OIDC authentication",
+    "deliverables": "Security baseline",
+    "pmp_section": "Security Controls"
+  },
+  {
+    "domain": "ISO/IEC 27001",
+    "control": "Hardware Security Module (HSM) for key storage",
+    "deliverables": "Compliance engine, Audit logs",
+    "pmp_section": "Security Controls"
+  },
+  {
+    "domain": "ISO/IEC 27001",
+    "control": "Encrypted at rest using AES\u2011256",
+    "deliverables": "Microservices, Compliance engine",
+    "pmp_section": "Security Controls"
+  },
+  {
+    "domain": "ISO/IEC 27001",
+    "control": "Regular penetration testing",
+    "deliverables": "Penetration test report",
+    "pmp_section": "Security & Compliance Strategy"
+  },
+  {
+    "domain": "ISO/IEC 27001",
+    "control": "Incident response plan with SANS guidelines",
+    "deliverables": "Security baseline",
+    "pmp_section": "Security & Compliance Strategy"
+  },
+  {
+    "domain": "ISO/IEC 27001",
+    "control": "Data loss prevention (DLP) integration",
+    "deliverables": "DLP integration",
+    "pmp_section": "Security & Compliance Strategy"
+  },
+  {
+    "domain": "Licensing Model",
+    "control": "MIT License for core platform",
+    "deliverables": "Core Platform Source Code",
+    "pmp_section": "Licensing & Legal"
+  },
+  {
+    "domain": "Licensing Model",
+    "control": "Commercial add-on subscription model",
+    "deliverables": "Enterprise Add-on Licensing Agreement",
+    "pmp_section": "Licensing & Legal"
+  },
+  {
+    "domain": "Architecture Constraints",
+    "control": "Kubernetes 1.28+ deployment",
+    "deliverables": "Kubernetes Deployment",
+    "pmp_section": "Architecture Constraints"
+  },
+  {
+    "domain": "Architecture Constraints",
+    "control": "PostgreSQL 15 persistence",
+    "deliverables": "PostgreSQL Database Schema",
+    "pmp_section": "Architecture Constraints"
+  },
+  {
+    "domain": "Architecture Constraints",
+    "control": "Container image signing with Notary",
+    "deliverables": "Container Image Signing Pipeline",
+    "pmp_section": "Architecture Constraints"
+  },
+  {
+    "domain": "Architecture Constraints",
+    "control": "Observability via OpenTelemetry",
+    "deliverables": "Observability Setup",
+    "pmp_section": "Architecture Constraints"
+  },
+  {
+    "domain": "Architecture Constraints",
+    "control": "Zero-trust network segmentation",
+    "deliverables": "Network Segmentation Plan",
+    "pmp_section": "Architecture Constraints"
+  }
+]

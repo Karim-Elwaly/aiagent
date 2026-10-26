@@ -1,0 +1,164 @@
+{
+  "arena_id": "arena-enterprise-rfp-proposal-2abc18",
+  "arena_name": "create proposal ",
+  "arena_slug": "enterprise-rfp-proposal",
+  "mission_prompt": "Enterprise RFP Proposal & Pricing Factory: Ingest uploaded government cloud migration RFP, extract mandatory technical compliance criteria, model multi-tier labor pricing, and generate a winning executive proposal with compliance traceability matrix.",
+  "strategy_profile": "STANDARD",
+  "units": [
+    {
+      "profile_name": "fleet-enterprise-rfp-p-ingest-rfp-extract-m",
+      "unit_codename": "RECON_INGESTION",
+      "task_id": "t-xtract-m",
+      "task_name": "Ingest RFP & Extract Mandatory Technical Compliance Criteria",
+      "operational_stage": "RECON_INGESTION",
+      "scoped_tools": [
+        "execute_python",
+        "triage_security_alert"
+      ],
+      "required_skills": [
+        "data_analysis",
+        "code_execution",
+        "general_reasoning"
+      ],
+      "description": "Load the uploaded RFP document (or synthesize a realistic government cloud migration RFP if none provided). Parse the text to identify all mandatory technical compliance items such as security controls, data residency requirements, audit standards, and performance SLAs. Output a structured table of criteria with identifiers, descriptions, and any referenced regulations.",
+      "input_contract": "",
+      "output_contract": "",
+      "profile_exists": true,
+      "attached_files": [
+        {
+          "id": "att-14ad99c7",
+          "filename": "reqop.docx",
+          "file_path": "D:\\projects\\aiagent\\data\\uploads\\arena-enterprise-rfp-proposal-2abc18\\reqop.docx",
+          "file_type": "docx",
+          "size_bytes": 20617,
+          "extracted_text": "# Request for Proposal (RFP)\n## Enterprise Electronic Health Record (EHR) & Clinical Integration Platform\n**Ministry of Health & Population (MOHP) \u2013 Smart Village Health Data Center**\n---\n### 1. Introduction\nThe Ministry of Health & Population (MOHP) invites qualified enterprise technology vendors and system integrators to submit proposals for the supply, deployment, configuration, and multi-year support of a centralized **Electronic Health Record (EHR) & Clinical Data Integration Platform**.\nThe objective of this RFP is to establish a secure, unified digital health foundation connecting tertiary referral hospitals, specialized institutes, and regional clinics across selected pilot governorates into a single longitudinal patient record repository.\n---\n### 2. Background\nMOHP is spearheading a national digital healthcare modernization agenda to transition public healthcare delivery away from fragmented paper records and disparate clinic databases into a standards-based, interoperable clinical ecosystem.\nTo deliver this transition, MOHP requires an enterprise healthcare platform that:\n* Eliminates departmental clinical data silos across hospitals and ambulatory networks.\n* Standardizes patient medical history into a verifiable, tamper-evident longitudinal health record.\n* Embeds clinical decision support and patient safety validations directly into clinician workflows.\n* Ensures strict compliance with national health data governance, patient privacy laws, and international interoperability standards.\nThe core solution will be hosted on-premises within the primary **MOHP Smart Village Health Data Center**, with secondary replication to an active-passive disaster recovery site.\n---\n### 3. Scope of Work\nThe selected vendor shall:\n1. Supply perpetual or multi-year enterprise platform licenses for core clinical, administrative, and integration modules.\n2. Design, size, and deploy the application and database tiers across MOHP private cloud virtualization infrastructure.\n3. Configure clinical workflows, specialty templates, role profiles, and clinical decision rules.\n4. Deliver end-to-end integration with external hospital systems (LIS, RIS/PACS, ERP, and national civil ID registry).\n5. Execute end-to-end clinical workflow testing, load/stress validation, and vulnerability assessments.\n6. Provide comprehensive administrative training, clinician train-the-trainer workshops, and complete operational runbooks.\n7. Provide 24/7 Level-3 vendor support, patching, and preventive maintenance under an agreed Service Level Agreement (SLA).\n---\n### 4. Functional Requirements\n#### 4.1 Master Patient Index (MPI) & Identity Management\nThe platform shall provide:\n* Deterministic and probabilistic patient identity matching algorithms to reconcile duplicate registrations.\n* Native integration with the National Civil Registry via secure REST/mTLS endpoints for identity verification.\n* Unique lifelong Patient Identification Number (PIN) assignment and biometric/barcode wristband printing.\n* Full audit tracking of demographic merge and split operations.\n#### 4.2 Clinical Documentation & Inpatient/Outpatient Management\nThe platform shall include:\n* Specialty-tailored clinical documentation templates (Outpatient, Inpatient Ward, Emergency, ICU, and Surgery).\n* Computerized Physician Order Entry (CPOE) for laboratory investigations, diagnostic imaging, procedures, and dietary orders.\n* Nursing care documentation, including automated Early Warning Score (EWS) calculations and vital sign trend tracking.\n* Discharge summary generation with automated coding cross-references.\n#### 4.3 Closed-Loop Medication Management (e-Prescribing & Pharmacy)\nThe solution shall support:\n* Electronic prescription writing with automatic dosage calculations based on patient age, weight, and renal clearance.\n* Real-time Clinical Decision Support (CDS) cross-referencing:\n* Drug-Drug interactions\n* Drug-Allergy contraindications\n* Duplicate therapy alerts\n* Electronic Medication Administration Record (eMAR) with barcode medication scanning at bedside.\n* Hospital pharmacy dispense tracking, formulary management, and inventory stock depletion.\n#### 4.4 Diagnostic Interoperability (LIS & RIS/PACS Integration)\nThe solution shall provide:\n* Bi-directional HL7 v2.x and FHIR interfaces to feed orders to third-party Laboratory Information Systems (LIS) and ingest structured results.\n* DICOM worklist broadcast and embedded zero-footprint web viewer launch capabilities for Picture Archiving and Communication Systems (PACS).\n* Critical lab value alerts delivered synchronously to attending physician dashboards.\n#### 4.5 Billing, Coding & Revenue Cycle Management (RCM)\nThe platform shall support:\n* Mapping of clinical diagnoses and procedures to ICD-10-CM/AM, ICD-11, and CPT/ACHI coding sets.\n* Automated claim generation compliant with national health insurance billing rules.\n* Co-pay calculation, insurance policy eligibility checks, and pre-authorization tracking.\n---\n### 5. Advanced Clinical & Interoperability Requirements\n#### 5.1 Standards-Based Interoperability\nThe platform shall:\n* Expose HL7 FHIR (v4.0.1 / v5.0) REST APIs for external health data exchange.\n* Support IHE Profiles including PIX/PDQ (patient identity), XDS.b / XCA (cross-enterprise document sharing), and ATNA (audit trail).\n* Facilitate inbound and outbound CDA/C-CDA exchange formats for patient transfer summaries.\n#### 5.2 Real-Time Clinical Decision Support (CDS) & Rules Engine\nThe platform shall provide:\n* Configurable rule engines supporting custom clinical pathways and sepsis risk stratification.\n* Alert fatigue suppression rules (customizable alert severities: Informational, Warning, Hard Stop).\n* Audit logging of all physician alert overrides including mandatory documented override reasons.\n#### 5.3 Telehealth & Patient Portal Integration\nThe platform shall support:\n* Native or API-driven video consultation scheduling and clinical summary linking.\n* Patient portal connectors allowing citizens to view lab results, immunization histories, and upcoming visits.\n* Consent management tracking allowing patients to grant or revoke specific provider record access.\n#### 5.4 Population Health Analytics & Disease Surveillance\nThe platform shall provide:\n* Automated notification triggers to national surveillance systems for reportable infectious diseases.\n* Embedded clinical registry dashboards for chronic conditions (e.g., Diabetes, Hypertension, Oncology).\n* Risk-scoring pipelines based on cohort aggregations across facilities.\n---\n### 6. Enterprise Architecture & Reliability\n#### 6.1 High Availability & Disaster Recovery\nThe solution shall:\n* Support active-active or active-hot-standby clustering with zero data loss ($RPO = 0$).\n* Provide Recovery Time Objective ($RTO$) of less than 15 minutes for critical clinical database components.\n* Support asynchronous data mirroring to the secondary data center over dedicated dark fiber links.\n#### 6.2 Data Partitioning, Scaling & Offline Tolerance\nThe platform shall:\n* Handle an initial concurrent load of **8,500 active clinical users** with sub-second page transition latency.\n* Provide an offline survivable branch appliance or caching mechanism ensuring local hospital wards can capture emergency notes and chart medications during wide-area network (WAN) disruptions.\n#### 6.3 Audit Trails & Forensic Compliance\nThe platform shall:\n* Record an immutable audit log entry for every electronic record access (view, export, edit, flag, or delete).\n* Retain forensic access logs for a minimum of 10 years without performance degradation on operational tables.\n---\n### 7. Deployment & Hosting Specifications\n* **Infrastructure**: Hosted on dedicated physical and virtual compute clusters inside the Smart Village Health Data Center.\n* **Operating Systems**: Enterprise Linux distributions (RHEL 9.x / Rocky Linux 9.x) or supported enterprise operating systems.\n* **Database**: Supported on enterprise-grade relational engines (Oracle RAC, PostgreSQL Enterprise, or Microsoft SQL Server Always On) with transparent data encryption (TDE).\n* **Storage Footprint**: Architecture must detail SAN/NAS IOPS requirements, hot storage retention tiers, and cold tape/object archival strategies.\n---\n### 8. Cybersecurity & Data Protection\n| Security Domain | Mandatory Requirement |\n| --- | --- |\n| **Authentication** | Integration with central Keycloak/Active Directory; mandatory Multi-Factor Authentication (MFA) for administrative and remote physician access. |\n| **Data Encryption** | AES-256 for all stored databases, tablespaces, and backups; TLS 1.3 for all endpoints in transit. |\n| **Access Control** | Granular Attribute-Based Access Control (ABAC) and Role-Based Access Control (RBAC) restricting record visibility by specialty, care unit, and facility. |\n| **Vulnerability SLA** | Critical CVE remediations and security patches must be provided within 14 calendar days of public disclosure. |\n---\n### 9. Licensing & Commercial Model\nVendors must clearly delineate costs across the following dimensions:\n1. **License Model**:\n* Facility-tier licensing (Per-Hospital / Per-Clinic classification), or\n* Per-Concurrent User / Named User license model.\n2. **Environment Licenses**: Non-production instances (Dev, Test, Training, UAT, and Disaster Recovery) must be explicitly factored into licensing costs.\n3. **Third-Party Dependencies**: All required commercial database, middleware, or clinical vocabulary licenses (e.g., SNOMED-CT, First Databank) must be itemized.\n4. **Maintenance & Support (M&S)**: Annual percentage caps on maintenance renewal after warranty expiration.\n---\n### 10. Required Deliverables\nThe successful vendor must provide:\n* Fully configured and operational EHR software platform deployed across MOHP infrastructure.\n* Validated HL7/FHIR integration gateways connecting LIS, PACS, and national identity registries.\n* Complete deployment architecture blueprints, database schema dictionaries, and API documentation.\n* Standard Operating Procedures (SOPs) for administrative backup, disaster recovery failover, and performance tuning.\n* Comprehensive role-based training programs (Train-the-Trainer, Physician Champions, System Administrators).\n* 12 months of warranty coverage starting from official final acceptance, followed by optional multi-year Service Level Agreements.",
+          "char_count": 10368,
+          "preview": "# Request for Proposal (RFP)\n## Enterprise Electronic Health Record (EHR) & Clinical Integration Platform\n**Ministry of Health & Population (MOHP) \u2013 Smart Village Health Data Center**\n---\n### 1. Introduction\nThe Ministry of Health & Population (MOHP) invites qualified enterprise technology vendors and system integrators to submit proposals for the supply, deployment, configuration, and multi-year support of a centralized **Electronic Health Record (EHR) & Clinical Data Integration Platform**.\nThe objective of this RFP is to establish a secure, unified digital health foundation connecting terti..."
+        }
+      ]
+    },
+    {
+      "profile_name": "fleet-enterprise-rfp-p-model-multi-tier-lab",
+      "unit_codename": "DEEP_ANALYSIS",
+      "task_id": "t-tier-lab",
+      "task_name": "Model Multi\u2011Tier Labor Pricing",
+      "operational_stage": "DEEP_ANALYSIS",
+      "scoped_tools": [
+        "execute_python"
+      ],
+      "required_skills": [
+        "data_analysis",
+        "code_execution"
+      ],
+      "description": "Using the compliance criteria from t1, design a multi\u2011tier labor pricing model that accounts for skill level (e.g., junior, mid, senior), role type (architect, engineer, project manager), and regulatory impact. Compute hourly rates, total cost per criterion, and aggregate proposal pricing. Output a structured pricing table with tier definitions, rate assumptions, and cost breakdowns.",
+      "input_contract": "",
+      "output_contract": "",
+      "profile_exists": true,
+      "attached_files": []
+    },
+    {
+      "profile_name": "fleet-enterprise-rfp-p-generate-executive-p",
+      "unit_codename": "DELIVERABLE_SYNTHESIS",
+      "task_id": "t-cutive-p",
+      "task_name": "Generate Executive Proposal with Compliance Traceability Matrix",
+      "operational_stage": "DELIVERABLE_SYNTHESIS",
+      "scoped_tools": [
+        "compress_security_timeline",
+        "summarize_to_presentation",
+        "triage_security_alert"
+      ],
+      "required_skills": [
+        "summarization",
+        "general_reasoning"
+      ],
+      "description": "Compose a polished executive proposal that includes an overview, solution architecture summary, key differentiators, and the pricing model from t2. Create a compliance traceability matrix linking each RFP criterion to the proposed solution component or labor tier that satisfies it. Produce the final deliverable in a structured format (e.g., Markdown or PDF outline) suitable for submission.",
+      "input_contract": "",
+      "output_contract": "",
+      "profile_exists": true,
+      "attached_files": []
+    }
+  ],
+  "dag": {
+    "goal": "Create a comprehensive executive proposal and pricing model for a government cloud migration RFP, including mandatory technical compliance extraction and a traceability matrix.",
+    "reasoning": "The request requires multi\u2011step processing: ingesting the RFP content (or synthesizing if not provided), extracting compliance criteria, modeling tiered labor costs, and assembling an executive proposal with a compliance traceability matrix. This aligns with the enterprise audit pattern, so we split into three distinct phases.",
+    "tasks": [
+      {
+        "id": "t1",
+        "name": "Ingest RFP & Extract Mandatory Technical Compliance Criteria",
+        "description": "Load the uploaded RFP document (or synthesize a realistic government cloud migration RFP if none provided). Parse the text to identify all mandatory technical compliance items such as security controls, data residency requirements, audit standards, and performance SLAs. Output a structured table of criteria with identifiers, descriptions, and any referenced regulations.",
+        "required_skills": [
+          "data_analysis",
+          "code_execution",
+          "general_reasoning"
+        ],
+        "expected_output": "A tabular dataset (e.g., CSV or JSON) listing each mandatory compliance criterion with its unique ID, description, and source reference.",
+        "dependencies": [],
+        "risk_level": "low",
+        "max_retries": 2,
+        "timeout_seconds": 600,
+        "parameters": {},
+        "agent_id": null,
+        "hermes_profile": "fleet-enterprise-rfp-p-ingest-rfp-extract-m",
+        "specialist_spec": null,
+        "_hermes_profile": "fleet-enterprise-rfp-p-ingest-rfp-extract-m"
+      },
+      {
+        "id": "t2",
+        "name": "Model Multi\u2011Tier Labor Pricing",
+        "description": "Using the compliance criteria from t1, design a multi\u2011tier labor pricing model that accounts for skill level (e.g., junior, mid, senior), role type (architect, engineer, project manager), and regulatory impact. Compute hourly rates, total cost per criterion, and aggregate proposal pricing. Output a structured pricing table with tier definitions, rate assumptions, and cost breakdowns.",
+        "required_skills": [
+          "data_analysis",
+          "code_execution"
+        ],
+        "expected_output": "A detailed pricing matrix (CSV/JSON) showing labor tiers, rates, and cost allocations per compliance item.",
+        "dependencies": [
+          "t1"
+        ],
+        "risk_level": "low",
+        "max_retries": 2,
+        "timeout_seconds": 600,
+        "parameters": {},
+        "agent_id": null,
+        "hermes_profile": "fleet-enterprise-rfp-p-model-multi-tier-lab",
+        "specialist_spec": null,
+        "_hermes_profile": "fleet-enterprise-rfp-p-model-multi-tier-lab"
+      },
+      {
+        "id": "t3",
+        "name": "Generate Executive Proposal with Compliance Traceability Matrix",
+        "description": "Compose a polished executive proposal that includes an overview, solution architecture summary, key differentiators, and the pricing model from t2. Create a compliance traceability matrix linking each RFP criterion to the proposed solution component or labor tier that satisfies it. Produce the final deliverable in a structured format (e.g., Markdown or PDF outline) suitable for submission.",
+        "required_skills": [
+          "summarization",
+          "general_reasoning"
+        ],
+        "expected_output": "A complete executive proposal document with embedded compliance traceability matrix and pricing summary.",
+        "dependencies": [
+          "t1",
+          "t2"
+        ],
+        "risk_level": "low",
+        "max_retries": 2,
+        "timeout_seconds": 600,
+        "parameters": {},
+        "agent_id": null,
+        "hermes_profile": "fleet-enterprise-rfp-p-generate-executive-p",
+        "specialist_spec": null,
+        "_hermes_profile": "fleet-enterprise-rfp-p-generate-executive-p"
+      }
+    ],
+    "estimated_completion_seconds": 60
+  },
+  "status": "completed",
+  "created_at": 1793030012.872507,
+  "updated_at": 1793036663.414599,
+  "profiles_to_create": [
+    "fleet-enterprise-rfp-p-ingest-rfp-extract-m"
+  ],
+  "profiles_existing": [
+    "fleet-enterprise-rfp-p-generate-executive-p",
+    "fleet-enterprise-rfp-p-model-multi-tier-lab"
+  ],
+  "workflow_id": "fleet-arena-enterprise-rfp-proposal-2abc18-fe60a6",
+  "agent_id": null,
+  "resilience": "standard"
+}

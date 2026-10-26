@@ -168,7 +168,14 @@ def process_uploaded_file(file_bytes: bytes, filename: str, session_id: str | No
     clean_name = re.sub(r"[^\w\.\-\_]", "_", filename)
     file_path = target_dir / clean_name
 
-    file_path.write_bytes(file_bytes)
+    try:
+        file_path.write_bytes(file_bytes)
+    except Exception as exc:
+        logger.warning("Could not write directly to %s (%s); writing to unique fallback path", file_path, exc)
+        clean_name = f"{uuid.uuid4().hex[:6]}_{clean_name}"
+        file_path = target_dir / clean_name
+        file_path.write_bytes(file_bytes)
+
     size_bytes = len(file_bytes)
 
     ext = file_path.suffix.lower()

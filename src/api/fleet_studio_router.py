@@ -13,12 +13,16 @@ AgentHub's autonomous backend, providing:
 from __future__ import annotations
 
 import asyncio
+import json
 import logging
+from pathlib import Path
+import re
 import time
 from typing import Any, Optional
 from uuid import uuid4
 
 from fastapi import APIRouter, File, HTTPException, Request, UploadFile
+from fastapi.responses import JSONResponse
 from pydantic import BaseModel
 
 logger = logging.getLogger(__name__)
@@ -433,29 +437,82 @@ async def apply_blueprint(blueprint_id: str, payload: dict, request: Request):
 
 # ── 5. Decision Rooms (Human Disposition / Step-Challenges) ──────────
 
+_ROOMS_STORE_PATH = Path("data/room_dispositions.json")
+
+
+def _load_room_dispositions() -> dict[str, dict[str, Any]]:
+    path = _ROOMS_STORE_PATH if _ROOMS_STORE_PATH.is_file() else Path(__file__).resolve().parent.parent.parent / "data" / "room_dispositions.json"
+    if path.is_file():
+        try:
+            return json.loads(path.read_text(encoding="utf-8"))
+        except Exception:
+            return {}
+    return {}
+
+
+def _save_room_disposition(room_id: str, decision: str, note: str = "") -> None:
+    data = _load_room_dispositions()
+    now = time.time()
+    existing = data.get(room_id, {})
+    data[room_id] = {
+        **existing,
+        "status": decision,
+        "decision": decision,
+        "note": note or existing.get("note", ""),
+        "decided_at": now,
+        "created_at": existing.get("created_at", now - 300),
+    }
+    try:
+        path = _ROOMS_STORE_PATH
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(json.dumps(data, indent=2), encoding="utf-8")
+    except Exception as exc:
+        logger.warning("Failed to save room disposition: %s", exc)
+
+
 @router.get("/api/v1/rooms")
-async def get_fleet_studio_decision_rooms():
+async def get_fleet_studio_decision_rooms(mission_id: Optional[str] = None):
     """Return all evidence-bound decisions awaiting human disposition."""
     from src.fleet.arena_store import FleetArenaStore
 
-    arenas = FleetArenaStore().list_all()
-    target_arena = arenas[0] if arenas else None
+    store = FleetArenaStore()
+    arenas = store.list_all()
+    target_arena = None
+    if mission_id:
+        target_arena = store.load(mission_id)
+    if not target_arena and arenas:
+        arenas.sort(key=lambda a: getattr(a, "updated_at", 0) or getattr(a, "created_at", 0), reverse=True)
+        target_arena = arenas[0]
+
+    stored_disp = _load_room_dispositions()
 
     rooms = []
     if target_arena and target_arena.units:
+        base_time = getattr(target_arena, "created_at", None) or (time.time() - 900)
         for idx, u in enumerate(target_arena.units):
+            room_id = f"room-{u.task_id}"
+            disp = stored_disp.get(room_id, {})
+            # If target arena completed, default to approved unless rejected
+            status = disp.get("status")
+            if not status:
+                status = "APPROVE" if getattr(target_arena, "status", "") == "completed" else "PENDING"
+            arena_time = getattr(target_arena, "updated_at", None) or getattr(target_arena, "created_at", None)
+            created_at = disp.get("created_at")
+            if not created_at or (arena_time and arena_time > created_at + 60):
+                created_at = (arena_time or base_time) - ((len(target_arena.units) - idx) * 30)
             rooms.append({
-                "room_id": f"room-{u.task_id}",
+                "room_id": room_id,
                 "title": f"Assurance Review: {u.task_name}",
                 "agent": u.task_name,
                 "fleet_id": target_arena.arena_name,
                 "basis": "ANALYTICAL",
                 "verdict": "EVIDENCE_FOUND",
-                "created_at": time.time() - (idx * 120),
+                "created_at": created_at,
                 "summary": f"Specialist unit '{u.unit_codename}' verified under local sovereign air-gap policy. Scoped tools: {', '.join(u.scoped_tools) or 'general_reasoning'}.",
-                "status": "PENDING",
+                "status": status,
             })
     if not rooms:
+        disp = stored_disp.get("room-default-assurance", {})
         rooms.append({
             "room_id": "room-default-assurance",
             "title": "Autonomous Fleet Governance Review",
@@ -463,9 +520,9 @@ async def get_fleet_studio_decision_rooms():
             "fleet_id": "Primary Agent Fleet",
             "basis": "ANALYTICAL",
             "verdict": "EVIDENCE_FOUND",
-            "created_at": time.time(),
+            "created_at": disp.get("created_at") or time.time(),
             "summary": "Full epistemic trace verified. All specialist unit boundaries confirmed.",
-            "status": "PENDING",
+            "status": disp.get("status", "PENDING"),
         })
     return rooms
 
@@ -475,6 +532,7 @@ async def record_decision_room_disposition(room_id: str, payload: dict):
     """Record operator disposition: APPROVE (unlock downstream) or REJECT (return for evidence)."""
     decision = payload.get("decision", "APPROVE")
     note = payload.get("note", "")
+    _save_room_disposition(room_id, decision, note)
     logger.info("Decision room '%s' disposition recorded: %s (note: %s)", room_id, decision, note)
     return {"room_id": room_id, "status": decision, "recorded_at": time.time()}
 
@@ -566,42 +624,87 @@ async def upload_document_and_run_fleet(mission_id: str, file: UploadFile = File
 
 
 @router.post("/api/v1/missions/{mission_id}/stage-document")
-async def stage_mission_document(mission_id: str, request: Request, filename: Optional[str] = "uploaded_document.docx"):
+async def stage_mission_document(
+    mission_id: str,
+    file: UploadFile = File(...),
+):
     """Stage a document directly from Fleet Studio's Run Mission button."""
-    from src.core.document_parser import process_uploaded_file
-    from src.fleet.arena import FleetArenaComposer
-    from src.fleet.arena_store import FleetArenaStore
+    import traceback
+    try:
+        from src.core.document_parser import process_uploaded_file
+        from src.fleet.arena import FleetArenaComposer
+        from src.fleet.arena_store import FleetArenaStore
 
-    content = await request.body()
-    meta = process_uploaded_file(file_bytes=content, filename=filename or "document.docx", session_id=mission_id)
+        content = await file.read()
+        actual_filename = file.filename or "uploaded_document.docx"
 
-    store = FleetArenaStore()
-    manifest = store.load(mission_id)
-    if not manifest:
-        arenas = store.list_all()
-        manifest = arenas[0] if arenas else None
+        if not content or len(content) == 0:
+            logger.error("stage_mission_document: received empty (0 bytes) file payload for %s", actual_filename)
+            return JSONResponse(
+                status_code=400,
+                content={"detail": f"The selected file '{actual_filename}' is empty (0 bytes). Please ensure the file contains data and is not locked by another application."},
+            )
 
-    if manifest:
-        att_dict = meta.model_dump() if hasattr(meta, "model_dump") else meta.dict()
-        target_tid = manifest.units[0].task_id if manifest.units else "t1"
-        composer = FleetArenaComposer(registry=getattr(request.app.state, "registry", None))
-        try:
-            composer.attach_files(manifest.arena_id, {target_tid: [att_dict]})
-        except Exception:
+        meta = process_uploaded_file(file_bytes=content, filename=actual_filename, session_id=mission_id)
+        logger.info("Staged file '%s': %d bytes, %d characters extracted", meta.filename, meta.size_bytes, meta.char_count)
+
+        store = FleetArenaStore()
+        manifest = store.load(mission_id)
+        if not manifest:
+            arenas = store.list_all()
+            manifest = arenas[0] if arenas else None
+
+        if manifest:
+            att_dict = meta.model_dump() if hasattr(meta, "model_dump") else meta.dict()
+            if not manifest.units:
+                manifest.units = []
             if manifest.units:
                 manifest.units[0].attached_files = [att_dict]
-                store.save(manifest)
 
-    return {
-        "document_key": meta.file_path,
-        "filename": meta.filename,
-        "status": "ok",
-    }
+            # Inject into DAG tasks so all specialist agents directly receive the file and its extracted content
+            if manifest.dag and isinstance(manifest.dag, dict) and "tasks" in manifest.dag:
+                tasks = manifest.dag.get("tasks")
+                if isinstance(tasks, list):
+                    for task in tasks:
+                        if isinstance(task, dict):
+                            task_desc = task.get("description", "")
+                            doc_section = (
+                                f"\n\n---\n# Attached Document Source:\n"
+                                f"- **File Name**: `{meta.filename}`\n"
+                                f"- **File Path**: `{meta.file_path}`\n"
+                                f"- **Size**: {meta.size_bytes} bytes\n"
+                            )
+                            has_real_text = meta.extracted_text and not meta.extracted_text.startswith("[Word Document:") and not meta.extracted_text.startswith("[PDF:")
+                            if has_real_text and len(meta.extracted_text.strip()) > 0:
+                                doc_section += f"- **Extracted Content**:\n```text\n{meta.extracted_text.strip()}\n```\n"
+                            else:
+                                doc_section += f"- Note: File is stored at `{meta.file_path}` for inspection with file tools.\n"
+
+                            if "# Attached Document Source:" not in task_desc:
+                                task["description"] = task_desc + doc_section
+                            task.setdefault("parameters", {})["target_path"] = meta.file_path
+                            task.setdefault("parameters", {})["attached_file"] = meta.file_path
+
+            store.save(manifest)
+
+        return {
+            "document_key": meta.file_path,
+            "filename": meta.filename,
+            "char_count": meta.char_count,
+            "size_bytes": meta.size_bytes,
+            "status": "ok",
+        }
+    except Exception as exc:
+        logger.exception("Error staging document: %s\n%s", exc, traceback.format_exc())
+        return JSONResponse(
+            status_code=500,
+            content={"detail": f"Stage document error: {str(exc)}"},
+        )
 
 
 @router.post("/api/v1/missions/{mission_id}/run")
 async def run_fleet_mission(mission_id: str, payload: dict, request: Request):
-    """Dispatch the multi-agent fleet arena."""
+    """Dispatch the multi-agent fleet arena with target paths and attached file context."""
     from src.core.resilience import normalize_level
     from src.fleet.arena import FleetArenaComposer
     from src.fleet.arena_store import FleetArenaStore
@@ -628,9 +731,57 @@ async def run_fleet_mission(mission_id: str, payload: dict, request: Request):
     workflow_id = f"fleet-{manifest.arena_id}-{uuid4().hex[:6]}"
     manifest.workflow_id = workflow_id
     manifest.status = "running"
+
+    target_path = str(payload.get("target_path") or payload.get("input_document") or "").strip()
+
+    # Discover any attached files from the arena manifest
+    attached_files = []
+    if manifest.units and manifest.units[0].attached_files:
+        attached_files = manifest.units[0].attached_files
+
+    # If target_path is specified as a local file, extract text if attached_files was empty or 0 bytes
+    if target_path and Path(target_path).is_file():
+        try:
+            from src.core.document_parser import process_uploaded_file
+            p = Path(target_path)
+            f_bytes = p.read_bytes()
+            if f_bytes:
+                meta = process_uploaded_file(file_bytes=f_bytes, filename=p.name, session_id=manifest.arena_id)
+                att_dict = meta.model_dump() if hasattr(meta, "model_dump") else meta.dict()
+                if manifest.units:
+                    manifest.units[0].attached_files = [att_dict]
+                attached_files = [att_dict]
+        except Exception as exc:
+            logger.warning("Could not auto-extract target_path file %s: %s", target_path, exc)
+
+    doc_context = ""
+    if attached_files:
+        primary_file = attached_files[0]
+        f_name = primary_file.get("filename", "document")
+        f_path = primary_file.get("file_path", "")
+        f_text = primary_file.get("extracted_text", "")
+        doc_context = f"\n\n[ATTACHED USER SOURCE DOCUMENT: {f_name}]\n[FILE PATH: {f_path}]\n"
+        has_real_text = f_text and not f_text.startswith("[Word Document:") and not f_text.startswith("[PDF:")
+        if has_real_text and len(f_text.strip()) > 0:
+            doc_context += f"[DOCUMENT CONTENT]:\n{f_text[:35000]}\n"
+        if not target_path and f_path:
+            target_path = f_path
+
+    if target_path:
+        effective_query = f"{manifest.mission_prompt}\n\nTarget Investigation Path / Document: {target_path}{doc_context}"
+    else:
+        effective_query = f"{manifest.mission_prompt}{doc_context}"
+
+    # Ensure every task in enriched_dag receives the target path and document context
+    if enriched_dag and "tasks" in enriched_dag:
+        for t in enriched_dag["tasks"]:
+            if target_path:
+                t.setdefault("parameters", {})["target_path"] = target_path
+            if doc_context and "[ATTACHED USER SOURCE DOCUMENT" not in t.get("description", ""):
+                t["description"] = f"{t.get('description', '')}\n{doc_context}"
+
     store.save(manifest)
 
-    effective_query = manifest.mission_prompt
     agent_id = manifest.agent_id or ""
     level = normalize_level(manifest.resilience or "standard")
 
@@ -651,6 +802,7 @@ async def run_fleet_mission(mission_id: str, payload: dict, request: Request):
         "mission_id": manifest.arena_id,
         "workflow_id": workflow_id,
         "agent_name": agent_name,
+        "target_path": target_path,
     }
 
 
@@ -671,42 +823,121 @@ _custom_outputs: dict[str, dict[str, Any]] = {}
 
 
 def _discover_artifact_outputs() -> list[dict[str, Any]]:
-    from pathlib import Path
-    
     outputs: list[dict[str, Any]] = []
     
     try:
-        artifacts_dir = Path("data/artifacts")
-        if artifacts_dir.is_dir():
-            files = [f for f in artifacts_dir.iterdir() if f.is_file() and f.suffix.lower() in (".md", ".html", ".txt", ".json", ".docx")]
-            files.sort(key=lambda f: f.stat().st_mtime, reverse=True)
-            for file in files:
-                try:
-                    stat = file.stat()
-                    content = file.read_text(encoding="utf-8", errors="replace")
-                    name_title = file.stem.replace("_", " ").title()
-                    if "rfp" in file.stem.lower() or "proposal" in file.stem.lower():
-                        name_title = "MOE DevOps Server RFP Proposal & Compliance Matrix"
-                    outputs.append({
-                        "id": f"art_{file.stem}",
-                        "output_id": f"art_{file.stem}",
-                        "name": name_title,
-                        "kind": "markdown" if file.suffix.lower() == ".md" else "document" if file.suffix.lower() in (".html", ".docx") else "structured",
-                        "classification": "confidential",
-                        "produced_by": "Proposal Synthesis Specialist",
-                        "case": "Enterprise RFP Proposal & Pricing Factory",
-                        "case_name": "Enterprise RFP Proposal & Pricing Factory",
-                        "size": stat.st_size,
-                        "size_bytes": stat.st_size,
-                        "at": stat.st_mtime,
-                        "created_at": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime(stat.st_mtime)),
-                        "text": content,
-                        "snippet": content[:300] + ("..." if len(content) > 300 else ""),
-                        "source": {"kind": "agent", "filename": file.name, "path": str(file)},
-                        "provenance": "Proposal Synthesis Specialist produced it from sovereign multi-agent synthesis",
-                    })
-                except Exception as err:
-                    logger.warning("Failed to read artifact %s: %s", file, err)
+        from src.core.config import ROOT_DIR
+        artifacts_dir = ROOT_DIR / "data" / "artifacts"
+        if not artifacts_dir.is_dir():
+            artifacts_dir = Path("data/artifacts").resolve()
+        
+        # Diagnostic
+        if not artifacts_dir.is_dir():
+            return [{
+                "id": "diag_not_found",
+                "name": "Artifacts Directory Not Found",
+                "path_tested": str(artifacts_dir),
+                "cwd": str(Path.cwd()),
+            }]
+        
+        files = [f for f in artifacts_dir.iterdir() if f.is_file() and f.suffix.lower() in (".md", ".html", ".txt", ".json", ".docx")]
+        if not files:
+            return []
+
+        files.sort(key=lambda f: f.stat().st_mtime, reverse=True)
+        for file in files:
+            try:
+                stat = file.stat()
+                content = file.read_text(encoding="utf-8", errors="replace")
+                name_title = file.name
+                # 1. Check for embedded metadata in content
+                case_match = re.search(r"##\s*Case:\s*([^\n\r]+)", content, re.IGNORECASE)
+                produced_match = re.search(r"\*\*(?:Produced By|Assigned Fleet):\*\*\s*([^\n\r]+)", content, re.IGNORECASE)
+                title_match = re.search(r"^#\s*([^\n\r]+)", content, re.MULTILINE)
+
+                if case_match:
+                    case_code = case_match.group(1).strip()
+                    case_title = case_code.replace("-", " ").title()
+                elif "azure" in file.stem.lower():
+                    case_code = "CASE-3-IDENTITY-TAKEOVER-IMPOSSIBLE-TRAVEL"
+                    case_title = "Case 3: Azure AD Intrusion SOC Investigation"
+                elif "k8s" in file.stem.lower():
+                    case_code = "CASE-4-K8S-LINUX-CONTAINER-BREAKOUT"
+                    case_title = "K8s Container Breakout SOC Investigation"
+                elif "dns" in file.stem.lower() or "tunneling" in file.stem.lower():
+                    case_code = "CASE-5-DNS-TUNNELING-DATA-EXFILTRATION"
+                    case_title = "Case 5: DNS Tunneling SOC Investigation"
+                elif "case_1" in file.stem.lower() or "case-1" in file.stem.lower() or ("apt" in file.stem.lower() and "intrusion" in file.stem.lower()):
+                    case_code = "CASE-1-APT-ENTERPRISE-INTRUSION"
+                    case_title = "Case A: APT Enterprise Intrusion SOC Investigation"
+                elif "create_proposal" in file.stem.lower() or "government_cloud" in file.stem.lower():
+                    case_code = "ARENA-ENTERPRISE-RFP-PROPOSAL-2ABC18"
+                    case_title = "Government Cloud Migration RFP"
+                elif "moe" in file.stem.lower() or "devops_server" in file.stem.lower() or ("proposal" in file.stem.lower() and "rfp" in file.stem.lower()):
+                    case_code = "RFP-MOE-ROXY-DEVOPS-2026-01"
+                    case_title = "Ministry of Education DevOps Server Implementation"
+                else:
+                    # Match against stored missions in FleetArenaStore
+                    matched_arena = None
+                    try:
+                        from src.fleet.arena_store import FleetArenaStore
+                        for arena in FleetArenaStore().list_all():
+                            if arena.arena_id in file.stem.lower() or (arena.arena_name and arena.arena_name.lower().replace(" ", "-") in file.stem.lower()):
+                                matched_arena = arena
+                                break
+                    except Exception:
+                        pass
+
+                    if matched_arena:
+                        case_code = matched_arena.arena_id.upper()
+                        case_title = matched_arena.arena_name or matched_arena.arena_id
+                    else:
+                        clean_stem = file.stem.replace("_", "-").replace(" ", "-")
+                        case_code = f"CASE-{clean_stem.upper()[:24]}"
+                        case_title = file.stem.replace("_", " ").title()
+
+                if produced_match:
+                    produced_by = produced_match.group(1).strip()
+                elif "azure" in file.stem.lower():
+                    produced_by = "Azure AD & Cloud Identity Defense Fleet"
+                elif "k8s" in file.stem.lower():
+                    produced_by = "K8s Container Breakout SOC Fleet"
+                elif "dns" in file.stem.lower() or "tunneling" in file.stem.lower():
+                    produced_by = "DNS Exfiltration SOC Fleet"
+                elif "case_6" in file.stem.lower() or "ddos" in file.stem.lower():
+                    produced_by = "Autonomous SOC Specialist Fleet"
+                elif "case_1" in file.stem.lower() or "case-1" in file.stem.lower() or ("apt" in file.stem.lower() and "intrusion" in file.stem.lower()):
+                    produced_by = "APT Enterprise Intrusion SOC Fleet"
+                elif "government_cloud" in file.stem.lower() or "create_proposal" in file.stem.lower():
+                    produced_by = "Government Cloud Proposal Synthesis Fleet"
+                elif "rfp" in file.stem.lower() or "proposal" in file.stem.lower() or "moe" in file.stem.lower():
+                    produced_by = "DevOps & Cloud Infrastructure Fleet"
+                else:
+                    produced_by = "Autonomous Fleet Specialist"
+
+                provenance_text = f"{produced_by} produced it for {case_title}"
+
+                clean_name = file.name.replace(".", "_")
+                outputs.append({
+                    "id": f"art_{clean_name}",
+                    "output_id": f"art_{clean_name}",
+                    "name": name_title,
+                    "kind": "markdown" if file.suffix.lower() == ".md" else "document" if file.suffix.lower() in (".html", ".docx") else "structured",
+                    "classification": "confidential",
+                    "produced_by": produced_by,
+                    "case": case_code,
+                    "case_name": case_title,
+                    "size": stat.st_size,
+                    "size_bytes": stat.st_size,
+                    "at": stat.st_mtime,
+                    "created_at": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime(stat.st_mtime)),
+                    "text": content,
+                    "snippet": content[:300] + ("..." if len(content) > 300 else ""),
+                    "source": {"kind": "agent", "filename": file.name, "path": str(file)},
+                    "provenance": provenance_text,
+                })
+            except Exception as err:
+                logger.warning("Failed to read artifact %s: %s", file, err)
     except Exception as exc:
         logger.warning("Error scanning artifacts: %s", exc)
 
@@ -734,9 +965,7 @@ async def list_fleet_outputs(kind: Optional[str] = None, case: Optional[str] = N
                 text_match = q in o.get("name", "").lower() or q in (o.get("case") or "").lower() or q in (o.get("produced_by") or "").lower() or q in (o.get("snippet") or "").lower()
                 if not text_match:
                     continue
-            summary = dict(o)
-            summary.pop("text", None)
-            filtered.append(summary)
+            filtered.append(dict(o))
         return filtered
     except Exception as err:
         logger.exception("list_fleet_outputs error: %s", err)

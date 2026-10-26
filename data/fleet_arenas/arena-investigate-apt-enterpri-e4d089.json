@@ -1,0 +1,193 @@
+{
+  "arena_id": "arena-investigate-apt-enterpri-e4d089",
+  "arena_name": "Case 6: dns tunneling SOC Investigation",
+  "arena_slug": "investigate-apt-enterpri",
+  "mission_prompt": "Investigate the APT enterprise intrusion in D:\\Security-logs-test\\attack-cases-benchmark\\case-5-dns-tunneling-data-exfiltration\\raw-logs. Reconstruct the full attack kill chain across authentication logs, process executions, and network flows. Extract all C2 indicators of compromise (IOCs), map MITRE ATT&CK techniques, and generate automated containment policies.\n",
+  "strategy_profile": "STANDARD",
+  "units": [
+    {
+      "profile_name": "fleet-investigate-apt--discover-log-directo",
+      "unit_codename": "RECON_INGESTION",
+      "task_id": "t--directo",
+      "task_name": "Discover Log Directory Structure",
+      "operational_stage": "RECON_INGESTION",
+      "scoped_tools": [
+        "list_directory"
+      ],
+      "required_skills": [
+        "file_tree"
+      ],
+      "description": "List all files and subdirectories under the specified raw\u2011logs path to identify authentication, process, and network log files.",
+      "input_contract": "",
+      "output_contract": "",
+      "profile_exists": true,
+      "attached_files": []
+    },
+    {
+      "profile_name": "fleet-investigate-apt--read-and-parse-log-f",
+      "unit_codename": "RECON_INGESTION",
+      "task_id": "t-se-log-f",
+      "task_name": "Read and Parse Log Files",
+      "operational_stage": "RECON_INGESTION",
+      "scoped_tools": [
+        "execute_python",
+        "gather_log_evidence",
+        "read_file"
+      ],
+      "required_skills": [
+        "file_reading",
+        "data_analysis"
+      ],
+      "description": "Using the file list from t1, read each log file (e.g., auth.log, proc.log, netflow.log). Extract structured events: timestamps, user accounts, process IDs, command lines, source/destination IPs, DNS queries, and payload sizes.",
+      "input_contract": "",
+      "output_contract": "",
+      "profile_exists": true,
+      "attached_files": []
+    },
+    {
+      "profile_name": "fleet-investigate-apt--extract-c2-indicator",
+      "unit_codename": "RECON_INGESTION",
+      "task_id": "t-ndicator",
+      "task_name": "Extract C2 Indicators and Map MITRE ATT&CK Techniques",
+      "operational_stage": "RECON_INGESTION",
+      "scoped_tools": [
+        "abuseipdb_check_ip",
+        "execute_python",
+        "lookup_threat_indicators",
+        "virustotal_lookup_hash",
+        "virustotal_lookup_ip"
+      ],
+      "required_skills": [
+        "data_analysis",
+        "threat_intel"
+      ],
+      "description": "Analyze the parsed datasets to identify suspicious patterns: repeated DNS queries to uncommon domains, anomalous process chains, lateral movement indicators. Extract IOCs (domains, IPs, file hashes, registry keys) and map each to relevant ATT&CK techniques using threat_intel and data_analysis.",
+      "input_contract": "",
+      "output_contract": "",
+      "profile_exists": true,
+      "attached_files": []
+    },
+    {
+      "profile_name": "fleet-investigate-apt--generate-automated-c",
+      "unit_codename": "DELIVERABLE_SYNTHESIS",
+      "task_id": "t-omated-c",
+      "task_name": "Generate Automated Containment Policies",
+      "operational_stage": "DELIVERABLE_SYNTHESIS",
+      "scoped_tools": [
+        "execute_python",
+        "triage_security_alert"
+      ],
+      "required_skills": [
+        "data_analysis",
+        "general_reasoning"
+      ],
+      "description": "Based on the IOC table from t3, produce containment rules for firewall/IDS and endpoint protection: block malicious domains/IPs, quarantine suspicious processes, and alert on future DNS tunneling patterns. Format policies in a machine\u2011readable format (e.g., JSON or YAML) suitable for deployment.",
+      "input_contract": "",
+      "output_contract": "",
+      "profile_exists": true,
+      "attached_files": []
+    }
+  ],
+  "dag": {
+    "goal": "Investigate the APT enterprise intrusion located in D:\\Security-logs-test\\attack-cases-benchmark\\case-5-dns-tunneling-data-exfiltration\\raw-logs, reconstruct the full kill chain across authentication logs, process executions, and network flows, extract all C2 indicators of compromise (IOCs), map them to MITRE ATT&CK techniques, and generate automated containment policies.",
+    "reasoning": "The request requires a multi\u2011step forensic analysis of local log files. We must first discover the file structure, read relevant logs, parse authentication, process, and network events, then extract IOCs, map them to ATT&CK, and finally produce containment rules. This aligns with the enterprise audit pattern: ingest data, analyze for threats, quantify impact, and deliver mitigation.",
+    "tasks": [
+      {
+        "id": "t1",
+        "name": "Discover Log Directory Structure",
+        "description": "List all files and subdirectories under the specified raw\u2011logs path to identify authentication, process, and network log files.",
+        "required_skills": [
+          "file_tree"
+        ],
+        "expected_output": "A structured list of file paths for subsequent reading.",
+        "dependencies": [],
+        "risk_level": "low",
+        "max_retries": 2,
+        "timeout_seconds": 120,
+        "parameters": {},
+        "agent_id": null,
+        "hermes_profile": "fleet-investigate-apt--discover-log-directo",
+        "specialist_spec": null,
+        "_hermes_profile": "fleet-investigate-apt--discover-log-directo"
+      },
+      {
+        "id": "t2",
+        "name": "Read and Parse Log Files",
+        "description": "Using the file list from t1, read each log file (e.g., auth.log, proc.log, netflow.log). Extract structured events: timestamps, user accounts, process IDs, command lines, source/destination IPs, DNS queries, and payload sizes.",
+        "required_skills": [
+          "file_reading",
+          "data_analysis"
+        ],
+        "expected_output": "Three tabular datasets (authentication, processes, network) ready for analysis.",
+        "dependencies": [
+          "t1"
+        ],
+        "risk_level": "low",
+        "max_retries": 2,
+        "timeout_seconds": 300,
+        "parameters": {},
+        "agent_id": null,
+        "hermes_profile": "fleet-investigate-apt--read-and-parse-log-f",
+        "specialist_spec": null,
+        "_hermes_profile": "fleet-investigate-apt--read-and-parse-log-f"
+      },
+      {
+        "id": "t3",
+        "name": "Extract C2 Indicators and Map MITRE ATT&CK Techniques",
+        "description": "Analyze the parsed datasets to identify suspicious patterns: repeated DNS queries to uncommon domains, anomalous process chains, lateral movement indicators. Extract IOCs (domains, IPs, file hashes, registry keys) and map each to relevant ATT&CK techniques using threat_intel and data_analysis.",
+        "required_skills": [
+          "data_analysis",
+          "threat_intel"
+        ],
+        "expected_output": "A table of extracted IOCs with associated MITRE technique IDs and brief descriptions.",
+        "dependencies": [
+          "t2"
+        ],
+        "risk_level": "low",
+        "max_retries": 2,
+        "timeout_seconds": 300,
+        "parameters": {},
+        "agent_id": null,
+        "hermes_profile": "fleet-investigate-apt--extract-c2-indicator",
+        "specialist_spec": null,
+        "_hermes_profile": "fleet-investigate-apt--extract-c2-indicator"
+      },
+      {
+        "id": "t4",
+        "name": "Generate Automated Containment Policies",
+        "description": "Based on the IOC table from t3, produce containment rules for firewall/IDS and endpoint protection: block malicious domains/IPs, quarantine suspicious processes, and alert on future DNS tunneling patterns. Format policies in a machine\u2011readable format (e.g., JSON or YAML) suitable for deployment.",
+        "required_skills": [
+          "data_analysis",
+          "general_reasoning"
+        ],
+        "expected_output": "A set of containment policy files ready to be applied by security tooling.",
+        "dependencies": [
+          "t3"
+        ],
+        "risk_level": "low",
+        "max_retries": 2,
+        "timeout_seconds": 120,
+        "parameters": {},
+        "agent_id": null,
+        "hermes_profile": "fleet-investigate-apt--generate-automated-c",
+        "specialist_spec": null,
+        "_hermes_profile": "fleet-investigate-apt--generate-automated-c"
+      }
+    ],
+    "estimated_completion_seconds": 60
+  },
+  "status": "completed",
+  "created_at": 1793023557.2291126,
+  "updated_at": 1793025244.526374,
+  "profiles_to_create": [
+    "fleet-investigate-apt--discover-log-directo",
+    "fleet-investigate-apt--read-and-parse-log-f"
+  ],
+  "profiles_existing": [
+    "fleet-investigate-apt--extract-c2-indicator",
+    "fleet-investigate-apt--generate-automated-c"
+  ],
+  "workflow_id": "fleet-arena-investigate-apt-enterpri-e4d089-9b9868",
+  "agent_id": null,
+  "resilience": "standard"
+}

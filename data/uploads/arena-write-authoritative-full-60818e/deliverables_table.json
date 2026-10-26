@@ -1,0 +1,170 @@
+[
+  {
+    "deliverable": "Project Charter",
+    "owner": "Product Owner",
+    "due_date": "2024-11-15",
+    "acceptance_criteria": "Deliverable Project charter meets defined requirements and is approved by stakeholders",
+    "status": "Completed"
+  },
+  {
+    "deliverable": "Stakeholder Register",
+    "owner": "Engineering Lead",
+    "due_date": "2024-11-15",
+    "acceptance_criteria": "Deliverable stakeholder register meets defined requirements and is approved by stakeholders",
+    "status": "Completed"
+  },
+  {
+    "deliverable": "Requirements Spec",
+    "owner": "Product Owner",
+    "due_date": "2025-01-31",
+    "acceptance_criteria": "Deliverable Requirements spec meets defined requirements and is approved by stakeholders",
+    "status": "Completed"
+  },
+  {
+    "deliverable": "Architecture Diagram",
+    "owner": "Engineering Lead",
+    "due_date": "2025-01-31",
+    "acceptance_criteria": "Deliverable architecture diagram meets defined requirements and is approved by stakeholders",
+    "status": "Completed"
+  },
+  {
+    "deliverable": "Risk Register",
+    "owner": "Engineering Lead",
+    "due_date": "2025-01-31",
+    "acceptance_criteria": "Deliverable risk register meets defined requirements and is approved by stakeholders",
+    "status": "Completed"
+  },
+  {
+    "deliverable": "Microservices",
+    "owner": "Engineering Lead",
+    "due_date": "2025-08-31",
+    "acceptance_criteria": "Deliverable Microservices meets defined requirements and is approved by stakeholders",
+    "status": "Completed"
+  },
+  {
+    "deliverable": "Ci/Cd Pipeline",
+    "owner": "Operations Manager",
+    "due_date": "2025-08-31",
+    "acceptance_criteria": "Deliverable CI/CD pipeline meets defined requirements and is approved by stakeholders",
+    "status": "Completed"
+  },
+  {
+    "deliverable": "Security Baseline",
+    "owner": "Engineering Lead",
+    "due_date": "2025-08-31",
+    "acceptance_criteria": "Deliverable security baseline meets defined requirements and is approved by stakeholders",
+    "status": "Completed"
+  },
+  {
+    "deliverable": "Compliance Engine",
+    "owner": "Compliance Manager",
+    "due_date": "2025-12-15",
+    "acceptance_criteria": "Deliverable Compliance engine meets defined requirements and is approved by stakeholders",
+    "status": "Completed"
+  },
+  {
+    "deliverable": "Audit Logs",
+    "owner": "Engineering Lead",
+    "due_date": "2025-12-15",
+    "acceptance_criteria": "Deliverable audit logs meets defined requirements and is approved by stakeholders",
+    "status": "Completed"
+  },
+  {
+    "deliverable": "Dlp Integration",
+    "owner": "Security Officer",
+    "due_date": "2025-12-15",
+    "acceptance_criteria": "Deliverable DLP integration meets defined requirements and is approved by stakeholders",
+    "status": "Completed"
+  },
+  {
+    "deliverable": "Unit/Integration Tests",
+    "owner": "Engineering Lead",
+    "due_date": "2026-03-31",
+    "acceptance_criteria": "Deliverable Unit/integration tests meets defined requirements and is approved by stakeholders",
+    "status": "Completed"
+  },
+  {
+    "deliverable": "Penetration Test Report",
+    "owner": "Engineering Lead",
+    "due_date": "2026-03-31",
+    "acceptance_criteria": "Deliverable penetration test report meets defined requirements and is approved by stakeholders",
+    "status": "Completed"
+  },
+  {
+    "deliverable": "User Acceptance Testing",
+    "owner": "Engineering Lead",
+    "due_date": "2026-03-31",
+    "acceptance_criteria": "Deliverable user acceptance testing meets defined requirements and is approved by stakeholders",
+    "status": "Completed"
+  },
+  {
+    "deliverable": "Production Rollout",
+    "owner": "Operations Manager",
+    "due_date": "2026-04-30",
+    "acceptance_criteria": "Deliverable Production rollout meets defined requirements and is approved by stakeholders",
+    "status": "Completed"
+  },
+  {
+    "deliverable": "Monitoring Dashboards",
+    "owner": "Engineering Lead",
+    "due_date": "2026-04-30",
+    "acceptance_criteria": "Deliverable monitoring dashboards meets defined requirements and is approved by stakeholders",
+    "status": "Completed"
+  },
+  {
+    "deliverable": "Training Materials",
+    "owner": "Engineering Lead",
+    "due_date": "2026-04-30",
+    "acceptance_criteria": "Deliverable training materials meets defined requirements and is approved by stakeholders",
+    "status": "Completed"
+  },
+  {
+    "deliverable": "Core Platform Source Code",
+    "owner": "Engineering Lead",
+    "due_date": "2025-08-31",
+    "acceptance_criteria": "Source code repository meets coding standards and is approved by Engineering Lead.",
+    "status": "Completed"
+  },
+  {
+    "deliverable": "Enterprise Add-on Licensing Agreement",
+    "owner": "Legal Counsel",
+    "due_date": "2025-12-15",
+    "acceptance_criteria": "Licensing agreement signed and archived.",
+    "status": "Completed"
+  },
+  {
+    "deliverable": "Kubernetes Deployment",
+    "owner": "Engineering Lead",
+    "due_date": "2025-08-31",
+    "acceptance_criteria": "Deployment manifests validated and deployed to test cluster.",
+    "status": "Completed"
+  },
+  {
+    "deliverable": "PostgreSQL Database Schema",
+    "owner": "Engineering Lead",
+    "due_date": "2025-08-31",
+    "acceptance_criteria": "Schema versioned and migration scripts approved.",
+    "status": "Completed"
+  },
+  {
+    "deliverable": "Container Image Signing Pipeline",
+    "owner": "Operations Manager",
+    "due_date": "2025-08-31",
+    "acceptance_criteria": "Signing pipeline integrated and verified.",
+    "status": "Completed"
+  },
+  {
+    "deliverable": "Observability Setup",
+    "owner": "Engineering Lead",
+    "due_date": "2025-08-31",
+    "acceptance_criteria": "OpenTelemetry instrumentation deployed.",
+    "status": "Completed"
+  },
+  {
+    "deliverable": "Network Segmentation Plan",
+    "owner": "Security Officer",
+    "due_date": "2025-08-31",
+    "acceptance_criteria": "Zero-trust network design approved.",
+    "status": "Completed"
+  }
+]

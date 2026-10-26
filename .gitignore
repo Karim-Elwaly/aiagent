@@ -70,3 +70,4 @@ data/checkpoints/
 data/decision_capture/
 # Hermes Agent integration state (profile token hashes, active runs)
 data/hermes/
+data/*.log

@@ -1,0 +1,83 @@
+{
+  "incident_id": "CASE-3-IDENTITY-TAKEOVER-IMPOSSIBLE-TRAVEL",
+  "generated_at": "2026-10-26T15:58:50Z",
+  "threat_level": "CRITICAL_SEV_1",
+  "affected_tenant": {
+    "tenant_name": "Contoso Global Enterprise",
+    "tenant_id": "0f81d942-8821-4f1a-b62e-9d2a4e819b11"
+  },
+  "compromised_identity": {
+    "user_principal_name": "alex.vance@contoso-global.com",
+    "display_name": "Alex Vance",
+    "job_title": "Director of Strategic Finance",
+    "risk_state": "confirmedCompromised",
+    "risk_level": "high"
+  },
+  "autonomous_containment_actions": [
+    {
+      "sequence": 1,
+      "action_type": "REVOKE_SIGNIN_SESSIONS",
+      "target": "alex.vance@contoso-global.com",
+      "powershell_command": "Revoke-MgUserSignInSession -UserId 'alex.vance@contoso-global.com'",
+      "status": "EXECUTED",
+      "verified": true
+    },
+    {
+      "sequence": 2,
+      "action_type": "DISABLE_USER_ACCOUNT",
+      "target": "alex.vance@contoso-global.com",
+      "powershell_command": "Update-MgUser -UserId 'alex.vance@contoso-global.com' -AccountEnabled:$false",
+      "status": "EXECUTED",
+      "verified": true
+    },
+    {
+      "sequence": 3,
+      "action_type": "PURGE_ROGUE_APP_SECRET",
+      "target": "Financial-Reporting-Sync-App",
+      "app_id": "7a14e912-88f1-4b19-9133-e9821a4f01bc",
+      "key_name": "DiagnosticSyncKey-2026",
+      "powershell_command": "Remove-MgApplicationPassword -ApplicationId '7a14e912-88f1-4b19-9133-e9821a4f01bc' -KeyId '0x9a8f21bc'",
+      "status": "EXECUTED",
+      "verified": true
+    },
+    {
+      "sequence": 4,
+      "action_type": "CONDITIONAL_ACCESS_BLOCK",
+      "policy_name": "Block-Anonymizers-And-Impossible-Travel",
+      "scope": {
+        "users": "All",
+        "conditions": {
+          "clientAppTypes": ["all"],
+          "locations": ["AllTrustedLocationsExceptTor", "AnonymizersNetworkList"],
+          "riskLevels": ["high"]
+        },
+        "grantControls": {
+          "builtInControls": ["block"]
+        }
+      },
+      "status": "APPLIED",
+      "verified": true
+    },
+    {
+      "sequence": 5,
+      "action_type": "NETWORK_EGRESS_FIREWALL_BLOCK",
+      "blocked_ips": [
+        "185.220.101.45",
+        "194.135.31.88"
+      ],
+      "blocked_domains": [
+        "sync-telemetry-cache.net"
+      ],
+      "firewall_profile": "Enterprise Core Edge Gateway #01",
+      "status": "ACTIVE",
+      "verified": true
+    }
+  ],
+  "governance_approval": {
+    "assurance_verdict": "EVIDENCE_FOUND",
+    "decision_rooms_signed": 4,
+    "disposition": "APPROVED",
+    "disposition_signed_by": "Human Approver & SOC Lead Analyst",
+    "audit_ledger_checksum": "sha256:d4e5f6a1b2c39874561230abcdef0123456789abcdef0123456789abcdef0123"
+  }
+}

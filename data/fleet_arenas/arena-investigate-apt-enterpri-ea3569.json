@@ -1,0 +1,237 @@
+{
+  "arena_id": "arena-investigate-apt-enterpri-ea3569",
+  "arena_name": "Case 6: ddos recon firewall evasion SOC Investigation",
+  "arena_slug": "investigate-apt-enterpri",
+  "mission_prompt": "Investigate the APT enterprise intrusion in D:\\Security-logs-test\\attack-cases-benchmark\\case-6-ddos-recon-firewall-evasion\\raw-logs. Reconstruct the full attack kill chain across authentication logs, process executions, and network flows. Extract all C2 indicators of compromise (IOCs), map MITRE ATT&CK techniques, and generate automated containment policies.\n",
+  "strategy_profile": "STANDARD",
+  "units": [
+    {
+      "profile_name": "fleet-investigate-apt--ingest-and-parse-raw",
+      "unit_codename": "RECON_INGESTION",
+      "task_id": "t-arse-raw",
+      "task_name": "Ingest and Parse Raw Logs",
+      "operational_stage": "RECON_INGESTION",
+      "scoped_tools": [
+        "gather_log_evidence",
+        "read_file"
+      ],
+      "required_skills": [
+        "file_reading",
+        "log_forensics"
+      ],
+      "description": "Read all files under the specified raw\u2011logs directory, parse authentication events, process execution records, and network flow entries into structured tables (CSV or JSON). Handle common log formats such as Windows Event Log XML, Sysmon CSV, and NetFlow logs.",
+      "input_contract": "",
+      "output_contract": "",
+      "profile_exists": true,
+      "attached_files": []
+    },
+    {
+      "profile_name": "fleet-investigate-apt--reconstruct-attack-k",
+      "unit_codename": "RECON_INGESTION",
+      "task_id": "t-attack-k",
+      "task_name": "Reconstruct Attack Kill Chain",
+      "operational_stage": "RECON_INGESTION",
+      "scoped_tools": [
+        "execute_python",
+        "triage_security_alert"
+      ],
+      "required_skills": [
+        "data_analysis",
+        "general_reasoning"
+      ],
+      "description": "Using the parsed datasets, identify sequential stages of the intrusion (Reconnaissance, Initial Access, Execution, Persistence, Command & Control, Impact). Correlate timestamps across logs to build a timeline and highlight key events such as credential dumping, lateral movement, or DDoS initiation.",
+      "input_contract": "",
+      "output_contract": "",
+      "profile_exists": true,
+      "attached_files": []
+    },
+    {
+      "profile_name": "fleet-investigate-apt--extract-c2-indicator",
+      "unit_codename": "RECON_INGESTION",
+      "task_id": "t-ndicator",
+      "task_name": "Extract C2 Indicators of Compromise (IOCs)",
+      "operational_stage": "RECON_INGESTION",
+      "scoped_tools": [
+        "abuseipdb_check_ip",
+        "execute_python",
+        "lookup_threat_indicators",
+        "virustotal_lookup_hash",
+        "virustotal_lookup_ip"
+      ],
+      "required_skills": [
+        "data_analysis",
+        "threat_intel"
+      ],
+      "description": "From the kill\u2011chain data, pull out all unique IP addresses, domain names, URLs, file hashes, and registry keys that appear to be used for command & control or lateral movement. Deduplicate and annotate each IOC with its source log type.",
+      "input_contract": "",
+      "output_contract": "",
+      "profile_exists": true,
+      "attached_files": []
+    },
+    {
+      "profile_name": "fleet-investigate-apt--map-iocs-to-mitre-at",
+      "unit_codename": "DEEP_ANALYSIS",
+      "task_id": "t-mitre-at",
+      "task_name": "Map IOCs to MITRE ATT&CK Techniques",
+      "operational_stage": "DEEP_ANALYSIS",
+      "scoped_tools": [
+        "compress_security_timeline",
+        "triage_security_alert"
+      ],
+      "required_skills": [
+        "mitre_mapping",
+        "general_reasoning"
+      ],
+      "description": "For each IOC and kill\u2011chain event, map the activity to the most appropriate MITRE ATT&CK technique(s) (e.g., T1078 for Valid Accounts, T1040 for Network Sniffing). Generate a mapping table that includes technique ID, name, description, and evidence reference.",
+      "input_contract": "",
+      "output_contract": "",
+      "profile_exists": true,
+      "attached_files": []
+    },
+    {
+      "profile_name": "fleet-investigate-apt--generate-automated-c",
+      "unit_codename": "DELIVERABLE_SYNTHESIS",
+      "task_id": "t-omated-c",
+      "task_name": "Generate Automated Containment Policies",
+      "operational_stage": "DELIVERABLE_SYNTHESIS",
+      "scoped_tools": [
+        "compress_security_timeline",
+        "propose_containment_response",
+        "summarize_to_presentation"
+      ],
+      "required_skills": [
+        "containment_playbook",
+        "summarization"
+      ],
+      "description": "Using the IOC list and MITRE mapping, produce a set of containment rules suitable for common security tools (e.g., firewall ACLs, endpoint EDR policies, SIEM alerting). Include rule syntax examples for iptables/Windows Firewall, Suricata signatures, and Splunk queries.",
+      "input_contract": "",
+      "output_contract": "",
+      "profile_exists": true,
+      "attached_files": []
+    }
+  ],
+  "dag": {
+    "goal": "Investigate the APT enterprise intrusion in D:\\Security-logs-test\\attack-cases-benchmark\\case-6-ddos-recon-firewall-evasion\\raw-logs and reconstruct the full attack kill chain across authentication logs, process executions, and network flows. Extract all C2 indicators of compromise (IOCs), map MITRE ATT&CK techniques, and generate automated containment policies.",
+    "reasoning": "The request requires a multi\u2011step forensic analysis of local log files, mapping to ATT&CK, and policy generation. We break the work into distinct phases: ingest & parse logs, identify kill\u2011chain events, extract IOCs, map MITRE techniques, and produce containment rules. Each phase depends on the previous one for accurate data flow.",
+    "tasks": [
+      {
+        "id": "t1",
+        "name": "Ingest and Parse Raw Logs",
+        "description": "Read all files under the specified raw\u2011logs directory, parse authentication events, process execution records, and network flow entries into structured tables (CSV or JSON). Handle common log formats such as Windows Event Log XML, Sysmon CSV, and NetFlow logs.",
+        "required_skills": [
+          "file_reading",
+          "log_forensics"
+        ],
+        "expected_output": "Three structured datasets: auth_events.json, process_execs.json, network_flows.json",
+        "dependencies": [],
+        "risk_level": "low",
+        "max_retries": 2,
+        "timeout_seconds": 600,
+        "parameters": {},
+        "agent_id": null,
+        "hermes_profile": "fleet-investigate-apt--ingest-and-parse-raw",
+        "specialist_spec": null,
+        "_hermes_profile": "fleet-investigate-apt--ingest-and-parse-raw"
+      },
+      {
+        "id": "t2",
+        "name": "Reconstruct Attack Kill Chain",
+        "description": "Using the parsed datasets, identify sequential stages of the intrusion (Reconnaissance, Initial Access, Execution, Persistence, Command & Control, Impact). Correlate timestamps across logs to build a timeline and highlight key events such as credential dumping, lateral movement, or DDoS initiation.",
+        "required_skills": [
+          "data_analysis",
+          "general_reasoning"
+        ],
+        "expected_output": "A chronological kill\u2011chain report (JSON) with event IDs, timestamps, and stage labels",
+        "dependencies": [
+          "t1"
+        ],
+        "risk_level": "low",
+        "max_retries": 2,
+        "timeout_seconds": 600,
+        "parameters": {},
+        "agent_id": null,
+        "hermes_profile": "fleet-investigate-apt--reconstruct-attack-k",
+        "specialist_spec": null,
+        "_hermes_profile": "fleet-investigate-apt--reconstruct-attack-k"
+      },
+      {
+        "id": "t3",
+        "name": "Extract C2 Indicators of Compromise (IOCs)",
+        "description": "From the kill\u2011chain data, pull out all unique IP addresses, domain names, URLs, file hashes, and registry keys that appear to be used for command & control or lateral movement. Deduplicate and annotate each IOC with its source log type.",
+        "required_skills": [
+          "data_analysis",
+          "threat_intel"
+        ],
+        "expected_output": "IOC list in CSV format (type, value, source_log, first_seen)",
+        "dependencies": [
+          "t2"
+        ],
+        "risk_level": "low",
+        "max_retries": 2,
+        "timeout_seconds": 300,
+        "parameters": {},
+        "agent_id": null,
+        "hermes_profile": "fleet-investigate-apt--extract-c2-indicator",
+        "specialist_spec": null,
+        "_hermes_profile": "fleet-investigate-apt--extract-c2-indicator"
+      },
+      {
+        "id": "t4",
+        "name": "Map IOCs to MITRE ATT&CK Techniques",
+        "description": "For each IOC and kill\u2011chain event, map the activity to the most appropriate MITRE ATT&CK technique(s) (e.g., T1078 for Valid Accounts, T1040 for Network Sniffing). Generate a mapping table that includes technique ID, name, description, and evidence reference.",
+        "required_skills": [
+          "mitre_mapping",
+          "general_reasoning"
+        ],
+        "expected_output": "MITRE mapping CSV (ioc_value, technique_id, technique_name, evidence_event_ids)",
+        "dependencies": [
+          "t3"
+        ],
+        "risk_level": "low",
+        "max_retries": 2,
+        "timeout_seconds": 300,
+        "parameters": {},
+        "agent_id": null,
+        "hermes_profile": "fleet-investigate-apt--map-iocs-to-mitre-at",
+        "specialist_spec": null,
+        "_hermes_profile": "fleet-investigate-apt--map-iocs-to-mitre-at"
+      },
+      {
+        "id": "t5",
+        "name": "Generate Automated Containment Policies",
+        "description": "Using the IOC list and MITRE mapping, produce a set of containment rules suitable for common security tools (e.g., firewall ACLs, endpoint EDR policies, SIEM alerting). Include rule syntax examples for iptables/Windows Firewall, Suricata signatures, and Splunk queries.",
+        "required_skills": [
+          "containment_playbook",
+          "summarization"
+        ],
+        "expected_output": "Containment policy document (Markdown) with sections: Network Rules, Endpoint Rules, SIEM Alerts",
+        "dependencies": [
+          "t4"
+        ],
+        "risk_level": "medium",
+        "max_retries": 2,
+        "timeout_seconds": 300,
+        "parameters": {},
+        "agent_id": null,
+        "hermes_profile": "fleet-investigate-apt--generate-automated-c",
+        "specialist_spec": null,
+        "_hermes_profile": "fleet-investigate-apt--generate-automated-c"
+      }
+    ],
+    "estimated_completion_seconds": 60
+  },
+  "status": "completed",
+  "created_at": 1793021503.2725244,
+  "updated_at": 1793022331.1772695,
+  "profiles_to_create": [
+    "fleet-investigate-apt--extract-c2-indicator",
+    "fleet-investigate-apt--generate-automated-c",
+    "fleet-investigate-apt--ingest-and-parse-raw",
+    "fleet-investigate-apt--map-iocs-to-mitre-at",
+    "fleet-investigate-apt--reconstruct-attack-k"
+  ],
+  "profiles_existing": [],
+  "workflow_id": "fleet-arena-investigate-apt-enterpri-ea3569-cce430",
+  "agent_id": null,
+  "resilience": "standard"
+}
