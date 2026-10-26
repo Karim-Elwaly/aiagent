@@ -1,0 +1,107 @@
+{
+  "arena_id": "arena-investigate-critical-sec-dbd8e8",
+  "arena_name": "Investigate critical security logs in D:\\Security-logs-te... Arena",
+  "arena_slug": "investigate-critical-sec",
+  "mission_prompt": "Investigate critical security logs in D:\\Security-logs-test\\attack-cases-benchmark\\case-4-k8s-linux-container-breakout\\raw-logs.",
+  "strategy_profile": "STANDARD",
+  "units": [
+    {
+      "profile_name": "fleet-investigate-crit-enumerate-log-direct",
+      "unit_codename": "ENUMERATE-LOG-DIRECTORY-",
+      "task_id": "t1",
+      "task_name": "Enumerate Log Directory Structure",
+      "operational_stage": "RECON_INGESTION",
+      "scoped_tools": [
+        "list_directory"
+      ],
+      "required_skills": [
+        "file_tree"
+      ],
+      "description": "List all files and subdirectories under D:\\Security-logs-test\\attack-cases-benchmark\\case-4-k8s-linux-container-breakout\\raw-logs to confirm the presence of log files.",
+      "input_contract": "Requires verified outputs from upstream dependency nodes: [None - Initial Branch Node]",
+      "output_contract": "A structured representation (e.g., JSON) of all files and directories found in the target path.",
+      "profile_exists": false,
+      "attached_files": []
+    },
+    {
+      "profile_name": "fleet-investigate-crit-parse-logs-flag-crit",
+      "unit_codename": "PARSE-LOGS-FLAG-CRITICAL",
+      "task_id": "t2",
+      "task_name": "Parse Logs & Flag Critical Security Events",
+      "operational_stage": "RECON_INGESTION",
+      "scoped_tools": [
+        "execute_python",
+        "gather_log_evidence",
+        "read_file"
+      ],
+      "required_skills": [
+        "file_reading",
+        "data_analysis",
+        "code_execution"
+      ],
+      "description": "Read each log file identified in t1, parse its contents using Python, and flag lines that match patterns indicative of security incidents (e.g., \"failed login\", \"privilege escalation\", \"container breakout\", \"k8s pod\" anomalies). Produce a summary report listing the file name, timestamp, event type, and raw log line for each critical event.",
+      "input_contract": "Requires verified outputs from upstream dependency nodes: [t1]",
+      "output_contract": "A consolidated CSV/JSON report of all flagged critical security events with contextual information.",
+      "profile_exists": false,
+      "attached_files": []
+    }
+  ],
+  "dag": {
+    "goal": "Investigate critical security logs located in D:\\Security-logs-test\\attack-cases-benchmark\\case-4-k8s-linux-container-breakout\\raw-logs",
+    "reasoning": "The user requests a detailed investigation of local log files. According to the policy, any query that involves inspecting the host filesystem must use system tools and avoid reading arbitrary current working directory contents. We therefore split the task into two phases: first enumerate the file structure in the specified path, then read each log file and identify entries that indicate potential security incidents (e.g., failed authentications, privilege escalations, container breakout attempts). The analysis will be performed using Python code to parse the logs and flag critical events.",
+    "tasks": [
+      {
+        "id": "t1",
+        "name": "Enumerate Log Directory Structure",
+        "description": "List all files and subdirectories under D:\\Security-logs-test\\attack-cases-benchmark\\case-4-k8s-linux-container-breakout\\raw-logs to confirm the presence of log files.",
+        "required_skills": [
+          "file_tree"
+        ],
+        "expected_output": "A structured representation (e.g., JSON) of all files and directories found in the target path.",
+        "dependencies": [],
+        "risk_level": "low",
+        "max_retries": 2,
+        "timeout_seconds": 120,
+        "parameters": {},
+        "agent_id": null,
+        "hermes_profile": "fleet-investigate-crit-enumerate-log-direct",
+        "specialist_spec": null,
+        "_hermes_profile": "fleet-investigate-crit-enumerate-log-direct"
+      },
+      {
+        "id": "t2",
+        "name": "Parse Logs & Flag Critical Security Events",
+        "description": "Read each log file identified in t1, parse its contents using Python, and flag lines that match patterns indicative of security incidents (e.g., \"failed login\", \"privilege escalation\", \"container breakout\", \"k8s pod\" anomalies). Produce a summary report listing the file name, timestamp, event type, and raw log line for each critical event.",
+        "required_skills": [
+          "file_reading",
+          "data_analysis",
+          "code_execution"
+        ],
+        "expected_output": "A consolidated CSV/JSON report of all flagged critical security events with contextual information.",
+        "dependencies": [
+          "t1"
+        ],
+        "risk_level": "low",
+        "max_retries": 2,
+        "timeout_seconds": 300,
+        "parameters": {},
+        "agent_id": null,
+        "hermes_profile": "fleet-investigate-crit-parse-logs-flag-crit",
+        "specialist_spec": null,
+        "_hermes_profile": "fleet-investigate-crit-parse-logs-flag-crit"
+      }
+    ],
+    "estimated_completion_seconds": 60
+  },
+  "status": "provisioned",
+  "created_at": 1793005118.5067396,
+  "updated_at": 1793009376.251407,
+  "profiles_to_create": [
+    "fleet-investigate-crit-enumerate-log-direct",
+    "fleet-investigate-crit-parse-logs-flag-crit"
+  ],
+  "profiles_existing": [],
+  "workflow_id": null,
+  "agent_id": null,
+  "resilience": "standard"
+}

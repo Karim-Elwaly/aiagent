@@ -367,6 +367,7 @@ async def lifespan(app: FastAPI):
             return w_id
 
     app.state.dispatch_workflow = dispatch_workflow_helper
+    app.state.run_direct_workflow = run_direct_workflow
 
     # Start CronScheduler
     from src.orchestrator.cron_scheduler import CronScheduler
@@ -3200,11 +3201,13 @@ async def delete_fleet_arena_endpoint(arena_id: str):
     return {"deleted": True, "arena_id": arena_id}
 
 
-# ── Mount Messaging Gateways ─────────────────────────────────────
+# ── Mount Messaging Gateways & Fleet Studio Bridge ───────────────
 
 from src.api.gateways import router as gateways_router
+from src.api.fleet_studio_router import router as fleet_studio_router
 
 app.include_router(gateways_router)
+app.include_router(fleet_studio_router)
 
 
 # ── Entry Point ──────────────────────────────────────────────────

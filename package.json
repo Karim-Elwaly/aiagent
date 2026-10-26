@@ -1,0 +1,11 @@
+{
+  "name": "aiagent-workspace",
+  "version": "1.0.0",
+  "description": "AgentHub & Fleet Studio Workspace",
+  "scripts": {
+    "dev": "npm --prefix frontend/frontend run dev",
+    "build": "npm --prefix frontend/frontend run build",
+    "start": "npm --prefix frontend/frontend run start",
+    "backend": "powershell -ExecutionPolicy Bypass -File .\\start.ps1"
+  }
+}

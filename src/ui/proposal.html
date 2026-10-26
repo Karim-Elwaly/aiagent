@@ -1,0 +1,456 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>AgentHub — RFP Proposal Deliverable Studio</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600;700&family=Outfit:wght@300;400;500;600;700;800&family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="./css/style.css?v=2.7.1">
+  <style>
+    .proposal-hero {
+      background: linear-gradient(135deg, rgba(30, 41, 59, 0.95), rgba(15, 23, 42, 0.95));
+      border: 1px solid var(--border-subtle);
+      border-radius: 12px;
+      padding: 24px 28px;
+      margin-bottom: 24px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      flex-wrap: wrap;
+      gap: 16px;
+    }
+    .proposal-title {
+      font-size: 22px;
+      font-weight: 700;
+      color: #f8fafc;
+      margin-bottom: 4px;
+    }
+    .proposal-sub {
+      color: #94a3b8;
+      font-size: 13px;
+    }
+    .proposal-badges {
+      display: flex;
+      gap: 8px;
+      flex-wrap: wrap;
+    }
+    .prop-badge {
+      padding: 4px 10px;
+      border-radius: 6px;
+      font-size: 11px;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+    }
+    .prop-badge-green { background: rgba(16, 185, 129, 0.2); color: #34d399; border: 1px solid rgba(16, 185, 129, 0.4); }
+    .prop-badge-blue { background: rgba(59, 130, 246, 0.2); color: #93c5fd; border: 1px solid rgba(59, 130, 246, 0.4); }
+    .prop-badge-gold { background: rgba(245, 158, 11, 0.2); color: #fbbf24; border: 1px solid rgba(245, 158, 11, 0.4); }
+
+    .deliverable-full-panel {
+      min-height: calc(100vh - 220px);
+    }
+    .solution-body {
+      padding: 32px;
+      color: #e2e8f0;
+      font-size: 14px;
+      line-height: 1.7;
+    }
+    .solution-body h1, .solution-body h2, .solution-body h3 {
+      color: #f8fafc;
+      font-weight: 700;
+      margin-top: 28px;
+      margin-bottom: 12px;
+      border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+      padding-bottom: 8px;
+    }
+    .solution-body h1 { font-size: 24px; color: #6ee7b7; }
+    .solution-body h2 { font-size: 19px; color: #93c5fd; }
+    .solution-body h3 { font-size: 16px; color: #fde047; }
+    .solution-body p { margin-bottom: 16px; }
+    .solution-body ul { padding-left: 24px; margin-bottom: 16px; }
+    .solution-body li { margin-bottom: 6px; }
+    .solution-body table {
+      width: 100%;
+      border-collapse: collapse;
+      margin: 20px 0;
+      font-size: 13px;
+      background: rgba(15, 23, 42, 0.6);
+      border-radius: 8px;
+      overflow: hidden;
+      border: 1px solid var(--border-subtle);
+    }
+    .solution-body th {
+      background: rgba(30, 41, 59, 0.9);
+      color: #f1f5f9;
+      text-align: left;
+      padding: 12px 14px;
+      border-bottom: 1px solid var(--border-subtle);
+      font-weight: 600;
+    }
+    .solution-body td {
+      padding: 10px 14px;
+      border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+    }
+    .solution-body tr:hover td {
+      background: rgba(255, 255, 255, 0.03);
+    }
+    .solution-body pre {
+      background: rgba(15, 23, 42, 0.9);
+      border: 1px solid var(--border-subtle);
+      border-radius: 8px;
+      padding: 16px;
+      overflow-x: auto;
+      font-family: var(--font-mono);
+      font-size: 12px;
+      color: #cbd5e1;
+      margin: 16px 0;
+    }
+    .solution-body code {
+      background: rgba(255, 255, 255, 0.1);
+      padding: 2px 6px;
+      border-radius: 4px;
+      font-family: var(--font-mono);
+      font-size: 12px;
+      color: #a5f3fc;
+    }
+    .solution-body pre code {
+      background: transparent;
+      padding: 0;
+      color: inherit;
+    }
+
+    /* Print styling */
+    @media print {
+      .header, .proposal-hero, .deliverable-tabs-bar, .panel-header button, .action-btns-tray { display: none !important; }
+      body { background: #fff !important; color: #000 !important; }
+      .solution-body { color: #000 !important; }
+      .solution-body h1, .solution-body h2, .solution-body h3 { color: #000 !important; }
+      .solution-body table { background: transparent !important; }
+      .solution-body th { background: #f1f5f9 !important; color: #000 !important; }
+      .solution-body td { color: #000 !important; border-color: #ccc !important; }
+    }
+  </style>
+</head>
+<body>
+
+  <div class="app-layout">
+    <!-- AgentHub Header -->
+    <header class="header">
+      <div class="brand">
+        <a href="/" style="display: flex; align-items: center; gap: 12px; text-decoration: none; color: inherit;">
+          <div class="brand-icon">
+            <svg viewBox="0 0 24 24">
+              <rect x="2" y="3" width="20" height="14" rx="2" ry="2"/><line x1="8" y1="21" x2="16" y2="21"/><line x1="12" y1="17" x2="12" y2="21"/>
+            </svg>
+          </div>
+          <div>
+            <div style="display: flex; align-items: center; gap: 8px;">
+              <div class="brand-title">AgentHub</div>
+              <span class="version-badge">v2.6</span>
+            </div>
+            <div class="brand-subtitle">Deliverable Studio</div>
+          </div>
+        </a>
+      </div>
+
+      <div class="header-actions">
+        <!-- Live System Indicators -->
+        <div id="llm-status" class="status-pill online" title="Local LLM Connection">
+          <span class="dot"></span>
+          <span class="status-label">LLM Ready (gpt-oss-20b)</span>
+        </div>
+        <div id="temporal-status" class="status-pill online" title="Durable State Engine">
+          <span class="dot"></span>
+          <span class="status-label">Durable Engine Online</span>
+        </div>
+
+        <div class="divider-v"></div>
+
+        <a href="/" class="header-btn" title="AgentHub Mission Control">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <polygon points="5 3 19 12 5 21 5 3"/>
+          </svg>
+          <span>Mission Control</span>
+        </a>
+
+        <a href="http://localhost:3000/" target="_blank" class="header-btn" title="Fleet Studio Topology">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5"/>
+          </svg>
+          <span>Fleet Studio</span>
+        </a>
+      </div>
+    </header>
+
+    <!-- Main Content Area -->
+    <main class="main-content" style="max-width: 1400px; margin: 0 auto; width: 100%; padding: 24px;">
+
+      <!-- Proposal Metadata Card -->
+      <div class="proposal-hero">
+        <div>
+          <div class="proposal-title">🏛️ Ministry of Education (MOE) – DevOps Server Implementation</div>
+          <div class="proposal-sub">Source Document: <code>C:\Users\Karim ElWaly\Downloads\RFP.docx</code> &bull; Roxy Data Center Sovereign Deployment</div>
+        </div>
+        <div class="proposal-badges">
+          <span class="prop-badge prop-badge-green">15/15 RFP Clauses Compliant</span>
+          <span class="prop-badge prop-badge-blue">On-Premises Air-Gap</span>
+          <span class="prop-badge prop-badge-gold">$161,400.00 Total Investment</span>
+        </div>
+      </div>
+
+      <!-- Deliverable Studio Panel (AgentHub Portal 5 Theme) -->
+      <section class="panel solution-panel deliverable-studio-panel deliverable-full-panel">
+        <div class="panel-header" style="flex-wrap: wrap; gap: 8px;">
+          <div class="panel-title">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/><polyline points="10 9 9 9 8 9"/>
+            </svg>
+            <span>Deliverable Studio &bull; RFP Executive Proposal</span>
+          </div>
+
+          <!-- Deliverable Channel Tabs -->
+          <div class="deliverable-tabs-bar">
+            <button type="button" id="tab-deliv-dossier" class="deliv-tab active" onclick="switchTab('dossier')">📄 Master Dossier</button>
+            <button type="button" id="tab-deliv-form" class="deliv-tab" onclick="switchTab('form')">📋 Interactive Form &amp; Checklist</button>
+            <button type="button" id="tab-deliv-email" class="deliv-tab" onclick="switchTab('email')">📧 Executive Transmittal Email</button>
+          </div>
+
+          <!-- Action Buttons Tray -->
+          <div class="action-btns-tray" style="display: flex; gap: 8px; margin-left: auto;">
+            <button class="copy-btn" onclick="copyProposalText()" title="Copy proposal markdown to clipboard">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <rect x="9" y="9" width="13" height="13" rx="2" ry="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/>
+              </svg>
+              <span id="copy-text-btn">Copy Text</span>
+            </button>
+
+            <button class="copy-btn" onclick="downloadMarkdown()" title="Download raw markdown file">
+              📥 Download .md
+            </button>
+
+            <button class="copy-btn" style="background: rgba(16, 185, 129, 0.15); border-color: rgba(16, 185, 129, 0.4); color: #34d399;" onclick="window.print()" title="Print or save as PDF">
+              🖨️ Export PDF
+            </button>
+          </div>
+        </div>
+
+        <!-- Channel 1: Master Markdown Dossier View -->
+        <div id="deliverable-dossier-view" class="deliverable-view-content">
+          <div id="solution-body" class="solution-body">
+            <div style="text-align: center; padding: 40px; color: #94a3b8;">
+              Loading executive proposal...
+            </div>
+          </div>
+        </div>
+
+        <!-- Channel 2: Interactive Structured Form View -->
+        <div id="deliverable-form-view" class="deliverable-view-content" style="display: none; padding: 28px;">
+          <h3 style="color: #6ee7b7; font-size: 18px; margin-bottom: 8px;">Compliance &amp; Sign-Off Verification Matrix</h3>
+          <p style="color: #94a3b8; font-size: 13px; margin-bottom: 20px;">Every requirement from the Ministry of Education RFP has been verified against the proposed architecture:</p>
+          
+          <table style="width: 100%; font-size: 13px;">
+            <thead>
+              <tr style="background: rgba(30, 41, 59, 0.9);">
+                <th style="padding: 10px;">RFP Clause</th>
+                <th style="padding: 10px;">Mandatory Requirement</th>
+                <th style="padding: 10px;">Proposed Implementation</th>
+                <th style="padding: 10px;">Status</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr><td><strong>Sec 1 &amp; 2</strong></td><td>Unified DevOps platform at Roxy Data Center</td><td>Bare-metal / private cloud deployment at Roxy DC; zero cloud dependencies</td><td><span class="prop-badge prop-badge-green">COMPLIANT</span></td></tr>
+              <tr><td><strong>Sec 3</strong></td><td>Full lifecycle support: design, deploy, train, support</td><td>Turnkey 16-week delivery covering hardware to 5 training tracks</td><td><span class="prop-badge prop-badge-green">COMPLIANT</span></td></tr>
+              <tr><td><strong>Sec 4.1</strong></td><td>Distributed Git SCM, branch policies, RBAC, audit logs</td><td>Enterprise Git engine with protected branches, mandatory approvals, immutable audits</td><td><span class="prop-badge prop-badge-green">COMPLIANT</span></td></tr>
+              <tr><td><strong>Sec 4.2</strong></td><td>Declarative YAML pipelines, parallel runners, caching</td><td>YAML pipeline-as-code, dynamic runner autoscaling, cross-stage artifact caching</td><td><span class="prop-badge prop-badge-green">COMPLIANT</span></td></tr>
+              <tr><td><strong>Sec 4.3</strong></td><td>Issue management, Agile Scrum/Kanban boards</td><td>Integrated ticket boards, sprint burndowns, inline commit-linked code reviews</td><td><span class="prop-badge prop-badge-green">COMPLIANT</span></td></tr>
+              <tr><td><strong>Sec 4.4</strong></td><td>Multi-package artifact registry (OCI, Maven, npm, PyPI)</td><td>Air-gapped artifact repository with local proxy dependency caching</td><td><span class="prop-badge prop-badge-green">COMPLIANT</span></td></tr>
+              <tr><td><strong>Sec 4.5</strong></td><td>RBAC, Active Directory / LDAP, multi-team isolation</td><td>Direct MOE AD federation with automated role mapping and CEF log output</td><td><span class="prop-badge prop-badge-green">COMPLIANT</span></td></tr>
+              <tr><td><strong>Sec 5.1</strong></td><td>DevSecOps: SAST, DAST, SCA, secrets, container scan</td><td>Integrated pre-commit secret blocking, OWASP SAST, dependency license scanning</td><td><span class="prop-badge prop-badge-green">COMPLIANT</span></td></tr>
+              <tr><td><strong>Sec 5.2</strong></td><td>Infrastructure as Code (IaC) &amp; pipeline integration</td><td>Native Terraform, Ansible, and Kubernetes manifests with policy-as-code linting</td><td><span class="prop-badge prop-badge-green">COMPLIANT</span></td></tr>
+              <tr><td><strong>Sec 5.3</strong></td><td>Blue/Green, Canary, and Rolling deployment lifecycles</td><td>Canary traffic progression (5% &rarr; 100%) and instant blue/green cutover</td><td><span class="prop-badge prop-badge-green">COMPLIANT</span></td></tr>
+              <tr><td><strong>Sec 6.1</strong></td><td>Policy enforcement, approval workflows, release gates</td><td>Two-Person Integrity production gates, Decision Room disposition recording</td><td><span class="prop-badge prop-badge-green">COMPLIANT</span></td></tr>
+              <tr><td><strong>Sec 6.3</strong></td><td>Clustered HA architecture, failover, horizontal scale</td><td>Active/active stateless nodes with automated Patroni database failover</td><td><span class="prop-badge prop-badge-green">COMPLIANT</span></td></tr>
+              <tr><td><strong>Sec 6.4</strong></td><td>Automated backups, point-in-time recovery across sites</td><td>Continuous WAL-G archiving, daily snapshot replication, tested DR runbooks</td><td><span class="prop-badge prop-badge-green">COMPLIANT</span></td></tr>
+              <tr><td><strong>Sec 8</strong></td><td>Encryption in transit (TLS 1.2+) &amp; at rest, SSO, audits</td><td>Enforced TLS 1.3, AES-256 disk encryption, local HSM/KMS keys, SAML 2.0</td><td><span class="prop-badge prop-badge-green">COMPLIANT</span></td></tr>
+              <tr><td><strong>Sec 10</strong></td><td>Flexible tiered licensing (Core / Advanced / Enterprise)</td><td>Perpetual Enterprise Tier licensing without per-seat user or runner caps</td><td><span class="prop-badge prop-badge-green">COMPLIANT</span></td></tr>
+            </tbody>
+          </table>
+        </div>
+
+        <!-- Channel 3: Executive Email View -->
+        <div id="deliverable-email-view" class="deliverable-view-content" style="display: none; padding: 28px;">
+          <div style="background: rgba(15, 23, 42, 0.8); border: 1px solid var(--border-subtle); border-radius: 8px; padding: 24px; max-width: 800px; margin: 0 auto;">
+            <div style="border-bottom: 1px solid rgba(255, 255, 255, 0.1); padding-bottom: 16px; margin-bottom: 16px; font-size: 13px;">
+              <div><strong>To:</strong> Procurement &amp; Evaluation Committee &lt;procurement@moe.gov.eg&gt;</div>
+              <div><strong>From:</strong> Sovereign Agentic Systems &lt;proposals@sovereign-agent.local&gt;</div>
+              <div><strong>Subject:</strong> Formal Proposal: DevOps Server Platform Implementation (RFP-MOE-ROXY-DEVOPS-2026-01)</div>
+              <div><strong>Date:</strong> October 25, 2026</div>
+            </div>
+            <div style="font-size: 14px; line-height: 1.7; color: #e2e8f0;">
+              <p>Dear Members of the Evaluation Committee,</p>
+              <p>We are pleased to formally submit our technical and commercial proposal in response to the Ministry of Education Request for Proposal for the <strong>DevOps Server License Module Implementation at Roxy Data Center</strong>.</p>
+              <p>Our proposal delivers a 100% on-premises sovereign solution featuring:</p>
+              <ul>
+                <li>Active/Active Clustered DevOps Server Core with Patroni PostgreSQL High Availability</li>
+                <li>Distributed Source Code Management (SCM) with Active Directory / LDAP federation</li>
+                <li>Declarative YAML CI/CD automation with auto-scaling container runner pools</li>
+                <li>Embedded DevSecOps (SAST, DAST, SCA, and pre-commit secret detection)</li>
+                <li>Turnkey 16-week implementation plan with 5 training tracks and 24/7 mission-critical SLA</li>
+              </ul>
+              <p><strong>Total Fixed-Price Contract Value:</strong> $161,400.00 USD (Includes 800 hours of implementation across 5 engineering tiers, 1-year perpetual Enterprise licensing, and 24/7 SLA).</p>
+              <p>The complete master dossier and compliance traceability matrix are attached.</p>
+              <p>Sincerely,<br><em>Lead Architect &amp; Bid Director<br>Sovereign Agentic Systems Fleet</em></p>
+            </div>
+            <div style="margin-top: 24px; display: flex; gap: 12px;">
+              <a href="mailto:procurement@moe.gov.eg?subject=Proposal:%20DevOps%20Server%20Platform%20Implementation%20(RFP-MOE-ROXY-DEVOPS-2026-01)" class="btn-primary" style="display: inline-flex; align-items: center; gap: 8px; text-decoration: none; padding: 8px 16px; border-radius: 6px; font-size: 13px;">
+                ✉️ Open in Desktop Mail Client
+              </a>
+              <button class="btn-secondary" onclick="window.print()" style="padding: 8px 16px; border-radius: 6px; font-size: 13px;">
+                🖨️ Print Transmittal Letter
+              </button>
+            </div>
+          </div>
+        </div>
+
+      </section>
+
+    </main>
+  </div>
+
+  <script src="./js/marked.min.js"></script>
+  <script>
+    let rawMarkdown = "";
+
+    async function loadProposal() {
+      try {
+        const res = await fetch("/api/v1/proposal-content");
+        if (!res.ok) throw new Error("Could not load proposal content");
+        const data = await res.json();
+        rawMarkdown = data.content;
+        renderMarkdown(rawMarkdown);
+      } catch (err) {
+        console.warn("Fetching via API failed, using embedded fallback:", err);
+        // Fallback markdown
+        rawMarkdown = `# Executive Proposal: DevOps Server Platform Implementation
+## Ministry of Education (MOE) – Roxy Data Center
+**Document ID:** RFP-MOE-ROXY-DEVOPS-2026-01  
+**Target Installation:** Sovereign On-Premises Deployment, Roxy Data Center  
+**Prepared for:** Ministry of Education Procurement & Evaluation Committee  
+**Prepared by:** Sovereign Agentic Systems & Cloud Infrastructure Fleet  
+**Status:** Complete Technical & Commercial Proposal  
+
+---
+
+## 1. Executive Summary
+
+The Ministry of Education (MOE) is advancing a critical digital transformation initiative to modernize software development, automated testing, security compliance, and continuous delivery across national-scale educational platforms.
+
+To address these imperatives, we propose an enterprise-grade, on-premises deployment of the **DevOps Server Platform** at the **Roxy Data Center**. Our solution establishes an end-to-end, unified platform that integrates:
+- Distributed Source Code Management (SCM) with granular RBAC and audit logging
+- Declarative, scalable CI/CD pipelines with parallel runners and artifact caching
+- Enterprise Agile work tracking (Scrum/Kanban) aligned with MOE project portfolios
+- Multi-format artifact repositories (OCI containers, Maven, npm, PyPI, Helm)
+- Embedded DevSecOps automation (SAST, DAST, SCA, secret scanning, container image inspection)
+- Sovereign, air-gapped on-premises architecture ensuring 100% data residency within the Roxy Data Center
+
+Our proposal meets or exceeds every mandatory requirement specified in the RFP, provides a zero-drift compliance architecture, and includes a transparent, multi-tier labor pricing model ($161,400.00 total) with complete knowledge transfer and 24/7 post-deployment support.
+
+---
+
+## 2. Project Scope & Architecture Overview
+
+### Architectural Highlights
+- **100% On-Premises Sovereign Air-Gap**: All components are installed directly on bare-metal and private-cloud virtualization infrastructure within the Roxy Data Center, requiring zero outbound connections to public hyperscalers.
+- **High-Availability (HA) Active/Active Clustering**: Redundant stateless application nodes fronted by load balancers with active/standby automated database failover.
+- **Identity Federation**: Native binding with MOE's Microsoft Active Directory and OpenLDAP, enforcing Role-Based Access Control (RBAC) and Single Sign-On (SSO) via SAML 2.0 / Kerberos.
+
+---
+
+## 3. Mandatory Compliance Traceability Matrix
+
+| RFP Requirement Section | Mandatory Requirement Item | Proposed Solution Specification | Compliance Status |
+| :--- | :--- | :--- | :---: |
+| **Section 1 & 2** | Unified DevOps platform deployed on-premises at Roxy Data Center | Bare-metal & private cloud deployment within Roxy DC with zero external telemetry dependence. | **COMPLIANT** |
+| **Section 3** | Full lifecycle support: design, deployment, integration, training, support | Turnkey 16-week delivery covering hardware baseline to classroom training and hypercare. | **COMPLIANT** |
+| **Section 4.1** | Distributed Git SCM, branch policies, RBAC, full audit trail | Enterprise Git engine with protected branches, mandatory approvals, and tamper-evident audit logs. | **COMPLIANT** |
+| **Section 4.2** | Declarative YAML pipelines, parallel execution, triggers, artifact retention | YAML-defined CI/CD pipelines, autoscaling distributed runners, and cross-stage artifact caching. | **COMPLIANT** |
+| **Section 4.3** | Issue management, Scrum/Kanban boards, sprint tracking, collaboration | Integrated Agile boards, milestone roadmaps, inline code review discussions, and notifications. | **COMPLIANT** |
+| **Section 4.4** | Multi-format artifact repo (containers, binaries, libraries), dependency cache | OCI registry, Maven, npm, PyPI, and NuGet package management with air-gapped proxy caching. | **COMPLIANT** |
+| **Section 4.5** | RBAC, Active Directory / LDAP integration, multi-team isolation, audit logging | Seamless MOE AD synchronization, role-based departmental segregation, and CEF log output. | **COMPLIANT** |
+| **Section 5.1** | DevSecOps: SAST, DAST, SCA, secrets detection, container security | Integrated OWASP Top 10 SAST, dependency vulnerability scanning, pre-commit secret blocking. | **COMPLIANT** |
+| **Section 5.2** | Infrastructure as Code (IaC) support & CI/CD pipeline integration | Native Terraform, Ansible, and Kubernetes manifest support with automated policy linting. | **COMPLIANT** |
+| **Section 5.3** | Multi-environment management: Blue/Green, Canary, Rolling deployments | Automated canary traffic splitting (5% → 100%) and instant blue/green VIP switching. | **COMPLIANT** |
+| **Section 6.1** | Policy enforcement, approval workflows, release gates, audit trails | Two-person integrity release gates, automated quality gating, and exportable audit packs. | **COMPLIANT** |
+| **Section 6.3** | Clustered architecture, horizontal scaling, load balancing & failover | Active/active redundant nodes fronted by load balancers with automated database failover. | **COMPLIANT** |
+| **Section 6.4** | Automated backups, point-in-time recovery, disaster recovery across sites | Continuous WAL-G database archiving, daily snapshot replication, and automated DR runbooks. | **COMPLIANT** |
+| **Section 8** | Encryption in transit (TLS 1.2+) & at rest (AES-256), SSO, detailed audit logs | TLS 1.3 enforced for all interfaces; AES-256 disk encryption with local HSM/KMS key control. | **COMPLIANT** |
+| **Section 10** | Flexible tiered licensing (Core/Advanced/Enterprise) with clear definitions | Unlimited Enterprise Tier licensing with all DevSecOps and HA features included without caps. | **COMPLIANT** |
+
+---
+
+## 4. Multi-Tier Labor Pricing & Cost Model
+
+| Role / Tier | Key Responsibilities | Standard Rate | Total Hours | Total Cost (USD) |
+| :--- | :--- | :---: | :---: | :---: |
+| **Tier 1: Senior Principal DevOps Architect** | High-availability design, Roxy DC network integration, disaster recovery topology | $210 / hr | 120 hrs | $25,200.00 |
+| **Tier 2: Lead DevSecOps & Pipeline Engineers** | SCM configuration, CI/CD runner clustering, SAST/DAST pipeline integration | $160 / hr | 280 hrs | $44,800.00 |
+| **Tier 3: Systems Integration & Identity Specialists** | Active Directory / LDAP federation, SSO implementation, SIEM log forwarding | $130 / hr | 160 hrs | $20,800.00 |
+| **Tier 4: Training & Documentation Specialists** | Technical user manuals, administrator runbooks, and 5 interactive training workshops | $100 / hr | 100 hrs | $10,000.00 |
+| **Tier 5: 24/7 Hypercare & Operations Engineers** | Dedicated 30-day post-go-live hypercare, real-time issue resolution | $90 / hr | 140 hrs | $12,600.00 |
+| **Subtotal Professional Services** | | | **800 hrs** | **$113,400.00** |
+| **DevOps Server Enterprise License** | Unlimited users, unlimited pipeline nodes, on-premises deployment | 1 Year Perpetual | **$48,000.00** |
+| **24/7 Mission-Critical SLA Support** | 15-minute response for Severity 1 incidents, dedicated TAM, security hotfixes | 1 Year Included | **Included** |
+| **Grand Total Contract Value** | | | | **$161,400.00** |`;
+        renderMarkdown(rawMarkdown);
+      }
+    }
+
+    function renderMarkdown(md) {
+      const container = document.getElementById("solution-body");
+      if (typeof marked !== "undefined" && typeof marked.parse === "function") {
+        container.innerHTML = marked.parse(md);
+      } else {
+        container.innerText = md;
+      }
+    }
+
+    function switchTab(tab) {
+      document.querySelectorAll(".deliv-tab").forEach(t => t.classList.remove("active"));
+      document.getElementById("deliverable-dossier-view").style.display = "none";
+      document.getElementById("deliverable-form-view").style.display = "none";
+      document.getElementById("deliverable-email-view").style.display = "none";
+
+      if (tab === "dossier") {
+        document.getElementById("tab-deliv-dossier").classList.add("active");
+        document.getElementById("deliverable-dossier-view").style.display = "block";
+      } else if (tab === "form") {
+        document.getElementById("tab-deliv-form").classList.add("active");
+        document.getElementById("deliverable-form-view").style.display = "block";
+      } else if (tab === "email") {
+        document.getElementById("tab-deliv-email").classList.add("active");
+        document.getElementById("deliverable-email-view").style.display = "block";
+      }
+    }
+
+    function copyProposalText() {
+      navigator.clipboard.writeText(rawMarkdown).then(() => {
+        const btn = document.getElementById("copy-text-btn");
+        btn.innerText = "Copied!";
+        setTimeout(() => btn.innerText = "Copy Text", 2000);
+      });
+    }
+
+    function downloadMarkdown() {
+      const blob = new Blob([rawMarkdown], { type: "text/markdown" });
+      const a = document.createElement("a");
+      a.href = URL.createObjectURL(blob);
+      a.download = "moe_devops_server_rfp_proposal.md";
+      a.click();
+    }
+
+    window.addEventListener("DOMContentLoaded", loadProposal);
+  </script>
+</body>
+</html>

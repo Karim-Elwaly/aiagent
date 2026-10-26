@@ -16,6 +16,27 @@ import subprocess
 import sys
 import time
 
+# Auto-switch to .venv Python interpreter if running under global python
+venv_python = os.path.join(os.path.dirname(os.path.abspath(__file__)), ".venv", "Scripts", "python.exe")
+if os.path.exists(venv_python) and os.path.abspath(sys.executable).lower() != os.path.abspath(venv_python).lower():
+    if sys.platform == "win32":
+        try:
+            res = subprocess.call([venv_python] + sys.argv)
+            sys.exit(res)
+        except Exception:
+            pass
+    else:
+        try:
+            os.execv(venv_python, [venv_python] + sys.argv)
+        except Exception:
+            pass
+
+try:
+    from dotenv import load_dotenv
+    load_dotenv()
+except ImportError:
+    pass
+
 # Configure UTF-8 output with fallback for Windows terminals
 if hasattr(sys.stdout, "reconfigure"):
     sys.stdout.reconfigure(encoding="utf-8", errors="replace")
@@ -146,8 +167,12 @@ def main():
     web_ui_online = check_port("localhost", 8234, timeout=0.5)
     t_web_status = "http://localhost:8234 (Online)" if web_ui_online else "Offline (start Docker Desktop & run 'docker compose up -d postgresql temporal temporal-ui')"
 
+    fleet_studio_online = check_port("localhost", 3000, timeout=0.5)
+    fleet_status = "http://localhost:3000 (Online)" if fleet_studio_online else "http://localhost:3000 (Start with: cd frontend/frontend && npm run dev)"
+
     print("\n" + "=" * 60)
-    print(f"  🚀 AgentHub Mission Control UI: http://localhost:{api_port}")
+    print(f"  🚀 AgentHub Mission Control: http://localhost:{api_port}")
+    print(f"  🛰️  Fleet Studio UI:         {fleet_status}")
     print(f"  📚 Swagger API Docs:        http://localhost:{api_port}/docs")
     print(f"  ⏱️  Temporal Web UI:         {t_web_status}")
     print("=" * 60)
@@ -164,10 +189,12 @@ def main():
     api_log_f = open(os.path.join("data", "api.log"), "a", encoding="utf-8", errors="replace")
     worker_log_f = open(os.path.join("data", "worker.log"), "a", encoding="utf-8", errors="replace")
 
+    python_bin = venv_python if os.path.exists(venv_python) else sys.executable
+
     try:
         # Start Worker Runner process
         worker_proc = subprocess.Popen(
-            [sys.executable, "-m", "src.orchestrator.worker_runner"],
+            [python_bin, "-m", "src.orchestrator.worker_runner"],
             env=env,
             stdout=worker_log_f,
             stderr=subprocess.STDOUT,
@@ -177,7 +204,7 @@ def main():
         # Start FastAPI process via uvicorn
         api_proc = subprocess.Popen(
             [
-                sys.executable,
+                python_bin,
                 "-m",
                 "uvicorn",
                 "src.api.main:app",
@@ -203,7 +230,7 @@ def main():
                 print(f"\n[!] Worker Runner exited with code {ret}. Auto-restarting in 2s...")
                 time.sleep(2.0)
                 worker_proc = subprocess.Popen(
-                    [sys.executable, "-m", "src.orchestrator.worker_runner"],
+                    [python_bin, "-m", "src.orchestrator.worker_runner"],
                     env=env,
                     stdout=worker_log_f,
                     stderr=subprocess.STDOUT,
@@ -216,7 +243,7 @@ def main():
                 time.sleep(2.0)
                 api_proc = subprocess.Popen(
                     [
-                        sys.executable,
+                        python_bin,
                         "-m",
                         "uvicorn",
                         "src.api.main:app",

@@ -1,0 +1,197 @@
+{
+  "arena_id": "arena-ingest-uploaded-governme-de4768",
+  "arena_name": "Enterprise RFP Proposal & Pricing Factory",
+  "arena_slug": "ingest-uploaded-governme",
+  "mission_prompt": "Ingest uploaded government cloud migration RFP, extract mandatory technical compliance criteria, model multi-tier labor pricing, and generate a winning executive proposal with compliance traceability matrix.",
+  "strategy_profile": "STANDARD",
+  "units": [
+    {
+      "profile_name": "fleet-ingest-uploaded--ingest-and-parse-rfp",
+      "unit_codename": "INGEST-AND-PARSE-RFP-DOC",
+      "task_id": "t1",
+      "task_name": "Ingest and Parse RFP Document into Structured Data",
+      "operational_stage": "RECON_INGESTION",
+      "scoped_tools": [
+        "execute_python",
+        "triage_security_alert"
+      ],
+      "required_skills": [
+        "data_analysis",
+        "code_execution",
+        "general_reasoning"
+      ],
+      "description": "Read the uploaded government cloud migration RFP (PDF/Word), extract all textual content, and convert it into a structured tabular format (e.g., sections, subsections, key phrases). Store the parsed data in JSON for downstream tasks.",
+      "input_contract": "Requires verified outputs from upstream dependency nodes: [None - Initial Branch Node]",
+      "output_contract": "JSON representation of RFP structure with section titles and paragraph text.",
+      "profile_exists": false,
+      "attached_files": []
+    },
+    {
+      "profile_name": "fleet-ingest-uploaded--extract-mandatory-te",
+      "unit_codename": "EXTRACT-MANDATORY-TECHNI",
+      "task_id": "t2",
+      "task_name": "Extract Mandatory Technical Compliance Criteria",
+      "operational_stage": "RECON_INGESTION",
+      "scoped_tools": [
+        "execute_python",
+        "triage_security_alert"
+      ],
+      "required_skills": [
+        "data_analysis",
+        "general_reasoning"
+      ],
+      "description": "Analyze the parsed RFP JSON to identify all mandatory technical compliance items (e.g., security controls, data residency, audit requirements). Compile these into a list with associated section references and any required evidence or documentation.",
+      "input_contract": "Requires verified outputs from upstream dependency nodes: [t1]",
+      "output_contract": "Table of mandatory compliance criteria with source references.",
+      "profile_exists": false,
+      "attached_files": []
+    },
+    {
+      "profile_name": "fleet-ingest-uploaded--model-multi-tier-lab",
+      "unit_codename": "MODEL-MULTI-TIER-LABOR-P",
+      "task_id": "t3",
+      "task_name": "Model Multi\u2011Tier Labor Pricing",
+      "operational_stage": "DEEP_ANALYSIS",
+      "scoped_tools": [
+        "execute_python",
+        "triage_security_alert"
+      ],
+      "required_skills": [
+        "data_analysis",
+        "code_execution",
+        "general_reasoning"
+      ],
+      "description": "Using the compliance list and typical cloud migration labor roles (e.g., Cloud Architect, Security Engineer, Project Manager), create a tiered pricing model (e.g., Standard, Premium, Enterprise). Include hourly rates, estimated effort per compliance item, and total cost projections.",
+      "input_contract": "Requires verified outputs from upstream dependency nodes: [t2]",
+      "output_contract": "Pricing matrix with roles, tiers, hours, rates, and subtotal/total costs.",
+      "profile_exists": false,
+      "attached_files": []
+    },
+    {
+      "profile_name": "fleet-ingest-uploaded--generate-executive-p",
+      "unit_codename": "GENERATE-EXECUTIVE-PROPO",
+      "task_id": "t4",
+      "task_name": "Generate Executive Proposal with Compliance Traceability Matrix",
+      "operational_stage": "DELIVERABLE_SYNTHESIS",
+      "scoped_tools": [
+        "compress_security_timeline",
+        "summarize_to_presentation",
+        "triage_security_alert"
+      ],
+      "required_skills": [
+        "general_reasoning",
+        "summarization"
+      ],
+      "description": "Synthesize a polished executive proposal document that includes an executive summary, solution overview, compliance traceability matrix linking each RFP requirement to our proposed controls and pricing, and a clear call\u2011to\u2011action. Format the output as a structured JSON or Markdown suitable for conversion to PDF.",
+      "input_contract": "Requires verified outputs from upstream dependency nodes: [t2, t3]",
+      "output_contract": "Complete proposal text with embedded compliance traceability table and pricing summary.",
+      "profile_exists": false,
+      "attached_files": []
+    }
+  ],
+  "dag": {
+    "goal": "Create a comprehensive executive proposal for a government cloud migration RFP that includes mandatory technical compliance criteria extraction, multi\u2011tier labor pricing modeling, and a compliance traceability matrix.",
+    "reasoning": "The request requires ingesting an uploaded document, extracting structured requirements, performing quantitative modeling of labor costs, and synthesizing a final proposal with traceability. This maps to four distinct phases: ingestion & parsing, requirement extraction, cost modeling, and proposal generation.",
+    "tasks": [
+      {
+        "id": "t1",
+        "name": "Ingest and Parse RFP Document into Structured Data",
+        "description": "Read the uploaded government cloud migration RFP (PDF/Word), extract all textual content, and convert it into a structured tabular format (e.g., sections, subsections, key phrases). Store the parsed data in JSON for downstream tasks.",
+        "required_skills": [
+          "data_analysis",
+          "code_execution",
+          "general_reasoning"
+        ],
+        "expected_output": "JSON representation of RFP structure with section titles and paragraph text.",
+        "dependencies": [],
+        "risk_level": "low",
+        "max_retries": 2,
+        "timeout_seconds": 600,
+        "parameters": {},
+        "agent_id": null,
+        "hermes_profile": "fleet-ingest-uploaded--ingest-and-parse-rfp",
+        "specialist_spec": null,
+        "_hermes_profile": "fleet-ingest-uploaded--ingest-and-parse-rfp"
+      },
+      {
+        "id": "t2",
+        "name": "Extract Mandatory Technical Compliance Criteria",
+        "description": "Analyze the parsed RFP JSON to identify all mandatory technical compliance items (e.g., security controls, data residency, audit requirements). Compile these into a list with associated section references and any required evidence or documentation.",
+        "required_skills": [
+          "data_analysis",
+          "general_reasoning"
+        ],
+        "expected_output": "Table of mandatory compliance criteria with source references.",
+        "dependencies": [
+          "t1"
+        ],
+        "risk_level": "low",
+        "max_retries": 2,
+        "timeout_seconds": 300,
+        "parameters": {},
+        "agent_id": null,
+        "hermes_profile": "fleet-ingest-uploaded--extract-mandatory-te",
+        "specialist_spec": null,
+        "_hermes_profile": "fleet-ingest-uploaded--extract-mandatory-te"
+      },
+      {
+        "id": "t3",
+        "name": "Model Multi\u2011Tier Labor Pricing",
+        "description": "Using the compliance list and typical cloud migration labor roles (e.g., Cloud Architect, Security Engineer, Project Manager), create a tiered pricing model (e.g., Standard, Premium, Enterprise). Include hourly rates, estimated effort per compliance item, and total cost projections.",
+        "required_skills": [
+          "data_analysis",
+          "code_execution",
+          "general_reasoning"
+        ],
+        "expected_output": "Pricing matrix with roles, tiers, hours, rates, and subtotal/total costs.",
+        "dependencies": [
+          "t2"
+        ],
+        "risk_level": "low",
+        "max_retries": 2,
+        "timeout_seconds": 300,
+        "parameters": {},
+        "agent_id": null,
+        "hermes_profile": "fleet-ingest-uploaded--model-multi-tier-lab",
+        "specialist_spec": null,
+        "_hermes_profile": "fleet-ingest-uploaded--model-multi-tier-lab"
+      },
+      {
+        "id": "t4",
+        "name": "Generate Executive Proposal with Compliance Traceability Matrix",
+        "description": "Synthesize a polished executive proposal document that includes an executive summary, solution overview, compliance traceability matrix linking each RFP requirement to our proposed controls and pricing, and a clear call\u2011to\u2011action. Format the output as a structured JSON or Markdown suitable for conversion to PDF.",
+        "required_skills": [
+          "general_reasoning",
+          "summarization"
+        ],
+        "expected_output": "Complete proposal text with embedded compliance traceability table and pricing summary.",
+        "dependencies": [
+          "t2",
+          "t3"
+        ],
+        "risk_level": "low",
+        "max_retries": 2,
+        "timeout_seconds": 300,
+        "parameters": {},
+        "agent_id": null,
+        "hermes_profile": "fleet-ingest-uploaded--generate-executive-p",
+        "specialist_spec": null,
+        "_hermes_profile": "fleet-ingest-uploaded--generate-executive-p"
+      }
+    ],
+    "estimated_completion_seconds": 60
+  },
+  "status": "draft",
+  "created_at": 1792952579.4611154,
+  "updated_at": 1792952579.4611154,
+  "profiles_to_create": [
+    "fleet-ingest-uploaded--extract-mandatory-te",
+    "fleet-ingest-uploaded--generate-executive-p",
+    "fleet-ingest-uploaded--ingest-and-parse-rfp",
+    "fleet-ingest-uploaded--model-multi-tier-lab"
+  ],
+  "profiles_existing": [],
+  "workflow_id": null,
+  "agent_id": null,
+  "resilience": "standard"
+}

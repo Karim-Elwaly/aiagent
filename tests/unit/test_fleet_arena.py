@@ -324,30 +324,31 @@ def test_clone_arena():
             new_prompt="Investigate incident #202 in AWS VPC",
         )
 
-            # Verified properties
-            assert cloned.arena_id != "arena-soc-original"
-            assert cloned.arena_name == "Incident #202 Reusable Fleet"
-            assert cloned.mission_prompt == "Investigate incident #202 in AWS VPC"
-            # Since profile exists in Hermes, status is immediately provisioned (0 restarts needed)
-            assert cloned.status == "provisioned"
-            assert cloned.profiles_existing == ["fleet-soc-analyst"]
-            assert cloned.profiles_to_create == []
+        # Verified properties
+        assert cloned.arena_id != "arena-soc-original"
+        assert cloned.arena_name == "Incident #202 Reusable Fleet"
+        assert cloned.mission_prompt == "Investigate incident #202 in AWS VPC"
+        # Since profile exists in Hermes, status is immediately provisioned (0 restarts needed)
+        assert cloned.status == "provisioned"
+        assert cloned.profiles_existing == ["fleet-soc-analyst"]
+        assert cloned.profiles_to_create == []
 
-            # Unit verification
-            assert len(cloned.units) == 1
-            cloned_unit = cloned.units[0]
-            assert cloned_unit.profile_name == "fleet-soc-analyst"
-            assert cloned_unit.profile_exists is True
-            # Crucial: previous phase attachments are stripped out for the fresh run
-            assert cloned_unit.attached_files == []
+        # Unit verification
+        assert len(cloned.units) == 1
+        cloned_unit = cloned.units[0]
+        assert cloned_unit.profile_name == "fleet-soc-analyst"
+        assert cloned_unit.profile_exists is True
+        # Crucial: previous phase attachments are stripped out for the fresh run
+        assert cloned_unit.attached_files == []
 
-            # Clean DAG verification
-            cloned_task = cloned.dag["tasks"][0]
-            assert "old_logs.txt" not in cloned_task["description"]
+        # Clean DAG verification
+        cloned_task = cloned.dag["tasks"][0]
+        assert "old_logs.txt" not in cloned_task["description"]
 
-            # Persistent store verification
-            loaded = store.load(cloned.arena_id)
-            assert loaded is not None
-            assert loaded.arena_id == cloned.arena_id
-            assert loaded.arena_name == "Incident #202 Reusable Fleet"
+        # Persistent store verification
+        loaded = store.load(cloned.arena_id)
+        assert loaded is not None
+        assert loaded.arena_id == cloned.arena_id
+        assert loaded.arena_name == "Incident #202 Reusable Fleet"
+
 

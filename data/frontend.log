@@ -1,0 +1,67 @@
+
+> frontend@0.1.0 dev
+> next dev -p 3000
+
+▲ Next.js 16.4.2 (Turbopack)
+- Local:         http://localhost:3000
+- Network:       http://192.168.30.10:3000
+- Environments: .env.local
+✓ Ready in 5.5s
+✓ Running next.config.ts took 403ms
+- Cache Components enabled
+- Partial Prefetching enabled
+
+○ Compiling / ...
+ GET / 200 in 1583ms (next.js: 1075ms, application-code: 508ms)
+ GET / 200 in 109ms (next.js: 3ms, application-code: 106ms)
+[browser] A tree hydrated but some attributes of the server rendered HTML didn't match the client properties. This won't be patched up. This can happen if a SSR-ed Client Component used:
+
+- A server/client branch `if (typeof window !== 'undefined')`.
+- Variable input such as `Date.now()` or `Math.random()` which changes each time it's called.
+- Date formatting in a user's locale which doesn't match the server.
+- External changing data without sending a snapshot of it along with the HTML.
+- Invalid HTML tag nesting.
+
+It can also happen if the client has a browser extension installed which messes with the HTML before React loaded.
+
+https://react.dev/link/hydration-mismatch
+
+  ...
+    <HotReload globalError={[...]} webSocket={WebSocket} staticIndicatorState={{pathname:null, ...}}>
+      <AppDevOverlayErrorBoundary globalError={[...]}>
+        <ReplaySsrOnlyErrors>
+        <DevRootHTTPAccessFallbackBoundary>
+          <HTTPAccessFallbackBoundary notFound={<NotAllowedRootHTTPFallbackError>}>
+            <HTTPAccessFallbackErrorBoundary pathname="/" notFound={<NotAllowedRootHTTPFallbackError>} ...>
+              <RedirectBoundary>
+                <RedirectErrorBoundary router={{...}}>
+                  <Head>
+                  <__next_root_layout_boundary__>
+                    <SegmentViewNode type="layout" pagePath="layout.tsx">
+                      <SegmentTrieNode>
+                      <link>
+                      <script>
+                      <RootLayout>
+                        <html lang="en" className="geist_a715...">
+                          <body
++                           className="min-h-full flex flex-col"
+-                           className="min-h-full flex flex-col antigravity-scroll-lock"
+                          >
+                  ...
+ 
+ GET / 200 in 118ms (next.js: 4ms, application-code: 114ms)
+[?25h
+
+> frontend@0.1.0 dev
+> next dev -p 3000
+
+▲ Next.js 16.4.2 (Turbopack)
+- Local:         http://localhost:3000
+- Network:       http://192.168.30.10:3000
+- Environments: .env.local
+✓ Ready in 951ms
+✓ Running next.config.ts took 168ms
+- Cache Components enabled
+- Partial Prefetching enabled
+
+[?25h

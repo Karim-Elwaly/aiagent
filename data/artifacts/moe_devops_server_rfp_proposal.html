@@ -1,0 +1,369 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Executive Proposal: DevOps Server Platform Implementation — Ministry of Education</title>
+<style>
+  :root {
+    --primary: #1d554f;
+    --primary-dark: #123834;
+    --accent: #d97706;
+    --bg-page: #f8fafc;
+    --bg-card: #ffffff;
+    --text-main: #1e293b;
+    --text-muted: #64748b;
+    --border: #e2e8f0;
+    --font: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  }
+  body {
+    margin: 0;
+    padding: 40px 20px;
+    background: var(--bg-page);
+    color: var(--text-main);
+    font-family: var(--font);
+    line-height: 1.6;
+  }
+  .container {
+    max-width: 900px;
+    margin: 0 auto;
+    background: var(--bg-card);
+    padding: 50px 60px;
+    border-radius: 8px;
+    box-shadow: 0 4px 25px rgba(0,0,0,0.06);
+    border: 1px solid var(--border);
+  }
+  .header-badge {
+    display: inline-block;
+    padding: 4px 12px;
+    background: #e6f4f1;
+    color: var(--primary);
+    font-size: 11px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+    border-radius: 4px;
+    margin-bottom: 12px;
+  }
+  h1 {
+    font-size: 28px;
+    color: var(--primary-dark);
+    margin: 0 0 6px 0;
+    line-height: 1.25;
+  }
+  .subtitle {
+    font-size: 18px;
+    color: var(--text-muted);
+    margin: 0 0 24px 0;
+    font-weight: 400;
+  }
+  .metadata-box {
+    display: grid;
+    grid-template-columns: repeat(2, 1fr);
+    gap: 12px;
+    padding: 16px;
+    background: #f1f5f9;
+    border-radius: 6px;
+    font-size: 13px;
+    margin-bottom: 35px;
+  }
+  .metadata-box div strong {
+    color: var(--primary);
+  }
+  h2 {
+    font-size: 20px;
+    color: var(--primary);
+    border-bottom: 2px solid #e6f4f1;
+    padding-bottom: 8px;
+    margin-top: 36px;
+    margin-bottom: 16px;
+  }
+  h3 {
+    font-size: 16px;
+    color: var(--primary-dark);
+    margin-top: 24px;
+    margin-bottom: 8px;
+  }
+  p, li {
+    font-size: 14px;
+    color: #334155;
+  }
+  ul {
+    padding-left: 20px;
+    margin-bottom: 16px;
+  }
+  li {
+    margin-bottom: 6px;
+  }
+  table {
+    width: 100%;
+    border-collapse: collapse;
+    margin: 20px 0;
+    font-size: 13px;
+  }
+  th {
+    background: #f1f5f9;
+    color: var(--primary-dark);
+    text-align: left;
+    padding: 10px 12px;
+    border: 1px solid var(--border);
+    font-weight: 600;
+  }
+  td {
+    padding: 10px 12px;
+    border: 1px solid var(--border);
+  }
+  tr:nth-child(even) td {
+    background: #fafbfd;
+  }
+  .badge-compliant {
+    display: inline-block;
+    padding: 3px 8px;
+    background: #def7ec;
+    color: #03543f;
+    font-weight: 700;
+    font-size: 11px;
+    border-radius: 3px;
+  }
+  .highlight-card {
+    background: #fbf7ee;
+    border-left: 4px solid var(--accent);
+    padding: 14px 18px;
+    border-radius: 0 4px 4px 0;
+    margin: 20px 0;
+    font-size: 13px;
+  }
+  .signature-block {
+    margin-top: 45px;
+    padding-top: 25px;
+    border-top: 1px solid var(--border);
+    display: flex;
+    justify-content: space-between;
+    font-size: 13px;
+  }
+  @media print {
+    body { background: #fff; padding: 0; }
+    .container { box-shadow: none; border: none; padding: 20px; max-width: 100%; }
+  }
+</style>
+</head>
+<body>
+<div class="container">
+  <div class="header-badge">Sovereign On-Premises Proposal</div>
+  <h1>Executive Technical & Commercial Proposal</h1>
+  <div class="subtitle">DevOps Server License Module Implementation — Ministry of Education (MOE)</div>
+
+  <div class="metadata-box">
+    <div><strong>Document Reference:</strong> RFP-MOE-ROXY-DEVOPS-2026-01</div>
+    <div><strong>Target Installation:</strong> Roxy Data Center (On-Premises Air-Gap)</div>
+    <div><strong>Client:</strong> Ministry of Education Procurement & Evaluation Committee</div>
+    <div><strong>Status:</strong> Complete Final Proposal (Ready for Submission)</div>
+  </div>
+
+  <h2>1. Executive Summary</h2>
+  <p>The Ministry of Education (MOE) is advancing a critical digital transformation initiative to modernize software development, automated testing, security compliance, and continuous delivery across national-scale educational platforms. Our turnkey solution establishes an enterprise-grade, on-premises deployment of the <strong>DevOps Server Platform</strong> at the <strong>Roxy Data Center</strong>, providing:</p>
+  <ul>
+    <li><strong>Distributed Source Code Management (SCM)</strong> with granular RBAC, branch protection policies, and tamper-evident audit logging.</li>
+    <li><strong>Declarative CI/CD Pipelines</strong> with auto-scaling distributed runners, dependency caching, and parallel execution.</li>
+    <li><strong>Enterprise Agile Work Tracking</strong> featuring integrated Scrum and Kanban boards mapped to MOE educational portfolios.</li>
+    <li><strong>Universal Artifact Registry</strong> supporting OCI container images, Maven, npm, PyPI, and Helm with local proxy caching.</li>
+    <li><strong>Continuous DevSecOps Security</strong> automating SAST, DAST, SCA dependency scanning, and pre-commit secret detection.</li>
+    <li><strong>100% Sovereign Data Residency</strong> operating completely within the Roxy Data Center with zero outbound hyperscaler telemetry.</li>
+  </ul>
+
+  <h2>2. Project Scope & Architecture Overview</h2>
+  <p>The solution is deployed across high-availability (HA) clustered nodes within the Roxy Data Center:</p>
+  <ul>
+    <li><strong>Perimeter & Identity:</strong> Redundant reverse proxies (F5 / NGINX Plus) integrated natively with MOE Active Directory / OpenLDAP via SAML 2.0 and Kerberos.</li>
+    <li><strong>Control Plane:</strong> Clustered stateless application nodes backed by an active-passive PostgreSQL cluster managed by Patroni with WAL-G archiving.</li>
+    <li><strong>Execution Fabric:</strong> Distributed containerized runner pools segmented into static analysis, security inspection, and production deployment tiers.</li>
+    <li><strong>Persistent Storage:</strong> Enterprise SAN/NAS integration (NFSv4 / NVMe-oF) with automated local snapshot replication.</li>
+  </ul>
+
+  <h2>3. Mandatory Compliance Traceability Matrix</h2>
+  <p>Every requirement from the Ministry of Education RFP is addressed and verified compliant:</p>
+  <table>
+    <thead>
+      <tr>
+        <th>RFP Clause</th>
+        <th>Mandatory Requirement</th>
+        <th>Proposed Technical Specification</th>
+        <th>Status</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td><strong>Sec 1 & 2</strong></td>
+        <td>Unified DevOps platform at Roxy Data Center</td>
+        <td>On-premises bare-metal/private cloud installation; zero external dependencies</td>
+        <td><span class="badge-compliant">COMPLIANT</span></td>
+      </tr>
+      <tr>
+        <td><strong>Sec 3</strong></td>
+        <td>Full lifecycle: design, implement, train, support</td>
+        <td>Turnkey 16-week delivery schedule with 5 knowledge-transfer training tracks</td>
+        <td><span class="badge-compliant">COMPLIANT</span></td>
+      </tr>
+      <tr>
+        <td><strong>Sec 4.1</strong></td>
+        <td>Distributed Git SCM, branch policies, RBAC, audit logs</td>
+        <td>Enterprise Git core with protected branches, mandatory reviews, immutable audits</td>
+        <td><span class="badge-compliant">COMPLIANT</span></td>
+      </tr>
+      <tr>
+        <td><strong>Sec 4.2</strong></td>
+        <td>Declarative YAML pipelines, parallel runners, caching</td>
+        <td>YAML pipeline-as-code, dynamic runner autoscaling, cross-stage artifact caching</td>
+        <td><span class="badge-compliant">COMPLIANT</span></td>
+      </tr>
+      <tr>
+        <td><strong>Sec 4.3</strong></td>
+        <td>Issue management, Agile Scrum/Kanban boards</td>
+        <td>Integrated ticket boards, sprint burndowns, inline commit-linked code reviews</td>
+        <td><span class="badge-compliant">COMPLIANT</span></td>
+      </tr>
+      <tr>
+        <td><strong>Sec 4.4</strong></td>
+        <td>Multi-package artifact registry (OCI, Maven, npm, PyPI)</td>
+        <td>Air-gapped artifact repository with local proxy dependency caching</td>
+        <td><span class="badge-compliant">COMPLIANT</span></td>
+      </tr>
+      <tr>
+        <td><strong>Sec 4.5</strong></td>
+        <td>RBAC, Active Directory / LDAP, multi-team isolation</td>
+        <td>Direct MOE AD federation with automated role mapping and CEF SIEM export</td>
+        <td><span class="badge-compliant">COMPLIANT</span></td>
+      </tr>
+      <tr>
+        <td><strong>Sec 5.1</strong></td>
+        <td>DevSecOps: SAST, DAST, SCA, secrets, container scan</td>
+        <td>Integrated pre-commit secret blocking, OWASP SAST, dependency license scanning</td>
+        <td><span class="badge-compliant">COMPLIANT</span></td>
+      </tr>
+      <tr>
+        <td><strong>Sec 5.2</strong></td>
+        <td>Infrastructure as Code (IaC) & pipeline integration</td>
+        <td>Native Terraform, Ansible, and Kubernetes manifests with policy-as-code linting</td>
+        <td><span class="badge-compliant">COMPLIANT</span></td>
+      </tr>
+      <tr>
+        <td><strong>Sec 5.3</strong></td>
+        <td>Blue/Green, Canary, and Rolling deployment lifecycles</td>
+        <td>Canary traffic progression (5% &rarr; 100%) and instant blue/green cutover</td>
+        <td><span class="badge-compliant">COMPLIANT</span></td>
+      </tr>
+      <tr>
+        <td><strong>Sec 6.1</strong></td>
+        <td>Policy enforcement, approval workflows, release gates</td>
+        <td>Two-Person Integrity production gates, Decision Room disposition recording</td>
+        <td><span class="badge-compliant">COMPLIANT</span></td>
+      </tr>
+      <tr>
+        <td><strong>Sec 6.3</strong></td>
+        <td>Clustered HA architecture, failover, horizontal scale</td>
+        <td>Active/active stateless nodes with automated Patroni database failover</td>
+        <td><span class="badge-compliant">COMPLIANT</span></td>
+      </tr>
+      <tr>
+        <td><strong>Sec 6.4</strong></td>
+        <td>Automated backups, point-in-time recovery across sites</td>
+        <td>Continuous WAL-G archiving, daily snapshot replication, tested DR runbooks</td>
+        <td><span class="badge-compliant">COMPLIANT</span></td>
+      </tr>
+      <tr>
+        <td><strong>Sec 8</strong></td>
+        <td>Encryption in transit (TLS 1.2+) & at rest, SSO, audits</td>
+        <td>Enforced TLS 1.3, AES-256 disk encryption, local HSM/KMS keys, SAML 2.0</td>
+        <td><span class="badge-compliant">COMPLIANT</span></td>
+      </tr>
+      <tr>
+        <td><strong>Sec 10</strong></td>
+        <td>Flexible tiered licensing (Core / Advanced / Enterprise)</td>
+        <td>Perpetual Enterprise Tier licensing without per-seat user or runner caps</td>
+        <td><span class="badge-compliant">COMPLIANT</span></td>
+      </tr>
+    </tbody>
+  </table>
+
+  <h2>4. Commercial Investment & Multi-Tier Labor Pricing</h2>
+  <table>
+    <thead>
+      <tr>
+        <th>Engineering Tier / Role</th>
+        <th>Rate</th>
+        <th>Hours</th>
+        <th>Total (USD)</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td><strong>Tier 1: Senior Principal DevOps Architect</strong> (HA Architecture & Security)</td>
+        <td>$210/hr</td>
+        <td>120 hrs</td>
+        <td>$25,200.00</td>
+      </tr>
+      <tr>
+        <td><strong>Tier 2: Lead DevSecOps & Pipeline Engineers</strong> (SCM, CI/CD, IaC, Security)</td>
+        <td>$160/hr</td>
+        <td>280 hrs</td>
+        <td>$44,800.00</td>
+      </tr>
+      <tr>
+        <td><strong>Tier 3: Systems Integration & Identity Specialists</strong> (Active Directory, SAN)</td>
+        <td>$130/hr</td>
+        <td>160 hrs</td>
+        <td>$20,800.00</td>
+      </tr>
+      <tr>
+        <td><strong>Tier 4: Training & Documentation Specialists</strong> (Runbooks & 5 Workshops)</td>
+        <td>$100/hr</td>
+        <td>100 hrs</td>
+        <td>$10,000.00</td>
+      </tr>
+      <tr>
+        <td><strong>Tier 5: 24/7 Hypercare & Operations Engineers</strong> (30-day Post-Go-Live)</td>
+        <td>$90/hr</td>
+        <td>140 hrs</td>
+        <td>$12,600.00</td>
+      </tr>
+      <tr>
+        <td colspan="3"><strong>Subtotal Professional Implementation Services (800 hours)</strong></td>
+        <td><strong>$113,400.00</strong></td>
+      </tr>
+      <tr>
+        <td colspan="3"><strong>DevOps Server Enterprise Platform License (1 Year Perpetual + Updates)</strong></td>
+        <td><strong>$48,000.00</strong></td>
+      </tr>
+      <tr>
+        <td colspan="3"><strong>Mission-Critical 24/7 Enterprise SLA Support (15-min Severity 1 Response)</strong></td>
+        <td><strong>Included</strong></td>
+      </tr>
+      <tr style="background: #eef7f5; font-size: 15px;">
+        <td colspan="3"><strong>Total Contract Value (Turnkey Implementation + Licensing)</strong></td>
+        <td><strong style="color: var(--primary);">$161,400.00</strong></td>
+      </tr>
+    </tbody>
+  </table>
+
+  <h2>5. Phased Implementation Roadmap (16 Weeks)</h2>
+  <ul>
+    <li><strong>Phase 1: Inception & Readiness (Weeks 1–4):</strong> Hardware audit at Roxy DC, network allocation, Active Directory schema federation signoff.</li>
+    <li><strong>Phase 2: Platform Clustering (Weeks 5–8):</strong> Deploy clustered DevOps Server nodes, configure Patroni PostgreSQL HA, connect SAN/NAS storage.</li>
+    <li><strong>Phase 3: DevSecOps & Pilot Onboarding (Weeks 9–12):</strong> Configure runner fabric, integrate SAST/DAST pipelines, onboard 3 MOE pilot applications.</li>
+    <li><strong>Phase 4: Knowledge Transfer & Production Go-Live (Weeks 13–16):</strong> Complete 5 administrator and developer training tracks, final security audit, 30-day hypercare handoff.</li>
+  </ul>
+
+  <div class="signature-block">
+    <div>
+      <strong>Submitted by:</strong><br>
+      Sovereign Agentic Systems & Cloud Infrastructure Fleet<br>
+      Lead Architect & Bid Director
+    </div>
+    <div style="text-align: right;">
+      <strong>Date:</strong> 2026-10-25<br>
+      <strong>Deliverable File:</strong> moe_devops_server_rfp_proposal.md
+    </div>
+  </div>
+</div>
+</body>
+</html>
