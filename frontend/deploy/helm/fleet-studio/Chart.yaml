@@ -1,0 +1,6 @@
+apiVersion: v2
+name: fleet-studio
+description: Desired-state governance and assurance control plane for Hermes agent fleets
+type: application
+version: 0.1.0
+appVersion: "0.1.0"

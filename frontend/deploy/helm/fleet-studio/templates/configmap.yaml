@@ -1,0 +1,21 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "fleet-studio.fullname" . }}-config
+  labels:
+    {{- include "fleet-studio.labels" . | nindent 4 }}
+data:
+  FLEET_STUDIO_AUTH_REQUIRED: {{ .Values.config.authRequired | quote }}
+  FLEET_STUDIO_HERMES_HOOKS_ENABLED: {{ .Values.config.hermesHooksEnabled | quote }}
+  FLEET_STUDIO_HERMES_LOOPBACK_BRIDGE_ENABLED: {{ .Values.config.hermesLoopbackBridgeEnabled | quote }}
+  FLEET_STUDIO_FRONTEND_ORIGIN: {{ .Values.config.frontendOrigin | quote }}
+  FLEET_STUDIO_OIDC_METADATA_URL: {{ .Values.config.oidcMetadataUrl | quote }}
+  FLEET_STUDIO_OIDC_REDIRECT_URI: {{ .Values.config.oidcRedirectUri | quote }}
+  FLEET_STUDIO_OIDC_ROLES_CLAIM: {{ .Values.config.oidcRolesClaim | quote }}
+  FLEET_STUDIO_HERMES_BASE_URL: {{ .Values.config.hermesBaseUrl | quote }}
+  FLEET_STUDIO_HERMES_TOOL_RISK_OVERRIDES: {{ .Values.config.hermesToolRiskOverrides | toJson | quote }}
+  FLEET_STUDIO_SMTP_HOST: {{ .Values.config.smtpHost | quote }}
+  FLEET_STUDIO_SMTP_PORT: {{ .Values.config.smtpPort | quote }}
+  FLEET_STUDIO_SMTP_SENDER: {{ .Values.config.smtpSender | quote }}
+  FLEET_STUDIO_OUTPUT_WEBHOOK_URL: {{ .Values.config.outputWebhookUrl | quote }}
+  FLEET_STUDIO_OTEL_EXPORTER_OTLP_ENDPOINT: {{ .Values.config.otelExporterOtlpEndpoint | quote }}

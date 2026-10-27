@@ -1,0 +1,116 @@
+{
+  "arena_id": "arena-research-recent-developm-27ce36",
+  "arena_name": "Web intel",
+  "arena_slug": "research-recent-developm",
+  "mission_prompt": "Research recent developments in fusion energy reactors and summarize the latest 2026 milestones.",
+  "strategy_profile": "STANDARD",
+  "units": [
+    {
+      "profile_name": "fleet-research-recent--ingest-model-latest-",
+      "unit_codename": "RECON_INGESTION",
+      "task_id": "t--latest-",
+      "task_name": "Ingest & Model Latest Fusion Reactor Milestones (2026)",
+      "operational_stage": "RECON_INGESTION",
+      "scoped_tools": [
+        "arxiv_research",
+        "execute_python",
+        "web_search"
+      ],
+      "required_skills": [
+        "web_search",
+        "literature_review",
+        "data_analysis",
+        "code_execution",
+        "general_reasoning"
+      ],
+      "description": "Using web search, literature review, and public datasets, collect information on fusion reactor developments reported in 2026. Synthesize the data into a structured tabular format (e.g., CSV or JSON) that includes: project name, country/organization, reactor type (tokamak, stellarator, laser\u2011driven, etc.), key technical milestone achieved, date of announcement, and source reference.",
+      "input_contract": "",
+      "output_contract": "",
+      "profile_exists": true,
+      "attached_files": []
+    },
+    {
+      "profile_name": "fleet-research-recent--analyze-summarize-20",
+      "unit_codename": "DELIVERABLE_SYNTHESIS",
+      "task_id": "t-arize-20",
+      "task_name": "Analyze & Summarize 2026 Fusion Milestones",
+      "operational_stage": "DELIVERABLE_SYNTHESIS",
+      "scoped_tools": [
+        "execute_python",
+        "summarize_to_presentation"
+      ],
+      "required_skills": [
+        "data_analysis",
+        "general_reasoning",
+        "summarization"
+      ],
+      "description": "Consume the dataset produced by t1, perform a quick statistical and thematic analysis to identify trends (e.g., dominant reactor type, geographic distribution), and generate a concise written summary highlighting the most significant milestones. The output should be clear, bullet\u2011pointed, and suitable for inclusion in a briefing or report.",
+      "input_contract": "",
+      "output_contract": "",
+      "profile_exists": true,
+      "attached_files": []
+    }
+  ],
+  "dag": {
+    "goal": "Research recent developments in fusion energy reactors and provide a concise summary of the latest 2026 milestones.",
+    "reasoning": "The user requests up-to-date information on fusion energy research. No local files are provided, so we must autonomously gather and model relevant data from publicly available sources (e.g., scientific literature, press releases, conference proceedings). The task is split into two phases: first ingest and structure the latest 2026 milestones; second analyze that structured data to produce a clear summary.",
+    "tasks": [
+      {
+        "id": "t1",
+        "name": "Ingest & Model Latest Fusion Reactor Milestones (2026)",
+        "description": "Using web search, literature review, and public datasets, collect information on fusion reactor developments reported in 2026. Synthesize the data into a structured tabular format (e.g., CSV or JSON) that includes: project name, country/organization, reactor type (tokamak, stellarator, laser\u2011driven, etc.), key technical milestone achieved, date of announcement, and source reference.",
+        "required_skills": [
+          "web_search",
+          "literature_review",
+          "data_analysis",
+          "code_execution",
+          "general_reasoning"
+        ],
+        "expected_output": "A structured dataset (CSV/JSON) containing all identified 2026 fusion milestones with metadata and source links.",
+        "dependencies": [],
+        "risk_level": "low",
+        "max_retries": 2,
+        "timeout_seconds": 600,
+        "parameters": {},
+        "agent_id": null,
+        "hermes_profile": "fleet-research-recent--ingest-model-latest-",
+        "specialist_spec": null,
+        "_hermes_profile": "fleet-research-recent--ingest-model-latest-"
+      },
+      {
+        "id": "t2",
+        "name": "Analyze & Summarize 2026 Fusion Milestones",
+        "description": "Consume the dataset produced by t1, perform a quick statistical and thematic analysis to identify trends (e.g., dominant reactor type, geographic distribution), and generate a concise written summary highlighting the most significant milestones. The output should be clear, bullet\u2011pointed, and suitable for inclusion in a briefing or report.",
+        "required_skills": [
+          "data_analysis",
+          "general_reasoning",
+          "summarization"
+        ],
+        "expected_output": "A short narrative (\u2248300 words) summarizing the key 2026 fusion reactor milestones, with emphasis on breakthroughs, technological advances, and geopolitical implications.",
+        "dependencies": [
+          "t1"
+        ],
+        "risk_level": "low",
+        "max_retries": 2,
+        "timeout_seconds": 300,
+        "parameters": {},
+        "agent_id": null,
+        "hermes_profile": "fleet-research-recent--analyze-summarize-20",
+        "specialist_spec": null,
+        "_hermes_profile": "fleet-research-recent--analyze-summarize-20"
+      }
+    ],
+    "estimated_completion_seconds": 60
+  },
+  "status": "completed",
+  "created_at": 1793101316.479232,
+  "updated_at": 1793102135.994562,
+  "profiles_to_create": [],
+  "profiles_existing": [
+    "fleet-research-recent--ingest-model-latest-",
+    "fleet-research-recent--analyze-summarize-20"
+  ],
+  "workflow_id": "fleet-arena-research-recent-developm-27ce36-5d1ce4",
+  "agent_id": null,
+  "resilience": "standard"
+}

@@ -1,0 +1,66 @@
+nameOverride: ""
+fullnameOverride: ""
+
+image:
+  backend: ghcr.io/example/fleet-studio-api:0.1.0
+  frontend: ghcr.io/example/fleet-studio-web:0.1.0
+  daemon: ghcr.io/example/fleet-studio-daemon:0.1.0
+  pullPolicy: IfNotPresent
+
+replicaCount:
+  backend: 2
+  frontend: 2
+  daemon: 1
+
+service:
+  backendPort: 8000
+  frontendPort: 3000
+
+ingress:
+  enabled: false
+  className: nginx
+  host: fleet-studio.example.internal
+  tlsSecretName: fleet-studio-tls
+
+config:
+  authRequired: "true"
+  hermesHooksEnabled: "false"
+  hermesLoopbackBridgeEnabled: "false"
+  frontendOrigin: https://fleet-studio.example.internal
+  oidcMetadataUrl: ""
+  oidcRedirectUri: https://fleet-studio.example.internal/auth/callback
+  oidcRolesClaim: roles
+  hermesBaseUrl: ""
+  hermesToolRiskOverrides: {}
+  smtpHost: ""
+  smtpPort: "587"
+  smtpSender: ""
+  outputWebhookUrl: ""
+  otelExporterOtlpEndpoint: ""
+
+secrets:
+  databaseSecretName: fleet-studio-database
+  oidcSecretName: fleet-studio-oidc
+  sessionSecretName: fleet-studio-session
+  hermesSecretName: fleet-studio-hermes
+  daemonSecretName: fleet-studio-daemon
+  webhookSecretName: fleet-studio-webhook
+  smtpSecretName: fleet-studio-smtp
+  outputWebhookSecretName: fleet-studio-output-webhook
+  otelSecretName: fleet-studio-otel
+
+placement:
+  nodeSelector: {}
+  tolerations: []
+  affinity: {}
+
+resources:
+  backend:
+    requests: { cpu: 200m, memory: 256Mi }
+    limits: { cpu: "1", memory: 1Gi }
+  frontend:
+    requests: { cpu: 100m, memory: 128Mi }
+    limits: { cpu: 500m, memory: 512Mi }
+  daemon:
+    requests: { cpu: 100m, memory: 128Mi }
+    limits: { cpu: 500m, memory: 512Mi }

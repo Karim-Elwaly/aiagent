@@ -265,48 +265,34 @@ class FleetArenaComposer:
 
         for unit in manifest.units:
             pname = unit.profile_name
-            pdir = profiles.home / "profiles" / pname
-
-            if pdir.is_dir() and (pdir / "config.yaml").is_file() and profiles.profile_has_model(pname):
-                # Profile already exists and is healthy
-                unit.profile_exists = True
-                logger.info("Fleet profile '%s' already exists; reusing", pname)
-                # Sync model and MCP URL in case they drifted
-                profiles.sync_model_from_default(pname)
-                continue
-
-            # Create the named profile
             try:
-                profiles.ensure(
-                    None,
-                    dynamic_tools=unit.scoped_tools,
-                    profile_name_override=pname,
+                info = profiles.ensure_fleet_unit(
+                    profile_name=pname,
+                    unit_name=unit.task_name,
+                    role=unit.operational_stage,
+                    scope=unit.description,
+                    skills=list(unit.required_skills or []),
+                    tools=list(unit.scoped_tools or []),
+                    arena_name=manifest.arena_name,
+                    input_contract=unit.input_contract,
+                    output_contract=unit.output_contract,
+                    registry=self.registry,
                 )
                 unit.profile_exists = True
-                gateway_needs_restart = True
+                if info.changed:
+                    gateway_needs_restart = True
                 logger.info(
-                    "Created fleet profile '%s' with %d tools: %s",
-                    pname, len(unit.scoped_tools), unit.scoped_tools,
+                    "Provisioned fleet specialist profile '%s' (role: %s, %d skills: %s, %d tools: %s, changed=%s)",
+                    pname, unit.operational_stage, len(unit.required_skills), unit.required_skills,
+                    len(unit.scoped_tools), unit.scoped_tools, info.changed,
                 )
             except Exception as exc:
-                logger.warning("Failed to create fleet profile '%s': %s", pname, exc)
+                logger.warning("Failed to configure fleet profile '%s': %s", pname, exc)
                 unit.profile_exists = False
 
-            # Write task-specific skills
-            if self.registry and unit.scoped_tools:
-                try:
-                    from src.hermes.skills import skill_documents
-                    docs = skill_documents(
-                        None, self.registry,
-                        focus_tools=set(unit.scoped_tools),
-                        focus_skills=set(unit.required_skills),
-                    )
-                    profiles.write_profile_skills(pname, docs)
-                except Exception as exc:
-                    logger.debug("Could not write skills for '%s': %s", pname, exc)
-
         # Sync MCP URLs for all fleet profiles
-        profiles.sync_all_profiles_mcp_url()
+        if profiles.sync_all_profiles_mcp_url():
+            gateway_needs_restart = True
 
         # Single gateway restart if any profiles were created
         if gateway_needs_restart:

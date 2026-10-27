@@ -1,0 +1,5 @@
+[project]
+name = "fleetctl-daemon"
+version = "0.1.0"
+requires-python = ">=3.12"
+dependencies = ["apscheduler>=3.10,<4", "httpx>=0.27,<1"]

@@ -1,0 +1,91 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_DB: fleet_studio
+      POSTGRES_USER: fleet
+      POSTGRES_PASSWORD: fleet
+    ports:
+      - "5432:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U fleet -d fleet_studio"]
+      interval: 5s
+      timeout: 3s
+      retries: 12
+    volumes:
+      - fleet-studio-data:/var/lib/postgresql/data
+
+  api:
+    build:
+      context: ..
+      dockerfile: deploy/Dockerfile.backend
+    environment:
+      FLEET_STUDIO_DATABASE_URL: postgresql+asyncpg://fleet:fleet@postgres:5432/fleet_studio
+      FLEET_STUDIO_AUTH_REQUIRED: ${FLEET_STUDIO_AUTH_REQUIRED:-false}
+      FLEET_STUDIO_SESSION_SECRET: ${FLEET_STUDIO_SESSION_SECRET:-local-compose-only-change-me}
+      FLEET_STUDIO_DAEMON_TOKEN: ${FLEET_STUDIO_DAEMON_TOKEN:-local-compose-only-daemon-change-me}
+      FLEET_STUDIO_WEBHOOK_SECRET: ${FLEET_STUDIO_WEBHOOK_SECRET:-}
+      FLEET_STUDIO_HERMES_BASE_URL: ${FLEET_STUDIO_HERMES_BASE_URL:-http://host.docker.internal:9119}
+      FLEET_STUDIO_HERMES_API_TOKEN: ${FLEET_STUDIO_HERMES_API_TOKEN:-}
+      FLEET_STUDIO_HERMES_TOOL_RISK_OVERRIDES: ${FLEET_STUDIO_HERMES_TOOL_RISK_OVERRIDES:-{}}
+      FLEET_STUDIO_HERMES_LOOPBACK_BRIDGE_ENABLED: ${FLEET_STUDIO_HERMES_LOOPBACK_BRIDGE_ENABLED:-true}
+      FLEET_STUDIO_HERMES_HOOKS_ENABLED: ${FLEET_STUDIO_HERMES_HOOKS_ENABLED:-true}
+      FLEET_STUDIO_LLM_BASE_URL: ${FLEET_STUDIO_LLM_BASE_URL:-}
+      FLEET_STUDIO_LLM_MODEL: ${FLEET_STUDIO_LLM_MODEL:-qwen/qwen3.8-27b}
+      FLEET_STUDIO_API_URL: http://api:8000
+      FLEET_STUDIO_OIDC_CLIENT_ID: ${FLEET_STUDIO_OIDC_CLIENT_ID:-}
+      FLEET_STUDIO_OIDC_CLIENT_SECRET: ${FLEET_STUDIO_OIDC_CLIENT_SECRET:-}
+      FLEET_STUDIO_OIDC_METADATA_URL: ${FLEET_STUDIO_OIDC_METADATA_URL:-}
+      FLEET_STUDIO_OIDC_REDIRECT_URI: ${FLEET_STUDIO_OIDC_REDIRECT_URI:-http://localhost:8001/auth/callback}
+      FLEET_STUDIO_SMTP_HOST: ${FLEET_STUDIO_SMTP_HOST:-}
+      FLEET_STUDIO_SMTP_PORT: ${FLEET_STUDIO_SMTP_PORT:-587}
+      FLEET_STUDIO_SMTP_SENDER: ${FLEET_STUDIO_SMTP_SENDER:-}
+      FLEET_STUDIO_SMTP_USERNAME: ${FLEET_STUDIO_SMTP_USERNAME:-}
+      FLEET_STUDIO_SMTP_PASSWORD: ${FLEET_STUDIO_SMTP_PASSWORD:-}
+      FLEET_STUDIO_OUTPUT_WEBHOOK_URL: ${FLEET_STUDIO_OUTPUT_WEBHOOK_URL:-}
+      FLEET_STUDIO_OUTPUT_WEBHOOK_TOKEN: ${FLEET_STUDIO_OUTPUT_WEBHOOK_TOKEN:-}
+      FLEET_STUDIO_OTEL_EXPORTER_OTLP_ENDPOINT: ${FLEET_STUDIO_OTEL_EXPORTER_OTLP_ENDPOINT:-}
+      FLEET_STUDIO_OTEL_EXPORTER_OTLP_HEADERS: ${FLEET_STUDIO_OTEL_EXPORTER_OTLP_HEADERS:-{}}
+      FLEET_STUDIO_FRONTEND_ORIGIN: http://localhost:3000
+    volumes:
+      - ../backend:/app/backend
+      - fleet-studio-uploads:/hermes-uploads
+    ports:
+      - "8001:8000"
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/health', timeout=3)"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+  frontend:
+    build:
+      context: ..
+      dockerfile: deploy/Dockerfile.frontend
+      args:
+        NEXT_PUBLIC_API_URL: http://127.0.0.1:8001
+    ports:
+      - "3000:3000"
+    depends_on:
+      - api
+
+  daemon:
+    build:
+      context: ..
+      dockerfile: deploy/Dockerfile.daemon
+    environment:
+      FLEET_STUDIO_API_URL: http://api:8000
+      FLEET_STUDIO_DAEMON_TOKEN: ${FLEET_STUDIO_DAEMON_TOKEN:-local-compose-only-daemon-change-me}
+      FLEET_STUDIO_DAEMON_ID: ${FLEET_STUDIO_DAEMON_ID:-local-daemon}
+    volumes:
+      - ../backend:/app/backend
+    depends_on:
+      api:
+        condition: service_healthy
+
+volumes:
+  fleet-studio-data:
+  fleet-studio-uploads:

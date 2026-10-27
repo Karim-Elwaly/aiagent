@@ -347,9 +347,10 @@ class HermesProfiles:
 
     def profile_config(self, name: str, tools: list[str] | None = None) -> dict[str, str]:
         ext_dirs = [(self.skills_root / name).resolve().as_posix()]
-        lib_dir = self.get_skills_library_dir()
-        if lib_dir and lib_dir.resolve().as_posix() not in ext_dirs:
-            ext_dirs.append(lib_dir.resolve().as_posix())
+        if not is_dynamic_profile_name(name) and not is_fleet_profile_name(name) and name != ORCHESTRATOR_PROFILE:
+            lib_dir = self.get_skills_library_dir()
+            if lib_dir and lib_dir.resolve().as_posix() not in ext_dirs:
+                ext_dirs.append(lib_dir.resolve().as_posix())
         config = {
             "tools.tool_search.enabled": "off",
             "skills.external_dirs": json.dumps(ext_dirs),
@@ -391,6 +392,7 @@ class HermesProfiles:
             changed = True
 
         profile_exists = pdir.is_dir() and (pdir / "config.yaml").is_file()
+        created = not profile_exists
         if not profile_exists:
             description = (
                 f"aiagent dynamic bespoke profile '{name}'" if is_dynamic else
@@ -510,6 +512,236 @@ class HermesProfiles:
             **({"configured_at": restarted_at or now} if changed else {}),
         })
         return ProfileInfo(name=name, api_key=api_key, changed=changed, restarted_at=restarted_at)
+
+    def render_fleet_unit_soul(
+        self,
+        unit_name: str,
+        role: str,
+        scope: str,
+        skills: list[str],
+        tools: list[str],
+        profile_name: str,
+        arena_name: str = "",
+        input_contract: str = "",
+        output_contract: str = "",
+        workflow_steps: list[dict[str, Any]] | None = None,
+        upstream_agents: list[str] | None = None,
+    ) -> str:
+        """Renders an authoritative, dedicated SOUL.md system prompt for a fleet specialist agent."""
+        steps_text = ""
+        if workflow_steps:
+            steps_lines = [
+                f"{i+1}. **{s.get('name', 'Step')}** (`{s.get('capability_id', 'task')}`) — Retries: {s.get('retries', 1)}"
+                for i, s in enumerate(workflow_steps)
+            ]
+            steps_text = "\n".join(steps_lines)
+        else:
+            steps_text = "Execute assigned operational tasks autonomously within authorized scope."
+
+        skills_str = ", ".join(skills) if skills else "None (Pure reasoning & synthesis)"
+        tools_str = ", ".join(tools) if tools else "Standard read-only tools"
+        upstream_str = ", ".join(upstream_agents) if upstream_agents else "Direct entry or trigger event"
+
+        return (
+            f"# Specialist Agent: {unit_name}\n\n"
+            f"**Operational Role**: {role}\n"
+            f"**Mission / Fleet Arena**: {arena_name or 'Autonomous Fleet'}\n"
+            f"**Fleet Profile**: `{profile_name}`\n\n"
+            f"## Operational Scope & Boundaries\n"
+            f"{scope or f'Autonomous specialist agent dedicated to {unit_name}.'}\n\n"
+            f"## Capability & Tool Bindings\n"
+            f"- **Bound Skills**: {skills_str}\n"
+            f"- **Authorized Toolset**: {tools_str}\n"
+            f"- **Handoff Upstream**: {upstream_str}\n\n"
+            f"## Internal Workflow\n"
+            f"{steps_text}\n\n"
+            f"## Operational Contracts\n"
+            f"- **Input Expectation**: {input_contract or 'Upstream verified telemetry and stage inputs'}\n"
+            f"- **Deliverable Target**: {output_contract or 'Verified execution payload fulfilling specialist assignments'}\n\n"
+            f"## Execution Directive\n"
+            f"You are a dedicated specialist agent operating within an autonomous, multi-agent enterprise fleet.\n"
+            f"Follow your operational boundaries strictly. Do NOT exceed your assigned scope or attempt tasks outside your role.\n"
+            f"Use only your authorized tools and bound skills. Always deliver structured, epistemically grounded outputs with forensic citations.\n"
+        )
+
+    def ensure_fleet_unit(
+        self,
+        profile_name: str,
+        unit_name: str,
+        role: str,
+        scope: str,
+        skills: list[str],
+        tools: list[str],
+        arena_name: str = "",
+        input_contract: str = "",
+        output_contract: str = "",
+        workflow_steps: list[dict[str, Any]] | None = None,
+        upstream_agents: list[str] | None = None,
+        registry: Any = None,
+    ) -> ProfileInfo:
+        """Create or update a Fleet Arena specialist profile so its SOUL.md, description,
+        bound skills, and scoped tools strictly match the Fleet Studio specifications.
+        """
+        pdir = self.home / "profiles" / profile_name
+        changed = False
+        restarted_at = 0.0
+        description = f"{unit_name} ({role}): {scope}".strip()[:_DESCRIPTION_LIMIT]
+
+        if pdir.is_dir() and not self.profile_has_model(profile_name):
+            logger.info("Fleet profile '%s' is missing model configuration; deleting to re-clone", profile_name)
+            self.delete_profile(profile_name)
+            changed = True
+
+        profile_exists = pdir.is_dir() and (pdir / "config.yaml").is_file()
+        if not profile_exists:
+            if pdir.is_dir():
+                (pdir / "config.yaml").unlink(missing_ok=True)
+                shutil.rmtree(pdir, ignore_errors=True)
+            try:
+                self._run(["profile", "create", profile_name, "--clone-from", "default", "--no-alias", "--description", description])
+                changed = True
+                logger.info("Created fleet profile '%s' with description: %s", profile_name, description)
+            except HermesError as exc:
+                pdir.mkdir(parents=True, exist_ok=True)
+                if not (pdir / "config.yaml").is_file():
+                    logger.warning("Hermes profile create failed (%s); bootstrapping profile '%s' directly", exc, profile_name)
+                    self.sync_model_from_default(profile_name)
+                changed = True
+        else:
+            applied_state = self.state.get(profile_name)
+            desc_hash = _digest(description)
+            if applied_state.get("description_sha256") != desc_hash:
+                try:
+                    self._run(["profile", "describe", profile_name, "--text", description])
+                    changed = True
+                except Exception as exc:
+                    logger.debug("Could not update profile description via CLI: %s", exc)
+
+        # 1. Sync Model
+        if self.sync_model_from_default(profile_name):
+            changed = True
+
+        # 2. Write Environment & API Keys
+        env = pdir / ".env"
+        api_key = read_env_value(env, "API_SERVER_KEY")
+        if not api_key:
+            api_key = secrets.token_urlsafe(32)
+            append_env_value(env, "API_SERVER_KEY", api_key)
+            changed = True
+        token = read_env_value(env, TOKEN_ENV)
+        if not token:
+            token = secrets.token_urlsafe(32)
+            append_env_value(env, TOKEN_ENV, token)
+            changed = True
+
+        # 3. Write Dedicated SOUL.md
+        soul = self.render_fleet_unit_soul(
+            unit_name=unit_name,
+            role=role,
+            scope=scope,
+            skills=skills,
+            tools=tools,
+            profile_name=profile_name,
+            arena_name=arena_name,
+            input_contract=input_contract,
+            output_contract=output_contract,
+            workflow_steps=workflow_steps,
+            upstream_agents=upstream_agents,
+        )
+        soul_hash = _digest(soul)
+        soul_file = pdir / "SOUL.md"
+        current_soul = soul_file.read_text(encoding="utf-8") if soul_file.is_file() else ""
+        if current_soul != soul:
+            soul_file.write_text(soul, encoding="utf-8")
+            changed = True
+            logger.info("Updated dedicated SOUL.md for fleet specialist '%s'", profile_name)
+
+        # 4. Strict Skill Isolation: Purge unwanted cloned skills
+        allowed_skills = set(skills or [])
+        purge_cloned_skills(pdir, allowed_skills=allowed_skills)
+
+        # Copy allowed skills from library to profile dir
+        lib = self.list_available_library_skills()
+        p_skills = pdir / "skills"
+        p_skills.mkdir(parents=True, exist_ok=True)
+        for sname in allowed_skills:
+            target = p_skills / sname
+            if not target.is_dir() or not (target / "SKILL.md").is_file():
+                meta = lib.get(sname)
+                if meta:
+                    src = meta["path"]
+                    if src.is_dir():
+                        shutil.copytree(src, target, dirs_exist_ok=True)
+                    elif src.is_file():
+                        target.mkdir(parents=True, exist_ok=True)
+                        shutil.copy2(src, target / "SKILL.md")
+
+        # Write skill documents to skills_root / profile_name
+        sdir = self.skills_root / profile_name
+        sdir.mkdir(parents=True, exist_ok=True)
+        if registry and (tools or skills):
+            try:
+                from src.hermes.skills import skill_documents
+                docs = skill_documents(None, registry, focus_tools=set(tools), focus_skills=set(skills))
+                if docs:
+                    self.write_profile_skills(profile_name, docs)
+            except Exception as exc:
+                logger.debug("Could not write generated skill docs for '%s': %s", profile_name, exc)
+
+        # 5. Strict Config Isolation: MCP tools and scoped external dirs
+        config_to_set: dict[str, Any] = {
+            "tools.tool_search.enabled": "off",
+            "tool_format": "json",
+            "skills.external_dirs": json.dumps([(self.skills_root / profile_name).resolve().as_posix()]),
+            f"mcp_servers.{MCP_SERVER_NAME}.tools.include": json.dumps(sorted(tools or [])),
+        }
+        mcp_url = self.settings.hermes_mcp_url
+        target_timeout = int(getattr(self.settings, "hermes_run_timeout_seconds", 600))
+        config_to_set[f"mcp_servers.{MCP_SERVER_NAME}.url"] = mcp_url
+        config_to_set[f"mcp_servers.{MCP_SERVER_NAME}.headers.Authorization"] = "Bearer ${" + TOKEN_ENV + "}"
+        config_to_set[f"mcp_servers.{MCP_SERVER_NAME}.timeout"] = target_timeout
+
+        self.write_profile_config(profile_name, config_to_set)
+
+        # 6. Toolsets: Enable skills and any required tools
+        wanted_toolsets = ["skills"]
+        for t in (tools or []):
+            if any(k in t.lower() for k in ["file", "read", "write", "upload", "path", "dir"]):
+                if "file" not in wanted_toolsets:
+                    wanted_toolsets.append("file")
+            if any(k in t.lower() for k in ["python", "code", "eval", "math"]):
+                if "code_execution" not in wanted_toolsets:
+                    wanted_toolsets.append("code_execution")
+            if any(k in t.lower() for k in ["command", "terminal", "bash", "shell", "exec"]):
+                if "terminal" not in wanted_toolsets:
+                    wanted_toolsets.append("terminal")
+            if any(k in t.lower() for k in ["web", "http", "curl", "url", "search"]):
+                if "web" not in wanted_toolsets:
+                    wanted_toolsets.append("web")
+
+        self.apply_toolsets(profile_name, sorted(wanted_toolsets))
+
+        # 7. Update State
+        now = time.time()
+        self.state.update(profile_name, {
+            "agent_id": profile_name,
+            "unit_name": unit_name,
+            "role": role,
+            "scope": scope,
+            "token_sha256": token_hash(token),
+            "toolsets": sorted(wanted_toolsets),
+            "mcp_url": mcp_url,
+            "mcp_timeout": target_timeout,
+            "config": config_to_set,
+            "bundle": sorted(tools or []),
+            "skills": sorted(skills or []),
+            "soul_sha256": soul_hash,
+            "description_sha256": _digest(description),
+            "last_used_at": now,
+            "configured_at": now if changed else self.state.get(profile_name).get("configured_at", now),
+        })
+
+        return ProfileInfo(name=profile_name, api_key=api_key, changed=changed, restarted_at=restarted_at)
 
     def delete_profile(self, name: str) -> bool:
         """Delete a dynamic or fleet profile from disk and state. Refuses to delete permanent profiles."""

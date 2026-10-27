@@ -1,0 +1,10 @@
+FROM python:3.12-slim
+
+ENV PYTHONDONTWRITEBYTECODE=1 PYTHONUNBUFFERED=1 PYTHONPATH=/app/backend
+WORKDIR /app
+COPY backend/ ./backend/
+COPY agents/fleetctl_daemon/ ./daemon/
+RUN pip install --no-cache-dir ./backend
+
+WORKDIR /app/daemon
+CMD ["python", "main.py"]

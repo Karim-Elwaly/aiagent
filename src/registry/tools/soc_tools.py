@@ -626,7 +626,7 @@ TRIAGE_ALERT_SPEC = ToolSpec(
     tool_id="soc_triage_alert",
     name="triage_security_alert",
     description="Universal security triage: analyze alerts or logs across Host, Cloud, Web, Linux, and Network domains, extracting IoCs, CVEs, and scoring severity.",
-    skills_provided=["triage", "alert_triage", "ioc_extraction", "security_audit", "general_reasoning"],
+    skills_provided=["triage", "alert_triage", "ioc_extraction", "security_audit"],
     parameters={
         "alert_text": {
             "type": "string",
@@ -4019,7 +4019,7 @@ COMPRESS_TIMELINE_SPEC = ToolSpec(
         "log_compression",
         "timeline_synthesis",
         "context_compression",
-        "summarization",
+        "security_summarization",
         "incident_compression",
         "mitre_mapping",
         "mitre_rca",

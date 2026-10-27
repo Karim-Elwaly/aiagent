@@ -1,0 +1,13 @@
+# Merge these entries into the existing Hermes config.yaml hooks section.
+# Use the Python interpreter available to the Hermes process and absolute paths.
+hooks:
+  pre_tool_call:
+    - command: '"C:/path/to/python.exe" "D:/path/to/fleet-studio/agents/fleetcontrol_plugin/hook.py"'
+      matcher: ".*"
+      timeout: 300
+      fail_closed: true
+  post_tool_call:
+    - command: '"C:/path/to/python.exe" "D:/path/to/fleet-studio/agents/fleetcontrol_plugin/hook.py"'
+      matcher: ".*"
+      timeout: 10
+      fail_closed: false

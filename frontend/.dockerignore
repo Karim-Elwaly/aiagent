@@ -1,0 +1,17 @@
+.git
+.github
+.vscode
+.env
+.env.*
+**/__pycache__
+**/*.py[cod]
+**/.pytest_cache
+**/.ruff_cache
+.venv
+**/.venv
+frontend/node_modules
+frontend/.next
+frontend/coverage
+frontend/*.tsbuildinfo
+backend/tests
+*.log

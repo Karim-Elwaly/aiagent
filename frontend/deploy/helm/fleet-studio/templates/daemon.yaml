@@ -1,0 +1,48 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "fleet-studio.fullname" . }}-daemon
+  labels:
+    {{- include "fleet-studio.labels" . | nindent 4 }}
+    app.kubernetes.io/component: daemon
+spec:
+  replicas: {{ .Values.replicaCount.daemon }}
+  selector:
+    matchLabels:
+      app.kubernetes.io/instance: {{ .Release.Name }}
+      app.kubernetes.io/component: daemon
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/instance: {{ .Release.Name }}
+        app.kubernetes.io/component: daemon
+    spec:
+      nodeSelector:
+        {{- toYaml .Values.placement.nodeSelector | nindent 8 }}
+      tolerations:
+        {{- toYaml .Values.placement.tolerations | nindent 8 }}
+      affinity:
+        {{- toYaml .Values.placement.affinity | nindent 8 }}
+      containers:
+        - name: daemon
+          image: {{ .Values.image.daemon | quote }}
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          command: ["python", "main.py"]
+          workingDir: /app/daemon
+          env:
+            - name: FLEET_STUDIO_API_URL
+              value: "http://{{ include "fleet-studio.fullname" . }}-api:{{ .Values.service.backendPort }}"
+            - name: FLEET_STUDIO_DAEMON_ID
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.name
+            - name: FLEET_STUDIO_DAEMON_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.secrets.daemonSecretName }}
+                  key: daemon-token
+          envFrom:
+            - configMapRef:
+                name: {{ include "fleet-studio.fullname" . }}-config
+          resources:
+            {{- toYaml .Values.resources.daemon | nindent 12 }}
