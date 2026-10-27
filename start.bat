@@ -13,6 +13,11 @@ if %ERRORLEVEL% EQU 0 (
     )
 )
 
+REM Free port 8001 if a prior cancelled batch run left a lingering process
+for /f "tokens=5" %%a in ('netstat -aon ^| findstr :8001 ^| findstr LISTENING 2^>nul') do (
+    taskkill /f /pid %%a >nul 2>&1
+)
+
 echo [*] Launching AgentHub Orchestrator and Worker Runner...
 IF EXIST ".venv\Scripts\python.exe" (
     .venv\Scripts\python.exe run.py

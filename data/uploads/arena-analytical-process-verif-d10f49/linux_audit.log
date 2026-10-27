@@ -1,0 +1,31 @@
+# Linux Audit Daemon (auditd) Log: /var/log/audit/audit.log
+# Host: k8s-worker-node-01
+# Architecture: x86_64 (arch=c000003e)
+# Audit Rules Configured:
+#   -w /etc/shadow -p rwa -k shadow_access
+#   -a always,exit -F arch=b64 -S finit_module,init_module -k kernel_module_load
+
+# --- BASELINE BENIGN EVENT: CRON JOB AUDIT RECORD ---
+type=SYSCALL msg=audit(1789461901.012:1030): arch=c000003e syscall=231 success=yes exit=0 a0=0 a1=0 a2=0 a3=0 items=0 ppid=18120 pid=18121 auid=4294967295 uid=0 gid=0 euid=0 suid=0 fsuid=0 egid=0 sgid=0 fsgid=0 tty=(none) ses=4294967295 comm="debian-sa1" exe="/usr/lib/x86_64-linux-gnu/sysstat/debian-sa1" subj=unconfined key=(null)
+type=EXECVE msg=audit(1789461901.012:1030): argc=3 a0="/usr/lib/x86_64-linux-gnu/sysstat/debian-sa1" a1="1" a2="1"
+type=PROCTITLE msg=audit(1789461901.012:1030): proctitle=2F7573722F6C69622F7838365F36342D6C696E75782D676E752F737973737461742F64656269616E2D73613100310031
+
+# --- ATTACK EVENT 1: UNAUTHORIZED /etc/shadow ACCESS (T1003.008) ---
+# Timestamp: 2026-09-14 08:42:15 UTC (Epoch: 1789461735.812)
+# Process: cat /etc/shadow executed in deploy hijacked root session (auid=1001, uid=0)
+# Syscall: 257 (openat)
+type=SYSCALL msg=audit(1789461735.812:1042): arch=c000003e syscall=257 success=yes exit=3 a0=ffffff9c a1=55d2b1f8c210 a2=0 a3=0 items=1 ppid=17112 pid=17180 auid=1001 uid=0 gid=0 euid=0 suid=0 fsuid=0 egid=0 sgid=0 fsgid=0 tty=pts1 ses=21 comm="cat" exe="/usr/bin/cat" subj=unconfined key="shadow_access"
+type=EXECVE msg=audit(1789461735.812:1042): argc=2 a0="cat" a1="/etc/shadow"
+type=CWD msg=audit(1789461735.812:1042): cwd="/home/deploy"
+type=PATH msg=audit(1789461735.812:1042): item=0 name="/etc/shadow" inode=131089 dev=fc:00 mode=0100640 ouid=0 ogid=42 rdev=00:00 nametype=NORMAL cap_fp=0 cap_fi=0 cap_fe=0 cap_fver=0 cap_frootid=0
+type=PROCTITLE msg=audit(1789461735.812:1042): proctitle=636174002F6574632F736861646F77
+
+# --- ATTACK EVENT 2: KERNEL ROOTKIT INJECTION VIA finit_module (T1014 / T1547.006) ---
+# Timestamp: 2026-09-14 08:45:30 UTC (Epoch: 1789461930.304)
+# Process: insmod diamorphine.ko executed to hook sys_call_table and hide malicious processes
+# Syscall: 313 (finit_module)
+type=SYSCALL msg=audit(1789461930.304:1058): arch=c000003e syscall=313 success=yes exit=0 a0=3 a1=55c1e0a920b0 a2=0 a3=0 items=1 ppid=17185 pid=17240 auid=1001 uid=0 gid=0 euid=0 suid=0 fsuid=0 egid=0 sgid=0 fsgid=0 tty=pts1 ses=21 comm="insmod" exe="/usr/bin/kmod" subj=unconfined key="kernel_module_load"
+type=EXECVE msg=audit(1789461930.304:1058): argc=2 a0="insmod" a1="diamorphine.ko"
+type=KERN_MODULE msg=audit(1789461930.304:1058): name="diamorphine"
+type=PATH msg=audit(1789461930.304:1058): item=0 name="/home/deploy/diamorphine.ko" inode=262188 dev=fc:00 mode=0100644 ouid=1001 ogid=1001 nametype=NORMAL cap_fp=0 cap_fi=0 cap_fe=0 cap_fver=0 cap_frootid=0
+type=PROCTITLE msg=audit(1789461930.304:1058): proctitle=696E736D6F64006469616D6F727068696E652E6B6F

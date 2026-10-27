@@ -169,12 +169,32 @@ def main():
     default_port = int(os.getenv("API_PORT", "8000"))
     api_host = os.getenv("API_HOST", "127.0.0.1")
 
-    # If default port is in use, find next free port
+    # If default port is in use, attempt to reclaim it from a previous stale instance on Windows
+    if check_port(api_host, default_port, timeout=0.5):
+        print(f"[*] Port {default_port} is busy. Waiting 1.5s for prior instance to finish shutdown...")
+        time.sleep(1.5)
+        if check_port(api_host, default_port, timeout=0.5) and sys.platform == "win32":
+            try:
+                cmd = f'netstat -ano | findstr :{default_port}'
+                output = subprocess.check_output(cmd, shell=True, text=True, errors="replace")
+                my_pid = os.getpid()
+                for line in output.strip().splitlines():
+                    if "LISTENING" in line:
+                        parts = line.strip().split()
+                        pid = int(parts[-1])
+                        if pid and pid != my_pid:
+                            print(f"[*] Reclaiming port {default_port} from stale background process (PID: {pid})...")
+                            subprocess.run(f"taskkill /F /PID {pid}", shell=True, capture_output=True)
+                            time.sleep(1.0)
+                            break
+            except Exception as e:
+                print(f"    [!] Notice checking stale process on port {default_port}: {e}")
+
     if check_port(api_host, default_port, timeout=0.5):
         api_port = default_port + 1
         while check_port(api_host, api_port, timeout=0.5):
             api_port += 1
-        print(f"[*] Port {default_port} is in use. Auto-selected available port {api_port}.")
+        print(f"[!] Warning: Port {default_port} could not be freed. Switched to port {api_port}.")
     else:
         api_port = default_port
 

@@ -665,7 +665,8 @@ async def run_direct_workflow(
     resumed_dag: dict[str, Any] | None = None
     if checkpoint:
         resumed_completed = dict(checkpoint.get("completed") or {})
-        resumed_dag = checkpoint.get("dag")
+        resumed_dag = checkpoint.get("dag") or checkpoint.get("custom_dag")
+        user_query = checkpoint.get("query") or user_query
         level = normalize_level(checkpoint.get("resilience") or level)
         profile = get_profile(level)
         agent_id = agent_id or checkpoint.get("agent_id") or ""
@@ -702,6 +703,8 @@ async def run_direct_workflow(
     state["execution_policy"] = execution_policy or {}
     state.setdefault("step_challenge_events", {})
     state.setdefault("step_challenge_responses", {})
+    if checkpoint and "supervisor_evaluations" in checkpoint:
+        state["supervisor_evaluations"] = list(checkpoint["supervisor_evaluations"])
 
     def _persist_checkpoint(status: str, dag_dict: dict[str, Any] | None, completed: dict[str, str]) -> None:
         """Write the run's resumable state to disk (best-effort)."""

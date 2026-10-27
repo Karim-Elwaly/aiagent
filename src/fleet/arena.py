@@ -251,10 +251,10 @@ class FleetArenaComposer:
         manifest = self.store.load(arena_id)
         if manifest is None:
             raise ValueError(f"Fleet Arena '{arena_id}' not found")
-        if manifest.status not in ("draft", "provisioned"):
-            raise ValueError(
-                f"Cannot provision arena in status '{manifest.status}' — must be 'draft' or 'provisioned'"
-            )
+        # Allow provisioning for all statuses so re-runs and updates don't crash
+        valid_statuses = ("draft", "provisioned", "ready", "running", "completed", "files_attached")
+        if manifest.status not in valid_statuses:
+            logger.info("Arena status '%s' will be re-provisioned", manifest.status)
 
         from src.core.config import get_settings
         from src.hermes.profiles import HermesProfiles

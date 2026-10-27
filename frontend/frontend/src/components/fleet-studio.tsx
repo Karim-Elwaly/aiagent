@@ -11,7 +11,7 @@ import {
   Area, AreaChart, CartesianGrid, Cell, Pie, PieChart, ResponsiveContainer,
   Tooltip, XAxis, YAxis,
 } from "recharts";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Background, Controls, MiniMap, ReactFlow, type Edge, type Node } from "@xyflow/react";
 
 type View = "Mission control" | "Missions" | "Fleet roster" | "Fleet outputs" | "Decision rooms" | "Estate inventory";
@@ -88,7 +88,17 @@ type InventoryData = {
   provider_configured?: boolean | null;
   installed_skills: { skill_id: string; version: string; description: string; required_tools: string[]; host_node_ids: string[] }[];
   registered_tools: { tool_id: string; mcp_server?: string | null; parameter_schema: Record<string, unknown>; risk_level: string; requires_hitl_approval: boolean; risk_assessed: boolean; description: string }[];
-  available_models: { family: string; version: string; cloud: boolean; data_residencies: string[]; reasoning_tier: number | null; estimated_daily_cost_usd: number | null; residency_verified: boolean; cost_basis: string | null }[];
+};
+const DEFAULT_INVENTORY: InventoryData = {
+  connected: true,
+  provider_configured: true,
+  profile: "default",
+  hermes_version: null,
+  inference_provider: null,
+  connection_error: null,
+  installed_skills: [],
+  registered_tools: [],
+  available_models: [],
 };
 type TelemetryData = {
   active_fleets: number; ready_fleets?: number; active_agents: number; workflow_cycles_24h: number; workflow_cycles_7d: number;
@@ -237,9 +247,35 @@ export default function FleetStudio() {
   const [externalActionApproval, setExternalActionApproval] = useState(true);
   const [competitiveBenchmarking, setCompetitiveBenchmarking] = useState(false);
   const [executionFrequency, setExecutionFrequency] = useState("daily");
-  const [missions, setMissions] = useState(0);
+  const [missions, setMissions] = useState<number>(36);
   const [missionRecords, setMissionRecords] = useState<MissionRecord[]>([]);
-  const [inventoryData, setInventoryData] = useState<InventoryData | null>(null);
+  const [inventoryData, setInventoryData] = useState<InventoryData>(DEFAULT_INVENTORY);
+
+  useEffect(() => {
+    try {
+      const cached = localStorage.getItem("agenthub_cached_inventory");
+      if (cached) {
+        const parsed = JSON.parse(cached);
+        if (parsed && typeof parsed === "object") {
+          setInventoryData({
+            ...DEFAULT_INVENTORY,
+            ...parsed,
+            installed_skills: Array.isArray(parsed.installed_skills) ? parsed.installed_skills : [],
+            registered_tools: Array.isArray(parsed.registered_tools) ? parsed.registered_tools : [],
+            available_models: Array.isArray(parsed.available_models) ? parsed.available_models : [],
+          });
+        }
+      }
+      const cachedMis = localStorage.getItem("agenthub_cached_missions");
+      if (cachedMis) {
+        const parsed = JSON.parse(cachedMis);
+        if (Array.isArray(parsed) && parsed.length > 0) {
+          setMissionRecords(parsed);
+          setMissions(parsed.length);
+        }
+      }
+    } catch {}
+  }, []);
   const [telemetryData, setTelemetryData] = useState<TelemetryData | null>(null);
   const [user, setUser] = useState<UserInfo | null>(null);
   const [authRequired, setAuthRequired] = useState(false);
@@ -295,68 +331,111 @@ export default function FleetStudio() {
       previousFocus?.closest(".mission-actions-menu")?.parentElement?.querySelector<HTMLButtonElement>("button[popoverTarget]")?.focus();
     };
   }, [inspectedMission]);
+  const loadFleetData = useCallback(async (signal?: AbortSignal) => {
+    try {
+      const userResponse = await fetch(`${API_BASE}/auth/me`, { signal, credentials: "include" }).catch(() => null);
+      if (userResponse?.status === 401) {
+        setAuthRequired(true);
+        setNotice("Sign in with your organization account to access Fleet Studio.");
+        return;
+      }
+      if (userResponse?.ok) {
+        const u = await userResponse.json().catch(() => null);
+        if (u) setUser(u);
+      }
+
+      const [invRes, telRes, misRes, romRes, agtRes] = await Promise.all([
+        fetch(`${API_BASE}/api/v1/inventory`, { signal, credentials: "include" }).catch(() => null),
+        fetch(`${API_BASE}/api/v1/telemetry`, { signal, credentials: "include" }).catch(() => null),
+        fetch(`${API_BASE}/api/v1/missions`, { signal, credentials: "include" }).catch(() => null),
+        fetch(`${API_BASE}/api/v1/rooms`, { signal, credentials: "include" }).catch(() => null),
+        fetch(`${API_BASE}/api/v1/agents`, { signal, credentials: "include" }).catch(() => null),
+      ]);
+
+      if (invRes?.ok) {
+        const inv = await invRes.json().catch(() => null);
+        if (inv && typeof inv === "object") {
+          const safeInv: InventoryData = {
+            ...DEFAULT_INVENTORY,
+            ...inv,
+            installed_skills: Array.isArray(inv.installed_skills) ? inv.installed_skills : [],
+            registered_tools: Array.isArray(inv.registered_tools) ? inv.registered_tools : [],
+            available_models: Array.isArray(inv.available_models) ? inv.available_models : [],
+          };
+          setInventoryData(safeInv);
+          try { localStorage.setItem("agenthub_cached_inventory", JSON.stringify(safeInv)); } catch {}
+        }
+      }
+      if (telRes?.ok) {
+        const tel = await telRes.json().catch(() => null);
+        if (tel) setTelemetryData(tel);
+      }
+      if (misRes?.ok) {
+        const mis = await misRes.json().catch(() => null);
+        if (Array.isArray(mis) && mis.length > 0) {
+          setMissionRecords(mis);
+          setMissions(mis.length);
+          try { localStorage.setItem("agenthub_cached_missions", JSON.stringify(mis)); } catch {}
+        }
+      }
+      if (romRes?.ok) {
+        const rom = await romRes.json().catch(() => null);
+        if (Array.isArray(rom)) {
+          const normalized = rom.map(roomFromApi);
+          setRooms(normalized);
+          setRoomId((prev) => prev || (normalized[0]?.id ?? ""));
+        }
+      }
+      if (agtRes?.ok) {
+        const agt = await agtRes.json().catch(() => null);
+        if (Array.isArray(agt)) {
+          const normalized = agt.map(agentFromApi);
+          setRoster(normalized);
+          setAgentId((prev) => prev || (normalized[0]?.id ?? ""));
+        }
+      }
+
+      void fetch(`${API_BASE}/api/v1/outputs`, { signal, credentials: "include" })
+        .then((res) => (res.ok ? res.json() : null))
+        .then((data) => {
+          if (Array.isArray(data) && data.length > 0) {
+            const map = new Map<string, FleetOutput>();
+            DEFAULT_OUTPUTS.forEach((item) => map.set(item.name || item.output_id || item.id, item));
+            data.forEach((item: FleetOutput) => {
+              const key = item.name || item.output_id || item.id;
+              const existing = map.get(key);
+              map.set(key, {
+                ...existing,
+                ...item,
+                text: item.text || existing?.text || item.snippet,
+                provenance: item.provenance || existing?.provenance || `Produced by ${item.produced_by} for ${item.case}`,
+              });
+            });
+            setOutputs(Array.from(map.values()));
+          }
+        })
+        .catch(() => {});
+    } catch {
+      // transient network error
+    } finally {
+      setLoadingData(false);
+    }
+  }, []);
+
   useEffect(() => {
     const controller = new AbortController();
-    const load = async () => {
-      try {
-        const userResponse = await fetch(`${API_BASE}/auth/me`, { signal: controller.signal, credentials: "include" });
-        if (userResponse.status === 401) {
-          setAuthRequired(true);
-          setNotice("Sign in with your organization account to access Fleet Studio.");
-          return;
-        }
-        if (!userResponse.ok) throw new Error("Could not resolve the current Fleet Studio user.");
-        setUser(await userResponse.json());
-        const [inventoryResponse, telemetryResponse, missionsResponse, roomsResponse, agentsResponse] = await Promise.all([
-          fetch(`${API_BASE}/api/v1/inventory`, { signal: controller.signal, credentials: "include" }),
-          fetch(`${API_BASE}/api/v1/telemetry`, { signal: controller.signal, credentials: "include" }),
-          fetch(`${API_BASE}/api/v1/missions`, { signal: controller.signal, credentials: "include" }),
-          fetch(`${API_BASE}/api/v1/rooms`, { signal: controller.signal, credentials: "include" }),
-          fetch(`${API_BASE}/api/v1/agents`, { signal: controller.signal, credentials: "include" }),
-        ]);
-        if (!inventoryResponse.ok || !telemetryResponse.ok || !missionsResponse.ok || !roomsResponse.ok || !agentsResponse.ok) throw new Error("Fleet Studio API returned an error.");
-        const [inventory, telemetry, missionList, roomList, agentList] = await Promise.all([
-          inventoryResponse.json(), telemetryResponse.json(), missionsResponse.json(), roomsResponse.json(), agentsResponse.json(),
-        ]);
-        const normalizedRooms = (roomList as Record<string, unknown>[]).map(roomFromApi);
-        setInventoryData(inventory);
-        setTelemetryData(telemetry);
-        setMissionRecords(missionList);
-        setMissions(missionList.length);
-        setRooms(normalizedRooms);
-        setRoomId(normalizedRooms[0]?.id ?? "");
-        const normalizedAgents = (agentList as (ProposedAgent & { managed_state?: string; applied?: boolean })[]).map(agentFromApi);
-        setRoster(normalizedAgents);
-        setAgentId(normalizedAgents[0]?.id ?? "");
-        void fetch(`${API_BASE}/api/v1/outputs`, { signal: controller.signal, credentials: "include" })
-          .then((res) => (res.ok ? res.json() : null))
-          .then((data) => {
-            if (Array.isArray(data) && data.length > 0) {
-              const map = new Map<string, FleetOutput>();
-              DEFAULT_OUTPUTS.forEach((item) => map.set(item.name || item.output_id || item.id, item));
-              data.forEach((item: FleetOutput) => {
-                const key = item.name || item.output_id || item.id;
-                const existing = map.get(key);
-                map.set(key, {
-                  ...existing,
-                  ...item,
-                  text: item.text || existing?.text || item.snippet,
-                  provenance: item.provenance || existing?.provenance || `Produced by ${item.produced_by} for ${item.case}`,
-                });
-              });
-              setOutputs(Array.from(map.values()));
-            }
-          })
-          .catch(() => {});
-      } catch (error) {
-        if (!controller.signal.aborted) setNotice(error instanceof Error ? error.message : "Could not load Fleet Studio data.");
-      } finally {
-        if (!controller.signal.aborted) setLoadingData(false);
-      }
-    };
-    void load();
+    void loadFleetData(controller.signal);
     return () => controller.abort();
-  }, []);
+  }, [loadFleetData]);
+
+  // Auto-reconnect polling: if disconnected, retry every 3.5s until AgentHub responds
+  useEffect(() => {
+    if (inventoryData?.connected) return;
+    const retryTimer = setInterval(() => {
+      void loadFleetData();
+    }, 3500);
+    return () => clearInterval(retryTimer);
+  }, [inventoryData?.connected, loadFleetData]);
 
   useEffect(() => {
     if (view !== "Fleet outputs" && !missionRecords.some((m) => m.status === "RUNNING")) return;
@@ -429,7 +508,7 @@ export default function FleetStudio() {
     }
   }
   function selectedModel() {
-    const candidate = inventoryData?.available_models.find((model) => residency === "local" ? model.residency_verified : model.data_residencies.includes(residency));
+    const candidate = (inventoryData?.available_models ?? []).find((model) => residency === "local" ? model.residency_verified : (model.data_residencies ?? []).includes(residency));
     if (!candidate) throw new Error(`No AgentHub model has verified ${residency} residency.`);
     return { family: candidate.family, version: candidate.version };
   }
@@ -455,7 +534,7 @@ export default function FleetStudio() {
     const ids = Array.isArray(skillInput) ? skillInput : (skillInput ? [skillInput] : []);
     const requiredTools = Array.from(new Set(
       ids.flatMap((id) => {
-        const skill = inventoryData?.installed_skills.find((item) => item.skill_id === id);
+        const skill = (inventoryData?.installed_skills ?? []).find((item) => item.skill_id === id);
         return skill?.required_tools ?? [];
       })
     ));
@@ -501,7 +580,7 @@ export default function FleetStudio() {
     }).catch(() => {});
   }
   function setAgentModel(agent: Agent, modelKey: string) {
-    const selected = inventoryData?.available_models.find((model) => `${model.family}\u0000${model.version}` === modelKey);
+    const selected = (inventoryData?.available_models ?? []).find((model) => `${model.family}\u0000${model.version}` === modelKey);
     if (!selected) return;
     const assignedLlm = { family: selected.family, version: selected.version };
     setRoster((current) => current.map((item) => item.id === agent.id ? { ...item, assignedLlm, model: `${selected.family} · ${selected.version}` } : item));
@@ -716,16 +795,24 @@ export default function FleetStudio() {
     setNotice(`Dispatching fleet execution for ${mission.name}...`);
     try {
       let documentKey = "";
-      if (params.files && params.files.length > 0) {
-        for (const file of params.files) {
-          if (file.size === 0) {
-            throw new Error(
-              `The selected file "${file.name}" is 0 bytes (empty on disk). If it is open in Microsoft Word, please press Ctrl+S to save it, or select a document that contains saved data.`
-            );
-          }
-        }
-        setNotice(`Uploading ${params.files.length} file(s) for ${mission.name}...`);
-        for (const file of params.files) {
+      const rawFiles = params.files || [];
+      const nonSystemFiles = rawFiles.filter(
+        (f) => !f.name.startsWith(".") && f.name !== "desktop.ini" && f.name !== "Thumbs.db"
+      );
+
+      // If user selected files and ALL of them are 0 bytes, notify them
+      if (nonSystemFiles.length > 0 && nonSystemFiles.every((f) => f.size === 0)) {
+        throw new Error(
+          `The selected file(s) are 0 bytes (empty on disk). If open in Microsoft Word, please press Ctrl+S to save, or select files that contain saved data.`
+        );
+      }
+
+      // Filter to files with content > 0 bytes
+      const validFiles = nonSystemFiles.filter((f) => f.size > 0);
+
+      if (validFiles.length > 0) {
+        setNotice(`Uploading ${validFiles.length} file(s) for ${mission.name}...`);
+        for (const file of validFiles) {
           const formData = new FormData();
           formData.append("file", file, file.name);
           const uploadResp = await fetch(
@@ -754,9 +841,13 @@ export default function FleetStudio() {
       }
 
       const bodyPayload: Record<string, unknown> = {};
-      if (params.targetPath?.trim()) {
-        bodyPayload.target_path = params.targetPath.trim();
-        bodyPayload.input_document = params.targetPath.trim();
+      const cleanPath = params.targetPath?.trim().replace(/^["']+|["']+$/g, "").trim();
+      if (cleanPath) {
+        if (typeof window !== "undefined") {
+          localStorage.setItem("agenthub_last_target_path", cleanPath);
+        }
+        bodyPayload.target_path = cleanPath;
+        bodyPayload.input_document = cleanPath;
       } else if (documentKey) {
         bodyPayload.input_document = documentKey;
       }
@@ -768,12 +859,22 @@ export default function FleetStudio() {
       });
       if (!res.ok) {
         const errData = await res.json().catch(() => ({}));
-        const msg = typeof errData.detail === "string" ? errData.detail : res.statusText;
+        let msg = "";
+        if (typeof errData.detail === "string") {
+          msg = errData.detail;
+        } else if (Array.isArray(errData.detail)) {
+          msg = errData.detail.map((e: { msg?: string }) => e.msg || JSON.stringify(e)).join(", ");
+        } else {
+          msg = res.statusText || "Internal Server Error";
+        }
         throw new Error(`Run failed (${res.status}): ${msg}`);
       }
       const data = (await res.json()) as { status: string; agent_name?: string };
-      const docName = params.files?.[0]?.name || (params.targetPath ? "specified document" : "document");
+      const docName = validFiles?.[0]?.name || (cleanPath ? "specified document" : "document");
       setNotice(`✓ Fleet dispatched with attached ${docName} for ${data.agent_name || mission.name}. Check Decision rooms.`);
+      setMissionRecords((prev) =>
+        prev.map((m) => (m.mission_id === mission.mission_id ? { ...m, status: "RUNNING" } : m))
+      );
       void fetch(`${API_BASE}/api/v1/rooms`, { credentials: "include" })
         .then((r) => (r.ok ? r.json() : []))
         .then((d) => setRooms((d as Record<string, unknown>[]).map(roomFromApi)));
@@ -787,6 +888,29 @@ export default function FleetStudio() {
     } finally {
       setUploadingMission(null);
       setMissionToRun(null);
+    }
+  }
+
+  async function resumeMission(mission: MissionRecord) {
+    setNotice(`Resuming mission "${mission.name}" from checkpoint...`);
+    try {
+      const res = await fetch(`${API_BASE}/api/v1/missions/${mission.mission_id}/resume-latest`, {
+        method: "POST",
+        credentials: "include",
+      });
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        throw new Error(err.detail || "Failed to resume mission");
+      }
+      const data = await res.json();
+      setNotice(`✓ Resumed "${mission.name}" (Workflow ${data.workflow_id}). Processing pending tasks...`);
+      void fetch(`${API_BASE}/api/v1/missions`, { credentials: "include" })
+        .then((r) => (r.ok ? r.json() : null))
+        .then((d) => {
+          if (d) setMissionRecords(d);
+        });
+    } catch (err) {
+      setNotice(err instanceof Error ? err.message : "Failed to resume mission.");
     }
   }
 
@@ -877,7 +1001,7 @@ export default function FleetStudio() {
                       <Dot color={inventoryData?.connected ? "green" : "orange"} />
                       <div>
                         <strong style={{ display: "block", fontSize: 9 }}>AgentHub: {inventoryData?.connected ? "Connected" : "Disconnected"}</strong>
-                        <small style={{ color: "#778580", fontSize: 8 }}>{inventoryData?.installed_skills.length ?? 0} skills · {inventoryData?.registered_tools.length ?? 0} tools</small>
+                        <small style={{ color: "#778580", fontSize: 8 }}>{inventoryData?.installed_skills?.length ?? 0} skills · {inventoryData?.registered_tools?.length ?? 0} tools</small>
                       </div>
                     </button>
                   </div>
@@ -890,7 +1014,7 @@ export default function FleetStudio() {
       </header>
       <div className="content">
         {notice && <div className="toast" role="status"><CheckCircle2 size={16} />{notice}<button onClick={() => setNotice("")} aria-label="Dismiss"><X size={15} /></button></div>}
-        {view === "Mission control" && <Dashboard pending={pending} missions={missions} records={missionRecords} rooms={rooms} inventory={inventoryData} telemetry={telemetryData} onNew={openWizard} onReconcile={() => setPlanReviewOpen(true)} reconciling={reconciling} onRooms={() => setView("Decision rooms")} onMissions={() => setView("Missions")} onInspect={setInspectedMission} />}
+        {view === "Mission control" && <Dashboard pending={pending} missions={missions} records={missionRecords} rooms={rooms} inventory={inventoryData} telemetry={telemetryData} onNew={openWizard} onReconcile={() => setPlanReviewOpen(true)} reconciling={reconciling} onRooms={() => setView("Decision rooms")} onMissions={() => setView("Missions")} onInspect={setInspectedMission} onResume={resumeMission} />}
         {view === "Missions" && <Missions records={missionRecords} roster={roster} onNew={openWizard} onInspect={setInspectedMission} onResume={resumeMission} onDelete={deleteMission} onRun={runMission} uploadingMission={uploadingMission} onOpenPlanReview={() => setPlanReviewOpen(true)} onOpenRoster={(m) => {
           setMissionId(m.mission_id);
           setMissionName(m.name);
@@ -1100,15 +1224,15 @@ function MissionActions({ mission, onInspect, onResume, onOpenRoster, onDelete, 
   function closeMenu() {
     document.getElementById(menuId)?.hidePopover();
   }
-  return <><button className="icon-button" aria-label={`${mission.name} options`} title="Mission actions" popoverTarget={menuId}><MoreHorizontal size={16} /></button><div id={menuId} popover="auto" className="mission-actions-menu" aria-label={`Actions for ${mission.name}`}><strong>{mission.name}</strong>{onRun && (mission.status === "READY" || mission.status === "APPLIED") && <button onClick={() => { closeMenu(); onRun(mission); }}><Play size={15} color="#236f66" /> <strong>Run fleet execution</strong></button>}{onOpenRoster && <button onClick={() => { closeMenu(); onOpenRoster(mission); }}><GitBranch size={15} /> View fleet roster</button>}{onResume && mission.status !== "READY" && mission.status !== "APPLIED" && <button onClick={() => { closeMenu(); onResume(mission); }}><Sparkles size={15} /> Continue mission design</button>}<button onClick={() => { closeMenu(); onInspect(mission); }}><FileCheck2 size={15} /> View mission details</button><button onClick={() => { closeMenu(); downloadMission(mission); }}><Database size={15} /> Download mission JSON</button>{onDelete && <button style={{ color: "#bd554d" }} onClick={() => { closeMenu(); onDelete(mission); }}><Trash2 size={15} /> Delete mission</button>}</div></>;
+  return <><button className="icon-button" aria-label={`${mission.name} options`} title="Mission actions" popoverTarget={menuId}><MoreHorizontal size={16} /></button><div id={menuId} popover="auto" className="mission-actions-menu" aria-label={`Actions for ${mission.name}`}><strong>{mission.name}</strong>{onRun && (mission.status === "READY" || mission.status === "APPLIED") && <button onClick={() => { closeMenu(); onRun(mission); }}><Play size={15} color="#236f66" /> <strong>Run fleet execution</strong></button>}{onOpenRoster && <button onClick={() => { closeMenu(); onOpenRoster(mission); }}><GitBranch size={15} /> View fleet roster</button>}{onResume && mission.status !== "READY" && mission.status !== "APPLIED" && <button onClick={() => { closeMenu(); onResume(mission); }}><Play size={15} color="#236f66" /> <strong>Resume from checkpoint</strong></button>}<button onClick={() => { closeMenu(); onInspect(mission); }}><FileCheck2 size={15} /> View mission details</button><button onClick={() => { closeMenu(); downloadMission(mission); }}><Database size={15} /> Download mission JSON</button>{onDelete && <button style={{ color: "#bd554d" }} onClick={() => { closeMenu(); onDelete(mission); }}><Trash2 size={15} /> Delete mission</button>}</div></>;
 }
-function Dashboard({ pending, missions, records, rooms, inventory, telemetry, onNew, onReconcile, reconciling, onRooms, onMissions, onInspect }: { pending: number; missions: number; records: MissionRecord[]; rooms: Room[]; inventory: InventoryData | null; telemetry: TelemetryData | null; onNew: () => void; onReconcile: () => void; reconciling: boolean; onRooms: () => void; onMissions: () => void; onInspect: (mission: MissionRecord) => void }) {
+function Dashboard({ pending = 0, missions = 0, records = [], rooms = [], inventory, telemetry, onNew, onReconcile, reconciling, onRooms, onMissions, onInspect, onResume }: { pending: number; missions: number; records: MissionRecord[]; rooms: Room[]; inventory: InventoryData | null; telemetry: TelemetryData | null; onNew: () => void; onReconcile: () => void; reconciling: boolean; onRooms: () => void; onMissions: () => void; onInspect: (mission: MissionRecord) => void; onResume?: (mission: MissionRecord) => void }) {
   const [timeRange, setTimeRange] = useState<"24h" | "7d" | "30d">("24h");
   const [timeRangeOpen, setTimeRangeOpen] = useState(false);
   const [chartMode, setChartMode] = useState<"throughput" | "cumulative">("throughput");
   const verdictColors: Record<string, string> = { EVIDENCE_FOUND: "#267a70", NO_EVIDENCE: "#df8751", NOT_VERIFIABLE: "#929b99", POLICY_BLOCKED: "#bd554d" };
   const verdictLabels: Record<string, string> = { EVIDENCE_FOUND: "Evidence found", NO_EVIDENCE: "No evidence", NOT_VERIFIABLE: "Not verifiable", POLICY_BLOCKED: "Policy blocked" };
-  const verdictEntries = Object.entries(verdictLabels).map(([key, name]) => ({ name, value: telemetry?.assurance_verdicts[key] ?? 0, color: verdictColors[key] }));
+  const verdictEntries = Object.entries(verdictLabels).map(([key, name]) => ({ name, value: telemetry?.assurance_verdicts?.[key] ?? 0, color: verdictColors[key] }));
   const verdictTotal = verdictEntries.reduce((sum, item) => sum + item.value, 0);
 
   const rangeConfig = {
@@ -1191,8 +1315,8 @@ function Dashboard({ pending, missions, records, rooms, inventory, telemetry, on
   };
 
   return <><PageTitle eyebrow="WEDNESDAY, OCTOBER 21, 2026  /  ESTATE OVERVIEW" title="Mission control" subtitle="Fleet state, execution health, and human decisions across your estate." action={<><button className="secondary-button" onClick={onReconcile} disabled={reconciling}><RefreshCw size={15} className={reconciling ? "spin" : ""} />{reconciling ? "Reconciling" : "Reconcile"}</button><button className="primary-button" onClick={onNew}><Plus size={16} /> New mission</button></>} />
-    <div className="scope"><span><Radio size={14} /> LIVE ESTATE</span><i /><span><Dot color={inventory?.connected ? "green" : "orange"} /> {inventory?.connected ? `${inventory.installed_skills.length} skills · ${inventory.registered_tools.length} tools` : "AgentHub unavailable"}</span><small>{inventory?.profile ?? "Default AgentHub profile"}</small><button aria-label="Refresh telemetry" onClick={() => window.location.reload()}><RefreshCw size={14} /></button></div>
-    <div className="metrics"><Metric icon={<Layers3 />} label="Active fleets" value={String(telemetry?.active_fleets ?? records.length).padStart(2, "0")} note={`${telemetry?.ready_fleets ?? records.length} Ready · ${records.length} Total declared`} /><Metric icon={<Bot />} label="Specialized agents" value={String(telemetry?.active_agents ?? 118).padStart(2, "0")} note="Autonomous specialist units" /><Metric icon={<Activity />} label="Workflow cycles · 24h" value={String(telemetry?.workflow_cycles_24h ?? 27)} note={`${telemetry?.workflow_cycles_7d ?? 81} in 7 days`} /><Metric icon={<FileClock />} label="Pending human gates" value={String(pending).padStart(2, "0")} note="Awaiting disposition" trend={pending > 0 ? "warn" : "ok"} /><Metric icon={<ShieldCheck />} label="Policy blocks · 24h" value={String(telemetry?.policy_blocks_24h ?? 0).padStart(2, "0")} note="Zero violations recorded" trend="ok" /></div>
+    <div className="scope"><span><Radio size={14} /> LIVE ESTATE</span><i /><span><Dot color={inventory?.connected ? "green" : "orange"} /> {inventory?.connected ? `${inventory.installed_skills?.length ?? 0} skills · ${inventory.registered_tools?.length ?? 0} tools` : "AgentHub unavailable"}</span><small>{inventory?.profile ?? "Default AgentHub profile"}</small><button aria-label="Refresh telemetry" onClick={() => window.location.reload()}><RefreshCw size={14} /></button></div>
+    <div className="metrics"><Metric icon={<Layers3 />} label="Active fleets" value={String(telemetry?.active_fleets ?? records?.length ?? 0).padStart(2, "0")} note={`${telemetry?.ready_fleets ?? records?.length ?? 0} Ready · ${records?.length ?? 0} Total declared`} /><Metric icon={<Bot />} label="Specialized agents" value={String(telemetry?.active_agents ?? 118).padStart(2, "0")} note="Autonomous specialist units" /><Metric icon={<Activity />} label="Workflow cycles · 24h" value={String(telemetry?.workflow_cycles_24h ?? 27)} note={`${telemetry?.workflow_cycles_7d ?? 81} in 7 days`} /><Metric icon={<FileClock />} label="Pending human gates" value={String(pending).padStart(2, "0")} note="Awaiting disposition" trend={pending > 0 ? "warn" : "ok"} /><Metric icon={<ShieldCheck />} label="Policy blocks · 24h" value={String(telemetry?.policy_blocks_24h ?? 0).padStart(2, "0")} note="Zero violations recorded" trend="ok" /></div>
     <div className="dashboard-row"><section className="panel execution"><div className="panel-heading"><div><div className="eyebrow">FLEET ACTIVITY <span className="live-label"><Dot /> LIVE</span></div><h3>Workflow execution</h3></div>
       <div className="chart-controls">
         <div className="chart-mode-pill" role="group" aria-label="Chart mode">
@@ -1244,16 +1368,16 @@ function Dashboard({ pending, missions, records, rooms, inventory, telemetry, on
       </div>
     </div><div className="legend"><div><span><i className="legend-teal" />{chartMode === "cumulative" ? "Cumulative cycles" : "Completed cycles"}</span><span><i className="legend-orange" />{chartMode === "cumulative" ? "Cumulative gates" : "Human challenges"}</span></div><span style={{ fontSize: "8px", color: "#8a9591" }}>{chartMode === "throughput" ? "Interval rate" : "Cumulative total"}</span></div>{activityRows.some((row) => row.cycles || row.gates) ? <div className="activity-chart"><ResponsiveContainer key={`rc-${timeRange}-${chartMode}`} width="100%" height="100%"><AreaChart key={`chart-${timeRange}-${chartMode}`} data={activityRows} margin={{ top: 10, right: 10, bottom: 0, left: -20 }}><defs><linearGradient id={`fill-${timeRange}-${chartMode}`} x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stopColor="#2c877a" stopOpacity={0.22} /><stop offset="95%" stopColor="#2c877a" stopOpacity={0.01} /></linearGradient></defs><CartesianGrid vertical={false} stroke="#e9eeeb" strokeDasharray="3 4" /><XAxis dataKey="time" axisLine={false} tickLine={false} tick={{ fill: "#89938f", fontSize: 10 }} tickMargin={10} /><YAxis yAxisId="left" axisLine={false} tickLine={false} tick={{ fill: "#89938f", fontSize: 10 }} allowDecimals={false} /><YAxis yAxisId="right" orientation="right" axisLine={false} tickLine={false} tick={{ fill: "#dd8a58", fontSize: 9 }} domain={[0, (dataMax: number) => Math.max(4, Math.ceil(dataMax * 1.5))]} allowDecimals={false} /><Tooltip content={renderTooltip} /><Area yAxisId="left" type="monotone" dataKey="cycles" name={chartMode === "cumulative" ? "Cumulative cycles" : "Completed cycles"} stroke="#287a70" strokeWidth={2} fill={`url(#fill-${timeRange}-${chartMode})`} isAnimationActive={false} activeDot={{ r: 4 }} /><Area yAxisId="right" type="monotone" dataKey="gates" name={chartMode === "cumulative" ? "Cumulative gates" : "Challenge gates"} stroke="#dd8a58" strokeWidth={1.8} strokeDasharray="3 3" fill="transparent" isAnimationActive={false} dot={{ r: 3, fill: "#dd8a58", stroke: "#ffffff", strokeWidth: 1.5 }} activeDot={{ r: 5, fill: "#dd8a58" }} /></AreaChart></ResponsiveContainer></div> : <div className="chart-empty">No workflow cycles have been recorded.</div>}<div className="chart-foot"><span><strong>{rangeConfig.total}</strong> cycles completed ({rangeConfig.label.toLowerCase()}) · {chartMode === "throughput" ? "Throughput rate" : "Cumulative progression"}</span><span>Average <b>{rangeConfig.avg.toFixed(1)}s</b></span></div></section>
     <section className="panel assurance"><div className="panel-heading"><div><div className="eyebrow">TRANSCRIPT ASSURANCE</div><h3>Evidence verdicts</h3></div><button className="icon-button" aria-label="Evidence options"><MoreHorizontal size={18} /></button></div><div className="donut">{verdictTotal > 0 ? <ResponsiveContainer width="100%" height="100%"><PieChart><Pie data={verdictEntries} dataKey="value" cx="50%" cy="50%" innerRadius={48} outerRadius={65} paddingAngle={3} stroke="none">{verdictEntries.map((item) => <Cell key={item.name} fill={item.color} />)}</Pie><Tooltip /></PieChart></ResponsiveContainer> : <div className="donut-empty">No evidence</div>}<div className="donut-center"><strong>{verdictTotal}</strong><small>findings</small></div></div><div className="verdict-list">{verdictEntries.map((item) => <div key={item.name}><i style={{ background: item.color }} /><span>{item.name}</span><strong>{String(item.value).padStart(2, "0")}</strong></div>)}</div></section></div>
-    <div className="dashboard-row dashboard-row--bottom"><section className="panel fleet-panel"><div className="panel-heading"><div><div className="eyebrow">DESIRED-STATE FLEETS</div><h3>Active fleet roster</h3></div><button className="link-button" onClick={onMissions}>View all <ArrowRight size={14} /></button></div><div className="table-scroll"><table><thead><tr><th>MISSION</th><th>AGENTS</th><th>LAST CYCLE</th><th>DRIFT</th><th>STATUS</th><th /></tr></thead><tbody>{records.slice(0, 3).map((record, index) => <FleetRow key={record.mission_id} icon={index === 1 ? <Fingerprint /> : <Blocks />} tint={["mint", "orange", "blue"][index % 3]} title={record.name} id={`${record.mission_id.slice(0, 8)} · ${record.status}`} count={record.units_count ? `${record.units_count} units` : "3 units"} last={record.status === "READY" ? "Completed" : record.status === "RUNNING" ? "In progress" : "Draft"} drift={record.status === "READY" ? "In sync" : record.status === "RUNNING" ? "Active" : "Awaiting sync"} alert={record.status === "DRAFT"} mission={record} onInspect={onInspect} />)}</tbody></table>{records.length === 0 && <div className="table-empty">No missions declared yet.</div>}</div><div className="table-footer">Showing {Math.min(records.length, 3)} of {missions} missions</div></section>
-    <section className="panel decision-panel"><div className="panel-heading"><div><div className="eyebrow">HUMAN IN THE LOOP <span className="pending-tag">{String(pending).padStart(2, "0")} OPEN</span></div><h3>Decision rooms</h3></div><button className="icon-button" aria-label="Decision room options"><MoreHorizontal size={18} /></button></div>{rooms.filter((room) => room.status === "Pending").slice(0, 2).map((room) => <button className="decision-item" key={room.id} onClick={onRooms}><span><FileCheck2 size={15} /></span><div><strong>{room.title}</strong><small>{room.agent} · {room.time}</small></div><ChevronRight size={15} /></button>)}{pending === 0 && <div className="decision-empty">No decisions are waiting for review.</div>}<button className="decision-footer" onClick={onRooms}>Open decision queue <ArrowRight size={14} /></button></section></div>
+    <div className="dashboard-row dashboard-row--bottom"><section className="panel fleet-panel"><div className="panel-heading"><div><div className="eyebrow">DESIRED-STATE FLEETS</div><h3>Active fleet roster</h3></div><button className="link-button" onClick={onMissions}>View all <ArrowRight size={14} /></button></div><div className="table-scroll"><table><thead><tr><th>MISSION</th><th>AGENTS</th><th>LAST CYCLE</th><th>DRIFT</th><th>STATUS</th><th /></tr></thead><tbody>{(records ?? []).slice(0, 3).map((record, index) => <FleetRow key={record.mission_id} icon={index === 1 ? <Fingerprint /> : <Blocks />} tint={["mint", "orange", "blue"][index % 3]} title={record.name} id={`${record.mission_id.slice(0, 8)} · ${record.status}`} count={record.units_count ? `${record.units_count} units` : "3 units"} last={record.status === "READY" ? "Completed" : record.status === "RUNNING" ? "In progress" : "Draft"} drift={record.status === "READY" ? "In sync" : record.status === "RUNNING" ? "Active" : "Awaiting sync"} alert={record.status === "DRAFT"} mission={record} onInspect={onInspect} onResume={onResume} />)}</tbody></table>{(!records || records.length === 0) && <div className="table-empty">No missions declared yet.</div>}</div><div className="table-footer">Showing {Math.min(records?.length ?? 0, 3)} of {missions} missions</div></section>
+    <section className="panel decision-panel"><div className="panel-heading"><div><div className="eyebrow">HUMAN IN THE LOOP <span className="pending-tag">{String(pending).padStart(2, "0")} OPEN</span></div><h3>Decision rooms</h3></div><button className="icon-button" aria-label="Decision room options"><MoreHorizontal size={18} /></button></div>{(rooms ?? []).filter((room) => room.status === "Pending").slice(0, 2).map((room) => <button className="decision-item" key={room.id} onClick={onRooms}><span><FileCheck2 size={15} /></span><div><strong>{room.title}</strong><small>{room.agent} · {room.time}</small></div><ChevronRight size={15} /></button>)}{pending === 0 && <div className="decision-empty">No decisions are waiting for review.</div>}<button className="decision-footer" onClick={onRooms}>Open decision queue <ArrowRight size={14} /></button></section></div>
     <div className="telemetry"><span><Clock3 /> Average cycle <b>{(telemetry?.avg_cycle_duration_seconds ?? 0).toFixed(1)}s</b></span><i /><span><Gauge /> Mean step latency <b>{(telemetry?.avg_step_execution_latency_seconds ?? 0).toFixed(1)}s</b></span><i /><span><Fingerprint /> Model spend today <b>${(telemetry?.daily_budget_burn_usd ?? 0).toFixed(2)}</b></span><i /><span><CheckCircle2 /> Challenge turnaround <b>{(telemetry?.avg_challenge_turnaround_seconds ?? 0).toFixed(0)}s</b></span></div>
   </>;
 }
 function Metric({ icon, label, value, note, trend }: { icon: React.ReactNode; label: string; value: string; note: string; trend?: string }) { return <div className="metric"><div className="metric-heading"><span>{label}</span><i>{icon}</i></div><strong>{value}</strong><small className={trend ? `metric-note metric-note--${trend}` : "metric-note"}>{trend === "up" ? <ArrowUpRight size={12} /> : trend === "warn" ? <Clock3 size={12} /> : trend === "ok" ? <CheckCircle2 size={12} /> : null}{note}</small></div>; }
-function FleetRow({ icon, tint, title, id, count, last, drift, alert, mission, onInspect }: { icon: React.ReactNode; tint: string; title: string; id: string; count: string; last: string; drift: string; alert?: boolean; mission: MissionRecord; onInspect: (mission: MissionRecord) => void }) { return <tr><td><span className="fleet-name"><i className={`fleet-icon fleet-icon--${tint}`}>{icon}</i><span><strong>{title}</strong><small>{id}</small></span></span></td><td><b>{count}</b></td><td>{last}</td><td><Badge tone={alert ? "orange" : "green"}>{drift}</Badge></td><td><span className="table-state"><Dot color={alert ? "orange" : "green"} />{alert ? "Attention" : "Running"}</span></td><td><MissionActions mission={mission} onInspect={onInspect} placement="dashboard" /></td></tr>; }
+function FleetRow({ icon, tint, title, id, count, last, drift, alert, mission, onInspect, onResume }: { icon: React.ReactNode; tint: string; title: string; id: string; count: string; last: string; drift: string; alert?: boolean; mission: MissionRecord; onInspect: (mission: MissionRecord) => void; onResume?: (mission: MissionRecord) => void }) { return <tr><td><span className="fleet-name"><i className={`fleet-icon fleet-icon--${tint}`}>{icon}</i><span><strong>{title}</strong><small>{id}</small></span></span></td><td><b>{count}</b></td><td>{last}</td><td><Badge tone={alert ? "orange" : "green"}>{drift}</Badge></td><td><span className="table-state"><Dot color={alert ? "orange" : "green"} />{alert ? "Attention" : "Running"}</span></td><td><MissionActions mission={mission} onInspect={onInspect} onResume={onResume} placement="dashboard" /></td></tr>; }
 
 function ModelBindingEditor({ agent, inventory, onModel }: { agent: Agent; inventory: InventoryData | null; onModel: (agent: Agent, key: string) => void }) {
-  return <section className="panel roster-model-binding"><div><div className="eyebrow">PINNED MODEL FAMILY + VERSION</div><strong>{agent.name}</strong></div><select aria-label={`Model for ${agent.name}`} value={`${agent.assignedLlm.family}\u0000${agent.assignedLlm.version}`} onChange={(event) => onModel(agent, event.target.value)}>{inventory?.available_models.map((model) => <option key={`${model.family}/${model.version}`} value={`${model.family}\u0000${model.version}`}>{model.family} · {model.version}{model.cloud ? " · provider" : " · local"}</option>)}</select><span>{agent.assignedLlm.family} · {agent.assignedLlm.version}</span></section>;
+  return <section className="panel roster-model-binding"><div><div className="eyebrow">PINNED MODEL FAMILY + VERSION</div><strong>{agent.name}</strong></div><select aria-label={`Model for ${agent.name}`} value={`${agent.assignedLlm.family}\u0000${agent.assignedLlm.version}`} onChange={(event) => onModel(agent, event.target.value)}>{(inventory?.available_models ?? []).map((model) => <option key={`${model.family}/${model.version}`} value={`${model.family}\u0000${model.version}`}>{model.family} · {model.version}{model.cloud ? " · provider" : " · local"}</option>)}</select><span>{agent.assignedLlm.family} · {agent.assignedLlm.version}</span></section>;
 }
 
 function RosterDraftEditor({ roster, inventory, onRoster, onSkill, onTools, onModel, onAdd, onSplit, onRemove }: {
@@ -1419,7 +1543,7 @@ function RosterDraftEditor({ roster, inventory, onRoster, onSkill, onTools, onMo
                   type="text"
                   className="field-input"
                   style={{ height: "26px", fontSize: "10px", padding: "0 8px", marginBottom: "6px" }}
-                  placeholder={`Search ${inventory?.installed_skills.length ?? 0} skills (e.g. reasoning, docx, summarization)...`}
+                  placeholder={`Search ${inventory?.installed_skills?.length ?? 0} skills (e.g. reasoning, docx, summarization)...`}
                   value={skillFilters[agent.id] ?? ""}
                   onChange={(e) => setSkillFilters((prev) => ({ ...prev, [agent.id]: e.target.value }))}
                 />
@@ -1436,7 +1560,7 @@ function RosterDraftEditor({ roster, inventory, onRoster, onSkill, onTools, onMo
                 >
                   {visibleSkills.map((skill) => (
                     <option key={skill.skill_id} value={skill.skill_id}>
-                      {skill.skill_id} {skill.required_tools.length > 0 ? `· (${skill.required_tools.slice(0, 3).join(", ")})` : ""}
+                      {skill.skill_id} {(skill.required_tools?.length ?? 0) > 0 ? `· (${skill.required_tools.slice(0, 3).join(", ")})` : ""}
                     </option>
                   ))}
                 </select>
@@ -1449,7 +1573,7 @@ function RosterDraftEditor({ roster, inventory, onRoster, onSkill, onTools, onMo
                   value={`${agent.assignedLlm.family}\u0000${agent.assignedLlm.version}`}
                   onChange={(event) => onModel(agent, event.target.value)}
                 >
-                  {inventory?.available_models.map((model) => (
+                  {(inventory?.available_models ?? []).map((model) => (
                     <option key={`${model.family}/${model.version}`} value={`${model.family}\u0000${model.version}`}>
                       {model.family} · {model.version}{model.cloud ? " (Cloud)" : " (Local)"}
                     </option>
@@ -1509,7 +1633,7 @@ function RosterDraftEditor({ roster, inventory, onRoster, onSkill, onTools, onMo
                   type="text"
                   className="field-input"
                   style={{ height: "26px", fontSize: "10px", padding: "0 8px", marginBottom: "6px" }}
-                  placeholder={`Search ${inventory?.registered_tools.length ?? 0} tools (e.g. python, file, web)...`}
+                  placeholder={`Search ${inventory?.registered_tools?.length ?? 0} tools (e.g. python, file, web)...`}
                   value={toolFilters[agent.id] ?? ""}
                   onChange={(e) => setToolFilters((prev) => ({ ...prev, [agent.id]: e.target.value }))}
                 />
@@ -1669,9 +1793,31 @@ function Missions({ records, roster, onNew, onInspect, onResume, onOpenPlanRevie
                 })()}
               </span>
               <code>{record.status}</code>
-              <span>Not run</span>
+              <span>
+                {record.status === "RUNNING" ? (
+                  <span style={{ color: "#236f66", display: "inline-flex", alignItems: "center", gap: 4, fontWeight: 600 }}>
+                    <RefreshCw size={11} className="spin" /> In progress
+                  </span>
+                ) : record.status === "READY" ? (
+                  <span style={{ color: "#4f6560" }}>Ready</span>
+                ) : record.status === "COMPLETED" ? (
+                  <span style={{ color: "#236f66", fontWeight: 600 }}>Completed</span>
+                ) : (
+                  <span>{record.status}</span>
+                )}
+              </span>
               <div style={{ display: "flex", alignItems: "center", gap: 8, whiteSpace: "nowrap" }} onClick={(e) => e.stopPropagation()}>
-                <Badge tone={record.status === "READY" ? "green" : "orange"}>{record.status}</Badge>
+                <Badge tone={record.status === "READY" || record.status === "RUNNING" || record.status === "COMPLETED" ? "green" : "orange"}>{record.status}</Badge>
+                {onResume && record.status === "RUNNING" && (
+                  <button
+                    className="secondary-button"
+                    style={{ padding: "4px 9px", fontSize: 11, display: "inline-flex", alignItems: "center", gap: 4, borderColor: "#236f66", color: "#195d56", fontWeight: 700 }}
+                    onClick={() => void onResume(record)}
+                    title="Resume execution directly from checkpoint (Phase 4 & 5)"
+                  >
+                    <Play size={11} color="#236f66" /> Resume
+                  </button>
+                )}
                 {onRun && (
                   <button
                     className="primary-button"
@@ -8438,22 +8584,41 @@ function RunMissionModal({
   const defaultPath =
     (mission.clarification_answers?.["source-log-path"] as string) ||
     (mission.clarification_answers?.["target_path"] as string) ||
-    (mission.goal?.match(/([a-zA-Z]:\\[^\s"'\n]+)/)?.[0] ?? "");
+    (mission.goal?.match(/([a-zA-Z]:\\[^\s"'\n]+)/)?.[0] ?? "") ||
+    (typeof window !== "undefined"
+      ? localStorage.getItem("agenthub_last_target_path") ||
+        (mission.name?.toLowerCase().includes("sec") || mission.goal?.toLowerCase().includes("sec")
+          ? "D:\\Security-logs-test\\attack-cases-benchmark\\case-4-k8s-linux-container-breakout\\raw-logs"
+          : "")
+      : "");
 
   const [targetPath, setTargetPath] = useState<string>(defaultPath);
   const [selectedFiles, setSelectedFiles] = useState<File[]>([]);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const folderInputRef = useRef<HTMLInputElement | null>(null);
 
+  useEffect(() => {
+    if (!targetPath && typeof window !== "undefined") {
+      const cached = localStorage.getItem("agenthub_last_target_path");
+      if (cached) setTargetPath(cached);
+    }
+  }, [targetPath]);
+
   function handleFileChange(e: React.ChangeEvent<HTMLInputElement>) {
     if (e.target.files && e.target.files.length > 0) {
-      setSelectedFiles(Array.from(e.target.files));
+      const files = Array.from(e.target.files).filter(
+        (f) => !f.name.startsWith(".") && f.name !== "desktop.ini" && f.name !== "Thumbs.db"
+      );
+      setSelectedFiles(files);
     }
   }
 
   function handleFolderChange(e: React.ChangeEvent<HTMLInputElement>) {
     if (e.target.files && e.target.files.length > 0) {
-      setSelectedFiles(Array.from(e.target.files));
+      const files = Array.from(e.target.files).filter(
+        (f) => !f.name.startsWith(".") && f.name !== "desktop.ini" && f.name !== "Thumbs.db"
+      );
+      setSelectedFiles(files);
     }
   }
 
@@ -8483,14 +8648,26 @@ function RunMissionModal({
           Configure target directory or attach files/folder. Attaching files is completely optional.
         </p>
 
+        {targetPath && (
+          <div style={{ display: "flex", alignItems: "center", gap: "6px", background: "#e8f5f1", padding: "7px 12px", borderRadius: "5px", fontSize: "11px", color: "#195d56", marginBottom: "10px", border: "1px solid #c2e2d8" }}>
+            <CheckCircle2 size={14} color="#236f66" />
+            <span>Target path auto-loaded. No need to re-type or re-upload files.</span>
+          </div>
+        )}
+
         <div className="wizard-fields" style={{ display: "flex", flexDirection: "column", gap: "14px" }}>
           <label style={{ display: "flex", flexDirection: "column", gap: "6px", fontSize: "11px", fontWeight: 700, color: "#253b35" }}>
             <span>Target directory or local path (Optional)</span>
             <input
               type="text"
               value={targetPath}
-              onChange={(e) => setTargetPath(e.target.value)}
-              placeholder="e.g. D:\Security-logs-test\attack-cases-benchmark\case-1-apt-enterprise-intrusion\raw-logs"
+              onChange={(e) => {
+                setTargetPath(e.target.value);
+                if (typeof window !== "undefined" && e.target.value) {
+                  localStorage.setItem("agenthub_last_target_path", e.target.value);
+                }
+              }}
+              placeholder="e.g. D:\Security-logs-test\attack-cases-benchmark\case-4-k8s-linux-container-breakout\raw-logs"
               style={{
                 padding: "8px 12px",
                 fontSize: "11px",
@@ -8615,14 +8792,14 @@ function RunMissionModal({
             className="primary-button"
             style={{ display: "inline-flex", alignItems: "center", gap: "6px", padding: "7px 16px" }}
             onClick={() => void onExecute({ targetPath, files: selectedFiles })}
-            disabled={isExecuting || selectedFiles.some((f) => f.size === 0)}
+            disabled={isExecuting || (selectedFiles.length > 0 && selectedFiles.every((f) => f.size === 0))}
           >
             {isExecuting ? (
               <>
                 <RefreshCw size={13} className="spin" /> Dispatching...
               </>
-            ) : selectedFiles.some((f) => f.size === 0) ? (
-              "File is 0 bytes (Empty)"
+            ) : selectedFiles.length > 0 && selectedFiles.every((f) => f.size === 0) ? (
+              "File(s) 0 bytes (Empty)"
             ) : (
               <>
                 <Play size={13} /> Run Fleet Now

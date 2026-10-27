@@ -1,0 +1,35 @@
+[    0.000000] Linux version 5.15.0-89-generic (buildd@lcy02-amd64-075) (gcc (Ubuntu 11.4.0-1ubuntu1~22.04) 11.4.0, GNU ld (GNU Binutils for Ubuntu) 2.38) #99-Ubuntu SMP Mon Oct 30 20:42:41 UTC 2023 (Ubuntu 5.15.0-89.99-generic 5.15.131)
+[    0.000000] Command line: BOOT_IMAGE=/vmlinuz-5.15.0-89-generic root=UUID=7c8d9e2a-1b4c-4f5d-9e6a-2d3e4f5a6b7c ro quiet splash vt.handoff=7
+[    0.000000] KERNEL supported cpus:
+[    0.000000]   Intel GenuineIntel
+[    0.000000]   AMD AuthenticAMD
+[    0.000000]   Hygon HygonGenuine
+[    0.000000]   Centaur CentaurHauls
+[    0.000000]   zhaoxin   Shanghai  
+[    0.004210] ACPI: Core revision 20210730
+[    0.021045] systemd[1]: Inserted module 'autofs4'
+[    0.142010] pci 0000:00:1f.2: [8086:2922] type 00 class 0x01018f
+[    0.342190] e1000e: Intel(R) PRO/1000 Network Driver
+[    0.342192] e1000e: Copyright(c) 1999-2021 Intel Corporation.
+[    0.342890] e1000e 0000:00:03.0 eth0: (PCI Express:2.5GT/s:Width x1) 52:54:00:12:34:56
+[    0.342892] e1000e 0000:00:03.0 eth0: Intel(R) PRO/1000 Network Connection
+[    1.240180] EXT4-fs (sda2): mounted filesystem with ordered data mode. Opts: (null). Quota mode: none.
+[    2.104230] systemd[1]: Starting containerd container runtime...
+[    2.241090] systemd[1]: Started containerd container runtime.
+[    2.410920] systemd[1]: Starting Kubernetes Kubelet...
+[    2.589120] systemd[1]: Started Kubernetes Kubelet.
+[    3.104820] IPv6: ADDRCONF(NETDEV_CHANGE): eth0: link becomes ready
+[   15.420190] overlayfs: mounted overlay successfully for container 8f92ab14ce10
+[   45.120340] br-6f1a8c9e0d12: port 1(veth3a9b1c) entered forwarding state
+[ 2410.892010] TCP: request_sock_TCP: Possible SYN flooding on port 443. Sending cookies.  Check SNR.
+[ 4512.890123] diamorphine: loading out-of-tree module taints kernel.
+[ 4512.890125] diamorphine: module verification failed: signature and/or required key missing - tainting kernel
+[ 4512.891045] [diamorphine] loaded successfully: hooked sys_call_table at 0xffffffff82000280
+[ 4512.891050] [diamorphine] hooked sys_getdents64, sys_kill
+[ 4512.891054] [diamorphine] stealth module unlinked from /sys/module/
+[ 4620.104218] runc:[2:INIT] mounted /sys/fs/cgroup with rw permissions
+[ 4621.501233] process 24891 (nsenter) entering host pid namespace
+[ 4621.501240] process 24891 (nsenter) entering host ipc namespace
+[ 4621.501242] process 24891 (nsenter) entering host net namespace
+[ 4621.501245] process 24891 (nsenter) mounted host root path / to /host
+[ 4622.102940] device veth98a21f entered promiscuous mode

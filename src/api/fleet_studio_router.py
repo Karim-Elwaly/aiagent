@@ -905,7 +905,14 @@ async def stage_mission_document(
             if not manifest.units:
                 manifest.units = []
             if manifest.units:
-                manifest.units[0].attached_files = [att_dict]
+                # Accumulate files from folder uploads rather than dropping previously uploaded files
+                existing_files = list(manifest.units[0].attached_files or [])
+                existing_names = {f.get("filename") for f in existing_files if isinstance(f, dict)}
+                if meta.filename not in existing_names:
+                    existing_files.append(att_dict)
+                else:
+                    existing_files = [f for f in existing_files if f.get("filename") != meta.filename] + [att_dict]
+                manifest.units[0].attached_files = existing_files
 
             # Inject into DAG tasks so all specialist agents directly receive the file and its extracted content
             if manifest.dag and isinstance(manifest.dag, dict) and "tasks" in manifest.dag:
@@ -922,11 +929,11 @@ async def stage_mission_document(
                             )
                             has_real_text = meta.extracted_text and not meta.extracted_text.startswith("[Word Document:") and not meta.extracted_text.startswith("[PDF:")
                             if has_real_text and len(meta.extracted_text.strip()) > 0:
-                                doc_section += f"- **Extracted Content**:\n```text\n{meta.extracted_text.strip()}\n```\n"
+                                doc_section += f"- **Extracted Content**:\n```text\n{meta.extracted_text.strip()[:3500]}\n```\n"
                             else:
                                 doc_section += f"- Note: File is stored at `{meta.file_path}` for inspection with file tools.\n"
 
-                            if "# Attached Document Source:" not in task_desc:
+                            if meta.filename not in task_desc:
                                 task["description"] = task_desc + doc_section
                             task.setdefault("parameters", {})["target_path"] = meta.file_path
                             task.setdefault("parameters", {})["attached_file"] = meta.file_path
@@ -951,111 +958,178 @@ async def stage_mission_document(
 @router.post("/api/v1/missions/{mission_id}/run")
 async def run_fleet_mission(mission_id: str, payload: dict, request: Request):
     """Dispatch the multi-agent fleet arena with target paths and attached file context."""
-    from src.core.resilience import normalize_level
-    from src.fleet.arena import FleetArenaComposer
-    from src.fleet.arena_store import FleetArenaStore
-
-    store = FleetArenaStore()
-    manifest = store.load(mission_id)
-    if not manifest:
-        arenas = store.list_all()
-        manifest = arenas[0] if arenas else None
-
-    if not manifest:
-        raise HTTPException(404, "Mission not found")
-
-    composer = FleetArenaComposer(registry=getattr(request.app.state, "registry", None))
-
-    # Reconcile and provision Hermes profiles to guarantee SOUL, skills, and tools are in sync
+    import traceback
     try:
-        manifest = await asyncio.to_thread(composer.provision_arena, manifest.arena_id)
-    except Exception as exc:
-        logger.warning("Auto-provisioning during run skipped: %s", exc)
+        from src.core.resilience import normalize_level
+        from src.fleet.arena import FleetArenaComposer
+        from src.fleet.arena_store import FleetArenaStore
 
-    enriched_dag = composer.get_enriched_dag(manifest.arena_id)
-    workflow_id = f"fleet-{manifest.arena_id}-{uuid4().hex[:6]}"
-    manifest.workflow_id = workflow_id
-    manifest.status = "running"
+        store = FleetArenaStore()
+        manifest = store.load(mission_id)
+        if not manifest:
+            arenas = store.list_all()
+            manifest = arenas[0] if arenas else None
 
-    target_path = str(payload.get("target_path") or payload.get("input_document") or "").strip()
+        if not manifest:
+            raise HTTPException(404, f"Mission '{mission_id}' not found")
 
-    # Discover any attached files from the arena manifest
-    attached_files = []
-    if manifest.units and manifest.units[0].attached_files:
-        attached_files = manifest.units[0].attached_files
+        composer = FleetArenaComposer(registry=getattr(request.app.state, "registry", None))
 
-    # If target_path is specified as a local file, extract text if attached_files was empty or 0 bytes
-    if target_path and Path(target_path).is_file():
-        try:
-            from src.core.document_parser import process_uploaded_file
-            p = Path(target_path)
-            f_bytes = p.read_bytes()
-            if f_bytes:
-                meta = process_uploaded_file(file_bytes=f_bytes, filename=p.name, session_id=manifest.arena_id)
-                att_dict = meta.model_dump() if hasattr(meta, "model_dump") else meta.dict()
-                if manifest.units:
-                    manifest.units[0].attached_files = [att_dict]
-                attached_files = [att_dict]
-        except Exception as exc:
-            logger.warning("Could not auto-extract target_path file %s: %s", target_path, exc)
+        # Reconcile and provision Hermes profiles only if missing profiles need to be created
+        if manifest.profiles_to_create or any(not getattr(u, "profile_exists", False) for u in manifest.units):
+            try:
+                manifest = await asyncio.to_thread(composer.provision_arena, manifest.arena_id)
+            except Exception as exc:
+                logger.warning("Auto-provisioning during run skipped: %s", exc)
 
-    doc_context = ""
-    if attached_files:
-        primary_file = attached_files[0]
-        f_name = primary_file.get("filename", "document")
-        f_path = primary_file.get("file_path", "")
-        f_text = primary_file.get("extracted_text", "")
-        doc_context = f"\n\n[ATTACHED USER SOURCE DOCUMENT: {f_name}]\n[FILE PATH: {f_path}]\n"
-        has_real_text = f_text and not f_text.startswith("[Word Document:") and not f_text.startswith("[PDF:")
-        if has_real_text and len(f_text.strip()) > 0:
-            doc_context += f"[DOCUMENT CONTENT]:\n{f_text[:12000]}\n"
-        if not target_path and f_path:
-            target_path = f_path
+        enriched_dag = composer.get_enriched_dag(manifest.arena_id)
+        workflow_id = f"fleet-{manifest.arena_id}-{uuid4().hex[:6]}"
+        manifest.workflow_id = workflow_id
+        manifest.status = "running"
 
-    if target_path:
-        effective_query = f"{manifest.mission_prompt}\n\nTarget Investigation Path / Document: {target_path}{doc_context}"
-    else:
-        effective_query = f"{manifest.mission_prompt}{doc_context}"
+        # Sanitize target_path: strip quotes, backticks, leading/trailing whitespace
+        raw_target_path = str(payload.get("target_path") or payload.get("input_document") or "").strip()
+        target_path = raw_target_path.strip('"`\'').strip()
 
-    # Ensure every task in enriched_dag receives the target path and document context safely without duplicate bloat
-    if enriched_dag and "tasks" in enriched_dag:
-        for t in enriched_dag["tasks"]:
-            if target_path:
-                t.setdefault("parameters", {})["target_path"] = target_path
-            desc = t.get("description", "")
-            if doc_context and not any(k in desc for k in ("[ATTACHED USER SOURCE DOCUMENT", "# Attached Document Source:", "Attached Document Source:")):
-                t["description"] = f"{desc}\n{doc_context}"
+        # Discover any attached files from the arena manifest
+        attached_files: list[dict[str, Any]] = []
+        if manifest.units and manifest.units[0].attached_files:
+            attached_files = list(manifest.units[0].attached_files)
 
-    store.save(manifest)
+        # Also auto-discover any previously uploaded files stored in data/uploads/{arena_id}
+        upload_folder = Path("data/uploads") / manifest.arena_id
+        if upload_folder.is_dir():
+            try:
+                from src.core.document_parser import process_uploaded_file
+                for up_file in upload_folder.iterdir():
+                    if up_file.is_file() and not any(f.get("filename") == up_file.name for f in attached_files):
+                        try:
+                            f_bytes = up_file.read_bytes()
+                            if f_bytes:
+                                meta = process_uploaded_file(file_bytes=f_bytes, filename=up_file.name, session_id=manifest.arena_id)
+                                att_dict = meta.model_dump() if hasattr(meta, "model_dump") else meta.dict()
+                                attached_files.append(att_dict)
+                        except Exception as up_err:
+                            logger.warning("Could not auto-stage stored upload %s: %s", up_file, up_err)
+                if manifest.units and len(attached_files) > len(manifest.units[0].attached_files or []):
+                    manifest.units[0].attached_files = attached_files
+            except Exception as folder_err:
+                logger.warning("Error scanning uploads folder %s: %s", upload_folder, folder_err)
 
-    agent_id = manifest.agent_id or ""
-    level = normalize_level(manifest.resilience or "standard")
+        # Handle directory target_path or single file target_path safely
+        if target_path:
+            try:
+                p = Path(target_path)
+                if p.is_dir():
+                    # Target path is a directory (e.g. raw logs folder)
+                    logger.info("Target path is a directory: %s", p)
+                    dir_files = [f for f in p.iterdir() if f.is_file() and f.suffix.lower() in (
+                        ".log", ".txt", ".json", ".audit", ".evtx", ".xml", ".yaml", ".yml", ".csv", ".pcap", ".raw"
+                    )]
+                    dir_files.sort(key=lambda f: f.stat().st_size, reverse=True)
+                    # If attached_files has fewer than 2 files, auto-stage key files from directory
+                    if len(attached_files) < 2 and dir_files:
+                        from src.core.document_parser import process_uploaded_file
+                        for df in dir_files[:8]:
+                            try:
+                                if df.stat().st_size > 0:
+                                    with df.open("rb") as _fh:
+                                        f_bytes = _fh.read(5_000_000)
+                                    if f_bytes:
+                                        meta = process_uploaded_file(file_bytes=f_bytes, filename=df.name, session_id=manifest.arena_id)
+                                        att_dict = meta.model_dump() if hasattr(meta, "model_dump") else meta.dict()
+                                        if not any(f.get("filename") == df.name for f in attached_files):
+                                            attached_files.append(att_dict)
+                            except Exception as df_err:
+                                logger.warning("Could not auto-extract directory file %s: %s", df, df_err)
+                        if manifest.units:
+                            manifest.units[0].attached_files = attached_files
 
-    # Check for optional resume flag or existing checkpoint to resume
-    resume_flag = bool(payload.get("resume", False))
-    resume_workflow_id = payload.get("workflow_id")
-    if resume_flag and resume_workflow_id:
-        workflow_id = resume_workflow_id
+                elif p.is_file():
+                    # Target path is a single file
+                    try:
+                        from src.core.document_parser import process_uploaded_file
+                        f_bytes = p.read_bytes()
+                        if f_bytes:
+                            meta = process_uploaded_file(file_bytes=f_bytes, filename=p.name, session_id=manifest.arena_id)
+                            att_dict = meta.model_dump() if hasattr(meta, "model_dump") else meta.dict()
+                            if manifest.units:
+                                manifest.units[0].attached_files = [att_dict]
+                            attached_files = [att_dict]
+                    except Exception as exc:
+                        logger.warning("Could not auto-extract target_path file %s: %s", target_path, exc)
+            except (OSError, ValueError, Exception) as path_err:
+                logger.warning("Target path validation notice for '%s': %s", target_path, path_err)
 
-    # Dispatch workflow
-    run_direct_fn = getattr(request.app.state, "run_direct_workflow", None)
-    if not run_direct_fn:
-        from src.api.main import run_direct_workflow as run_direct_fn
+        # Build comprehensive document context for all attached files / directory contents
+        doc_context = ""
+        if attached_files:
+            doc_context = f"\n\n[ATTACHED INVESTIGATION ASSETS ({len(attached_files)} files)]:\n"
+            for idx, af in enumerate(attached_files[:8]):
+                f_name = af.get("filename", f"file_{idx}")
+                f_path = af.get("file_path", "")
+                f_text = af.get("extracted_text", "")
+                f_size = af.get("size_bytes", 0)
+                doc_context += f"- **File**: `{f_name}` (Path: `{f_path}`, Size: {f_size} bytes)\n"
+                has_real_text = f_text and not f_text.startswith("[Word Document:") and not f_text.startswith("[PDF:")
+                if has_real_text and len(f_text.strip()) > 0:
+                    doc_context += f"  Snippet:\n```text\n{f_text[:2500].strip()}\n```\n"
 
-    asyncio.create_task(
-        run_direct_fn(
-            workflow_id, effective_query, agent_id, enriched_dag, level, resume=resume_flag
+        if not target_path and attached_files:
+            target_path = attached_files[0].get("file_path", "")
+
+        if target_path:
+            effective_query = f"{manifest.mission_prompt}\n\nTarget Investigation Path / Document: {target_path}{doc_context}"
+        else:
+            effective_query = f"{manifest.mission_prompt}{doc_context}"
+
+        # Ensure every task in enriched_dag receives the target path and document context safely without duplicate bloat
+        if enriched_dag and "tasks" in enriched_dag:
+            for t in enriched_dag["tasks"]:
+                if target_path:
+                    t.setdefault("parameters", {})["target_path"] = target_path
+                desc = t.get("description", "")
+                if doc_context and not any(k in desc for k in ("[ATTACHED USER SOURCE DOCUMENT", "# Attached Document Source:", "[ATTACHED INVESTIGATION ASSETS")):
+                    t["description"] = f"{desc}\n{doc_context}"
+
+        store.save(manifest)
+
+        agent_id = manifest.agent_id or ""
+        level = normalize_level(manifest.resilience or "standard")
+
+        # Check for optional resume flag or existing checkpoint to resume
+        resume_flag = bool(payload.get("resume", False))
+        resume_workflow_id = payload.get("workflow_id")
+        if resume_flag and resume_workflow_id:
+            workflow_id = resume_workflow_id
+
+        # Dispatch workflow
+        run_direct_fn = getattr(request.app.state, "run_direct_workflow", None)
+        if not run_direct_fn:
+            from src.api.main import run_direct_workflow as run_direct_fn
+
+        asyncio.create_task(
+            run_direct_fn(
+                workflow_id, effective_query, agent_id, enriched_dag, level, resume=resume_flag
+            )
         )
-    )
 
-    agent_name = manifest.units[0].task_name if manifest.units else manifest.arena_name
-    return {
-        "status": "resumed" if resume_flag else "dispatched",
-        "mission_id": manifest.arena_id,
-        "workflow_id": workflow_id,
-        "agent_name": agent_name,
-        "target_path": target_path,
-    }
+        agent_name = manifest.units[0].task_name if manifest.units else manifest.arena_name
+        return {
+            "status": "resumed" if resume_flag else "dispatched",
+            "mission_id": manifest.arena_id,
+            "workflow_id": workflow_id,
+            "agent_name": agent_name,
+            "target_path": target_path,
+        }
+    except HTTPException:
+        raise
+    except Exception as exc:
+        logger.exception("Error in run_fleet_mission for %s: %s\n%s", mission_id, exc, traceback.format_exc())
+        return JSONResponse(
+            status_code=500,
+            content={"detail": f"Failed to dispatch mission: {str(exc)}"},
+        )
 
 
 @router.post("/api/v1/missions/{mission_id}/resume-latest")
