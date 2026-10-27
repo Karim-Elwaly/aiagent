@@ -16,8 +16,12 @@ import subprocess
 import sys
 import time
 
+# Ensure working directory is project root
+os.chdir(os.path.dirname(os.path.abspath(__file__)))
+
 # Auto-switch to .venv Python interpreter if running under global python
 venv_python = os.path.join(os.path.dirname(os.path.abspath(__file__)), ".venv", "Scripts", "python.exe")
+
 if os.path.exists(venv_python) and os.path.abspath(sys.executable).lower() != os.path.abspath(venv_python).lower():
     if sys.platform == "win32":
         try:
@@ -111,40 +115,50 @@ def main():
                 pass
     else:
         print(f"    [*] Temporal Server not responding on {temporal_host}. Checking Docker...")
-        started = False
+        docker_available = False
         try:
-            # 1. Try starting existing containers
-            for cname in ["uaos-postgres", "uaos-temporal", "uaos-temporal-ui"]:
-                res = subprocess.run(["docker", "start", cname], capture_output=True, text=True, timeout=4)
-                if res.returncode == 0:
-                    started = True
-
-            if started:
-                print(f"    [*] Started existing Temporal Docker containers. Waiting for ports {t_port} & 8234...")
-                for _ in range(8):
-                    time.sleep(1.0)
-                    if check_port(t_host, t_port, timeout=1.0):
-                        print(f"    [OK] Temporal Server online on {temporal_host}!")
-                        break
-
-            # 2. If not started or still offline, run docker compose up for the full stack
-            if not check_port(t_host, t_port, timeout=0.5):
-                res_dc = subprocess.run(
-                    ["docker", "compose", "up", "-d", "postgresql", "temporal", "temporal-ui"],
-                    capture_output=True,
-                    text=True,
-                    timeout=15,
-                )
-                if res_dc.returncode == 0:
-                    print(f"    [*] Launched Temporal stack via Docker Compose. Waiting for port {t_port}...")
-                    for _ in range(10):
-                        time.sleep(1.0)
-                        if check_port(t_host, t_port, timeout=1.0):
-                            print(f"    [OK] Temporal Server online on {temporal_host}!")
-                            started = True
-                            break
+            d_info = subprocess.run(["docker", "info"], capture_output=True, timeout=1.5)
+            docker_available = (d_info.returncode == 0)
         except Exception:
-            pass
+            docker_available = False
+
+        started = False
+        if docker_available:
+            try:
+                # 1. Try starting existing containers
+                for cname in ["uaos-postgres", "uaos-temporal", "uaos-temporal-ui"]:
+                    res = subprocess.run(["docker", "start", cname], capture_output=True, text=True, timeout=3)
+                    if res.returncode == 0:
+                        started = True
+
+                if started:
+                    print(f"    [*] Started existing Temporal Docker containers. Waiting for ports {t_port} & 8234...")
+                    for _ in range(5):
+                        time.sleep(1.0)
+                        if check_port(t_host, t_port, timeout=0.8):
+                            print(f"    [OK] Temporal Server online on {temporal_host}!")
+                            break
+
+                # 2. If not started or still offline, run docker compose up for the full stack
+                if not check_port(t_host, t_port, timeout=0.5):
+                    res_dc = subprocess.run(
+                        ["docker", "compose", "up", "-d", "postgresql", "temporal", "temporal-ui"],
+                        capture_output=True,
+                        text=True,
+                        timeout=8,
+                    )
+                    if res_dc.returncode == 0:
+                        print(f"    [*] Launched Temporal stack via Docker Compose. Waiting for port {t_port}...")
+                        for _ in range(6):
+                            time.sleep(1.0)
+                            if check_port(t_host, t_port, timeout=0.8):
+                                print(f"    [OK] Temporal Server online on {temporal_host}!")
+                                started = True
+                                break
+            except Exception:
+                pass
+        else:
+            print("    [*] Docker Desktop is offline. Skipping container startup.")
 
         if not check_port(t_host, t_port, timeout=0.5):
             print("    [*] Temporal Server (port 7234) and Web UI (port 8234) are offline.")

@@ -1,0 +1,160 @@
+{
+  "arena_id": "arena-manages-end-end-fcc53d",
+  "arena_name": "Talent Acquisition (TA) ",
+  "arena_slug": "manages-end-end",
+  "mission_prompt": "manages the end-to-end recruitment process to find, attract, interview, and hire qualified candidates for an organization.",
+  "strategy_profile": "STANDARD",
+  "units": [
+    {
+      "profile_name": "fleet-manages-end-end-define-recruitment-w",
+      "unit_codename": "RECON_INGESTION",
+      "task_id": "t-itment-w",
+      "task_name": "Define Recruitment Workflow & Success Metrics",
+      "operational_stage": "RECON_INGESTION",
+      "scoped_tools": [
+        "execute_python"
+      ],
+      "required_skills": [
+        "general_reasoning"
+      ],
+      "description": "Outline the high\u2011level stages of end\u2011to\u2011end recruitment (planning, sourcing, screening, interviewing, offer, onboarding), identify key performance indicators for each stage, and recommend tools or systems that support tracking.",
+      "input_contract": "",
+      "output_contract": "",
+      "profile_exists": true,
+      "attached_files": [
+        {
+          "id": "att-f4ac1ca4",
+          "filename": "TA.docx",
+          "file_path": "D:\\projects\\aiagent\\data\\uploads\\arena-manages-end-end-fcc53d\\TA.docx",
+          "file_type": "docx",
+          "size_bytes": 17945,
+          "extracted_text": "Talent Acquisition Assessment Task\nPosition: Senior Technical Recruiter / Talent Acquisition Specialist\nTime Limit: 48 Hours\nContext: Our engineering organization is expanding its platform capabilities. We are opening a critical role: Senior DevSecOps & Cloud Platform Engineer.\nYour objective is to demonstrate your end-to-end recruitment process across sourcing strategy, candidate outreach, initial screening, and stakeholder management.\nPart 1: Sourcing Strategy & Boolean Search\nTarget Persona: Define 3 to 4 core criteria you will look for when identifying prospective candidates (e.g., tech stack depth, architectural scale, security governance).\nSearch Strings: Provide two distinct search strings you would use to source passive talent:\nLinkedIn Recruiter Boolean String: Include key skills, tools, titles, and negative keywords (exclusions).\nAlternative Platform / X-Ray Search: Construct a Google X-Ray search query to find candidates via GitHub, Stack Overflow, or personal tech blogs.\nPart 2: Cold Candidate Outreach\nWrite an initial outreach message to a passive, highly sought-after Senior DevSecOps Engineer currently employed at a competitive firm.\nFormat: LinkedIn InMail or Cold Email.\nRequirements:\nKeep it concise (under 200 words).\nAvoid generic recruitment templates.\nClearly articulate the value proposition, high-impact technical challenges, and a low-friction call to action.\nPart 3: Structured Phone Screen Framework\nDesign a 30-minute initial screening questionnaire to evaluate candidates before passing them to the Hiring Manager. Provide 4 to 5 structured questions, specifying:\nThe exact question asked.\nThe competency or behavior being evaluated (e.g., technical depth, system ownership, cultural alignment, compensation expectations).\nWhat constitutes a \"strong answer\" versus a \"red flag.\"\nPart 4: Hiring Manager Scenario & Stakeholder Management\nScenario:\nTwo weeks into the search, you have presented 6 qualified profiles who meet the initial job description requirements. The Hiring Manager rejects 5 of them at the resume stage without detailed feedback and leaves the 6th pending review for over 7 business days. Meanwhile, top passive candidates in your pipeline are receiving competing offers.\nHow do you address this bottleneck with the Hiring Manager?\nOutline your agenda and talking points for a calibration/sync meeting to reset expectations, align on feedback, and protect the candidate experience.\nEvaluation Criteria\nSubmissions will be assessed on:\nMarket Insight & Technical Literacy: Ability to understand technical terminology and accurately target relevant engineering profiles.\nCommunication & Engagement Quality: Tone, personalization, and clarity in candidate-facing communications.\nMethodical Rigor: Structure, scoring consistency, and depth of the screening questions.\nConsultative Influence: Professionalism and diplomacy in managing hiring managers and eliminating recruitment bottlenecks.",
+          "char_count": 2950,
+          "preview": "Talent Acquisition Assessment Task\nPosition: Senior Technical Recruiter / Talent Acquisition Specialist\nTime Limit: 48 Hours\nContext: Our engineering organization is expanding its platform capabilities. We are opening a critical role: Senior DevSecOps & Cloud Platform Engineer.\nYour objective is to demonstrate your end-to-end recruitment process across sourcing strategy, candidate outreach, initial screening, and stakeholder management.\nPart 1: Sourcing Strategy & Boolean Search\nTarget Persona: Define 3 to 4 core criteria you will look for when identifying prospective candidates (e.g., tech st..."
+        }
+      ]
+    },
+    {
+      "profile_name": "fleet-manages-end-end-design-sourcing-attr",
+      "unit_codename": "EXECUTION_ACTION",
+      "task_id": "t-ing-attr",
+      "task_name": "Design Sourcing & Attraction Strategy",
+      "operational_stage": "EXECUTION_ACTION",
+      "scoped_tools": [
+        "execute_python"
+      ],
+      "required_skills": [
+        "general_reasoning"
+      ],
+      "description": "Develop a multi\u2011channel candidate attraction plan that includes job board selection, employer branding tactics, employee referral programs, social media outreach, and partnership with educational institutions. Include messaging guidelines and budget considerations.",
+      "input_contract": "",
+      "output_contract": "",
+      "profile_exists": true,
+      "attached_files": []
+    },
+    {
+      "profile_name": "fleet-manages-end-end-create-interview-hir",
+      "unit_codename": "DELIVERABLE_SYNTHESIS",
+      "task_id": "t-view-hir",
+      "task_name": "Create Interview & Hiring Framework",
+      "operational_stage": "DELIVERABLE_SYNTHESIS",
+      "scoped_tools": [
+        "execute_python"
+      ],
+      "required_skills": [
+        "general_reasoning"
+      ],
+      "description": "Specify structured interview formats (phone, video, in\u2011person), competency frameworks, scoring rubrics, decision\u2011making processes, offer negotiation templates, and onboarding handoff procedures. Include diversity & inclusion checkpoints.",
+      "input_contract": "",
+      "output_contract": "",
+      "profile_exists": true,
+      "attached_files": []
+    }
+  ],
+  "dag": {
+    "goal": "Provide a structured end\u2011to\u2011end recruitment process that covers candidate sourcing, attraction, interviewing, and hiring for an organization.",
+    "reasoning": "The user requests a conceptual framework for managing the full recruitment lifecycle. This is a purely knowledge\u2011based task requiring no host interaction or file access, so it can be handled with general reasoning. A three\u2011step decomposition allows clear separation of stages: (1) defining the overall workflow and key metrics, (2) designing sourcing & attraction tactics, and (3) outlining interview & hiring procedures.",
+    "tasks": [
+      {
+        "id": "t1",
+        "name": "Define Recruitment Workflow & Success Metrics",
+        "description": "Outline the high\u2011level stages of end\u2011to\u2011end recruitment (planning, sourcing, screening, interviewing, offer, onboarding), identify key performance indicators for each stage, and recommend tools or systems that support tracking.\n\n---\n# Attached Document Source:\n- **File Name**: `TA.docx`\n- **File Path**: `D:\\projects\\aiagent\\data\\uploads\\arena-manages-end-end-fcc53d\\TA.docx`\n- **Size**: 17945 bytes\n- **Extracted Content**:\n```text\nTalent Acquisition Assessment Task\nPosition: Senior Technical Recruiter / Talent Acquisition Specialist\nTime Limit: 48 Hours\nContext: Our engineering organization is expanding its platform capabilities. We are opening a critical role: Senior DevSecOps & Cloud Platform Engineer.\nYour objective is to demonstrate your end-to-end recruitment process across sourcing strategy, candidate outreach, initial screening, and stakeholder management.\nPart 1: Sourcing Strategy & Boolean Search\nTarget Persona: Define 3 to 4 core criteria you will look for when identifying prospective candidates (e.g., tech stack depth, architectural scale, security governance).\nSearch Strings: Provide two distinct search strings you would use to source passive talent:\nLinkedIn Recruiter Boolean String: Include key skills, tools, titles, and negative keywords (exclusions).\nAlternative Platform / X-Ray Search: Construct a Google X-Ray search query to find candidates via GitHub, Stack Overflow, or personal tech blogs.\nPart 2: Cold Candidate Outreach\nWrite an initial outreach message to a passive, highly sought-after Senior DevSecOps Engineer currently employed at a competitive firm.\nFormat: LinkedIn InMail or Cold Email.\nRequirements:\nKeep it concise (under 200 words).\nAvoid generic recruitment templates.\nClearly articulate the value proposition, high-impact technical challenges, and a low-friction call to action.\nPart 3: Structured Phone Screen Framework\nDesign a 30-minute initial screening questionnaire to evaluate candidates before passing them to the Hiring Manager. Provide 4 to 5 structured questions, specifying:\nThe exact question asked.\nThe competency or behavior being evaluated (e.g., technical depth, system ownership, cultural alignment, compensation expectations).\nWhat constitutes a \"strong answer\" versus a \"red flag.\"\nPart 4: Hiring Manager Scenario & Stakeholder Management\nScenario:\nTwo weeks into the search, you have presented 6 qualified profiles who meet the initial job description requirements. The Hiring Manager rejects 5 of them at the resume stage without detailed feedback and leaves the 6th pending review for over 7 business days. Meanwhile, top passive candidates in your pipeline are receiving competing offers.\nHow do you address this bottleneck with the Hiring Manager?\nOutline your agenda and talking points for a calibration/sync meeting to reset expectations, align on feedback, and protect the candidate experience.\nEvaluation Criteria\nSubmissions will be assessed on:\nMarket Insight & Technical Literacy: Ability to understand technical terminology and accurately target relevant engineering profiles.\nCommunication & Engagement Quality: Tone, personalization, and clarity in candidate-facing communications.\nMethodical Rigor: Structure, scoring consistency, and depth of the screening questions.\nConsultative Influence: Professionalism and diplomacy in managing hiring managers and eliminating recruitment bottlenecks.\n```\n",
+        "required_skills": [
+          "general_reasoning"
+        ],
+        "expected_output": "A concise workflow diagram description with associated KPIs and suggested tool categories.",
+        "dependencies": [],
+        "risk_level": "low",
+        "max_retries": 2,
+        "timeout_seconds": 300,
+        "parameters": {
+          "target_path": "D:\\projects\\aiagent\\data\\uploads\\arena-manages-end-end-fcc53d\\TA.docx",
+          "attached_file": "D:\\projects\\aiagent\\data\\uploads\\arena-manages-end-end-fcc53d\\TA.docx"
+        },
+        "agent_id": null,
+        "hermes_profile": "fleet-manages-end-end-define-recruitment-w",
+        "specialist_spec": null,
+        "_hermes_profile": "fleet-manages-end-end-define-recruitment-w"
+      },
+      {
+        "id": "t2",
+        "name": "Design Sourcing & Attraction Strategy",
+        "description": "Develop a multi\u2011channel candidate attraction plan that includes job board selection, employer branding tactics, employee referral programs, social media outreach, and partnership with educational institutions. Include messaging guidelines and budget considerations.\n\n---\n# Attached Document Source:\n- **File Name**: `TA.docx`\n- **File Path**: `D:\\projects\\aiagent\\data\\uploads\\arena-manages-end-end-fcc53d\\TA.docx`\n- **Size**: 17945 bytes\n- **Extracted Content**:\n```text\nTalent Acquisition Assessment Task\nPosition: Senior Technical Recruiter / Talent Acquisition Specialist\nTime Limit: 48 Hours\nContext: Our engineering organization is expanding its platform capabilities. We are opening a critical role: Senior DevSecOps & Cloud Platform Engineer.\nYour objective is to demonstrate your end-to-end recruitment process across sourcing strategy, candidate outreach, initial screening, and stakeholder management.\nPart 1: Sourcing Strategy & Boolean Search\nTarget Persona: Define 3 to 4 core criteria you will look for when identifying prospective candidates (e.g., tech stack depth, architectural scale, security governance).\nSearch Strings: Provide two distinct search strings you would use to source passive talent:\nLinkedIn Recruiter Boolean String: Include key skills, tools, titles, and negative keywords (exclusions).\nAlternative Platform / X-Ray Search: Construct a Google X-Ray search query to find candidates via GitHub, Stack Overflow, or personal tech blogs.\nPart 2: Cold Candidate Outreach\nWrite an initial outreach message to a passive, highly sought-after Senior DevSecOps Engineer currently employed at a competitive firm.\nFormat: LinkedIn InMail or Cold Email.\nRequirements:\nKeep it concise (under 200 words).\nAvoid generic recruitment templates.\nClearly articulate the value proposition, high-impact technical challenges, and a low-friction call to action.\nPart 3: Structured Phone Screen Framework\nDesign a 30-minute initial screening questionnaire to evaluate candidates before passing them to the Hiring Manager. Provide 4 to 5 structured questions, specifying:\nThe exact question asked.\nThe competency or behavior being evaluated (e.g., technical depth, system ownership, cultural alignment, compensation expectations).\nWhat constitutes a \"strong answer\" versus a \"red flag.\"\nPart 4: Hiring Manager Scenario & Stakeholder Management\nScenario:\nTwo weeks into the search, you have presented 6 qualified profiles who meet the initial job description requirements. The Hiring Manager rejects 5 of them at the resume stage without detailed feedback and leaves the 6th pending review for over 7 business days. Meanwhile, top passive candidates in your pipeline are receiving competing offers.\nHow do you address this bottleneck with the Hiring Manager?\nOutline your agenda and talking points for a calibration/sync meeting to reset expectations, align on feedback, and protect the candidate experience.\nEvaluation Criteria\nSubmissions will be assessed on:\nMarket Insight & Technical Literacy: Ability to understand technical terminology and accurately target relevant engineering profiles.\nCommunication & Engagement Quality: Tone, personalization, and clarity in candidate-facing communications.\nMethodical Rigor: Structure, scoring consistency, and depth of the screening questions.\nConsultative Influence: Professionalism and diplomacy in managing hiring managers and eliminating recruitment bottlenecks.\n```\n",
+        "required_skills": [
+          "general_reasoning"
+        ],
+        "expected_output": "A detailed sourcing & attraction blueprint covering channels, content themes, and resource allocation.",
+        "dependencies": [
+          "t1"
+        ],
+        "risk_level": "low",
+        "max_retries": 2,
+        "timeout_seconds": 300,
+        "parameters": {
+          "target_path": "D:\\projects\\aiagent\\data\\uploads\\arena-manages-end-end-fcc53d\\TA.docx",
+          "attached_file": "D:\\projects\\aiagent\\data\\uploads\\arena-manages-end-end-fcc53d\\TA.docx"
+        },
+        "agent_id": null,
+        "hermes_profile": "fleet-manages-end-end-design-sourcing-attr",
+        "specialist_spec": null,
+        "_hermes_profile": "fleet-manages-end-end-design-sourcing-attr"
+      },
+      {
+        "id": "t3",
+        "name": "Create Interview & Hiring Framework",
+        "description": "Specify structured interview formats (phone, video, in\u2011person), competency frameworks, scoring rubrics, decision\u2011making processes, offer negotiation templates, and onboarding handoff procedures. Include diversity & inclusion checkpoints.\n\n---\n# Attached Document Source:\n- **File Name**: `TA.docx`\n- **File Path**: `D:\\projects\\aiagent\\data\\uploads\\arena-manages-end-end-fcc53d\\TA.docx`\n- **Size**: 17945 bytes\n- **Extracted Content**:\n```text\nTalent Acquisition Assessment Task\nPosition: Senior Technical Recruiter / Talent Acquisition Specialist\nTime Limit: 48 Hours\nContext: Our engineering organization is expanding its platform capabilities. We are opening a critical role: Senior DevSecOps & Cloud Platform Engineer.\nYour objective is to demonstrate your end-to-end recruitment process across sourcing strategy, candidate outreach, initial screening, and stakeholder management.\nPart 1: Sourcing Strategy & Boolean Search\nTarget Persona: Define 3 to 4 core criteria you will look for when identifying prospective candidates (e.g., tech stack depth, architectural scale, security governance).\nSearch Strings: Provide two distinct search strings you would use to source passive talent:\nLinkedIn Recruiter Boolean String: Include key skills, tools, titles, and negative keywords (exclusions).\nAlternative Platform / X-Ray Search: Construct a Google X-Ray search query to find candidates via GitHub, Stack Overflow, or personal tech blogs.\nPart 2: Cold Candidate Outreach\nWrite an initial outreach message to a passive, highly sought-after Senior DevSecOps Engineer currently employed at a competitive firm.\nFormat: LinkedIn InMail or Cold Email.\nRequirements:\nKeep it concise (under 200 words).\nAvoid generic recruitment templates.\nClearly articulate the value proposition, high-impact technical challenges, and a low-friction call to action.\nPart 3: Structured Phone Screen Framework\nDesign a 30-minute initial screening questionnaire to evaluate candidates before passing them to the Hiring Manager. Provide 4 to 5 structured questions, specifying:\nThe exact question asked.\nThe competency or behavior being evaluated (e.g., technical depth, system ownership, cultural alignment, compensation expectations).\nWhat constitutes a \"strong answer\" versus a \"red flag.\"\nPart 4: Hiring Manager Scenario & Stakeholder Management\nScenario:\nTwo weeks into the search, you have presented 6 qualified profiles who meet the initial job description requirements. The Hiring Manager rejects 5 of them at the resume stage without detailed feedback and leaves the 6th pending review for over 7 business days. Meanwhile, top passive candidates in your pipeline are receiving competing offers.\nHow do you address this bottleneck with the Hiring Manager?\nOutline your agenda and talking points for a calibration/sync meeting to reset expectations, align on feedback, and protect the candidate experience.\nEvaluation Criteria\nSubmissions will be assessed on:\nMarket Insight & Technical Literacy: Ability to understand technical terminology and accurately target relevant engineering profiles.\nCommunication & Engagement Quality: Tone, personalization, and clarity in candidate-facing communications.\nMethodical Rigor: Structure, scoring consistency, and depth of the screening questions.\nConsultative Influence: Professionalism and diplomacy in managing hiring managers and eliminating recruitment bottlenecks.\n```\n",
+        "required_skills": [
+          "general_reasoning"
+        ],
+        "expected_output": "A comprehensive interview & hiring playbook with step\u2011by\u2011step instructions and documentation templates.",
+        "dependencies": [
+          "t2"
+        ],
+        "risk_level": "low",
+        "max_retries": 2,
+        "timeout_seconds": 300,
+        "parameters": {
+          "target_path": "D:\\projects\\aiagent\\data\\uploads\\arena-manages-end-end-fcc53d\\TA.docx",
+          "attached_file": "D:\\projects\\aiagent\\data\\uploads\\arena-manages-end-end-fcc53d\\TA.docx"
+        },
+        "agent_id": null,
+        "hermes_profile": "fleet-manages-end-end-create-interview-hir",
+        "specialist_spec": null,
+        "_hermes_profile": "fleet-manages-end-end-create-interview-hir"
+      }
+    ],
+    "estimated_completion_seconds": 60
+  },
+  "status": "completed",
+  "created_at": 1793107716.3818545,
+  "updated_at": 1793111419.4459455,
+  "profiles_to_create": [],
+  "profiles_existing": [
+    "fleet-manages-end-end-define-recruitment-w",
+    "fleet-manages-end-end-design-sourcing-attr",
+    "fleet-manages-end-end-create-interview-hir"
+  ],
+  "workflow_id": "fleet-arena-manages-end-end-fcc53d-29b7f4",
+  "agent_id": null,
+  "resilience": "standard"
+}

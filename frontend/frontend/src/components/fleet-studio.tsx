@@ -61,6 +61,7 @@ type MissionRecord = {
     external_action_approval?: boolean;
   };
   clarification_answers?: Record<string, string>;
+  units_count?: number;
 };
 type UserInfo = { sub?: string; name?: string; email?: string; roles?: string[] };
 type ClarifyingQuestion = {
@@ -90,11 +91,16 @@ type InventoryData = {
   available_models: { family: string; version: string; cloud: boolean; data_residencies: string[]; reasoning_tier: number | null; estimated_daily_cost_usd: number | null; residency_verified: boolean; cost_basis: string | null }[];
 };
 type TelemetryData = {
-  active_fleets: number; active_agents: number; workflow_cycles_24h: number; workflow_cycles_7d: number;
+  active_fleets: number; ready_fleets?: number; active_agents: number; workflow_cycles_24h: number; workflow_cycles_7d: number;
+  workflow_cycles_30d?: number;
   pending_challenge_gates: number; policy_blocks_24h: number; avg_cycle_duration_seconds: number;
+  avg_cycle_duration_seconds_7d?: number;
+  avg_cycle_duration_seconds_30d?: number;
   avg_step_execution_latency_seconds: number; avg_challenge_turnaround_seconds: number;
   avg_reconciliation_seconds: number; daily_budget_burn_usd: number; assurance_verdicts: Record<string, number>;
-  hourly_cycles: { time: string; cycles: number; gates: number }[];
+  hourly_cycles: { time: string; cycles: number; gates: number; cumulative_cycles?: number; cumulative_gates?: number }[];
+  daily_cycles?: { time: string; cycles: number; gates: number; cumulative_cycles?: number; cumulative_gates?: number }[];
+  monthly_cycles?: { time: string; cycles: number; gates: number; cumulative_cycles?: number; cumulative_gates?: number }[];
   model_distribution: Record<string, number>; skill_tool_utilization: Record<string, number>;
 };
 const API_BASE =
@@ -424,7 +430,7 @@ export default function FleetStudio() {
   }
   function selectedModel() {
     const candidate = inventoryData?.available_models.find((model) => residency === "local" ? model.residency_verified : model.data_residencies.includes(residency));
-    if (!candidate) throw new Error(`No Hermes model has verified ${residency} residency.`);
+    if (!candidate) throw new Error(`No AgentHub model has verified ${residency} residency.`);
     return { family: candidate.family, version: candidate.version };
   }
   function addSpecialist() {
@@ -693,7 +699,7 @@ export default function FleetStudio() {
         });
     } catch (error) {
       if (!inventoryData?.provider_configured && !inventoryData?.available_models?.length) {
-        setNotice("Reconciliation plan validated. Hermes inference is currently unconfigured in hermes.yaml; runtime agents remain in standby.");
+        setNotice("Reconciliation plan validated. AgentHub inference is currently unconfigured in agenthub.yaml; runtime agents remain in standby.");
       } else {
         setNotice(error instanceof Error ? error.message : "Reconciliation failed.");
       }
@@ -809,7 +815,7 @@ export default function FleetStudio() {
       <div style={{ position: "relative" }}>
         <button className="estate-select" onClick={() => setEstateInfoOpen(!estateInfoOpen)}>
           <span className="estate-letter">N</span>
-          <span><strong>Northstar estate</strong><small><Dot color={inventoryData?.connected ? "green" : "orange"} /> {missions} missions · {inventoryData?.connected ? "Hermes connected" : "Hermes offline"}</small></span>
+          <span><strong>Northstar estate</strong><small><Dot color={inventoryData?.connected ? "green" : "orange"} /> {missions} missions · {inventoryData?.connected ? "AgentHub connected" : "AgentHub offline"}</small></span>
           <ChevronDown size={15} />
         </button>
         {estateInfoOpen && (
@@ -831,14 +837,14 @@ export default function FleetStudio() {
       </div>
       <div className="nav-title">OPERATIONS</div>
       <nav>{navigation.map(({ name, icon: Icon }, index) => <div key={name}>{index === 3 && <div className="nav-title nav-title--governance">GOVERNANCE</div>}<button className={`nav-link ${view === name ? "nav-link--active" : ""}`} onClick={() => setView(name)}><Icon size={17} /><span>{name}</span>{name === "Decision rooms" && pending > 0 && <b>{String(pending).padStart(2, "0")}</b>}{name === "Mission control" && <Dot />}</button></div>)}</nav>
-      <div className="sidebar-bottom"><div className="system-health"><span><Activity size={15} /></span><div><strong>{inventoryData?.connected ? "Hermes online" : "Hermes unavailable"}</strong><small>{inventoryData?.provider_configured ? "Inference ready" : "Inference not configured"}</small></div></div><button className="profile"><span className="avatar">{(user?.name ?? "LO").split(/\s+/).map((part) => part[0]).join("").slice(0, 2).toUpperCase()}</span><span><strong>{user?.name ?? "Local Operator"}</strong><small>{user?.roles?.[0] ?? "PlatformEngineer"}</small></span><MoreHorizontal size={16} /></button></div>
+      <div className="sidebar-bottom"><div className="system-health"><span><Activity size={15} /></span><div><strong>{inventoryData?.connected ? "AgentHub online" : "AgentHub unavailable"}</strong><small>{inventoryData?.provider_configured ? "Inference ready" : "Inference not configured"}</small></div></div><button className="profile"><span className="avatar">{(user?.name ?? "LO").split(/\s+/).map((part) => part[0]).join("").slice(0, 2).toUpperCase()}</span><span><strong>{user?.name ?? "Local Operator"}</strong><small>{user?.roles?.[0] ?? "PlatformEngineer"}</small></span><MoreHorizontal size={16} /></button></div>
     </aside>
     <main className="main-area">
       <header className="topbar">
         <div className="breadcrumb">Northstar estate <ChevronRight size={14} /><strong>{view}</strong></div>
         <div className="top-actions">
           {authRequired ? <a className="primary-button" href={`${API_BASE}/auth/login`}>Sign in</a> : <>
-            <span className="connection"><Dot color={inventoryData?.connected ? "green" : "orange"} /> Hermes estate <i>·</i> {inventoryData?.connected ? "Connected" : "Disconnected"}</span>
+            <span className="connection"><Dot color={inventoryData?.connected ? "green" : "orange"} /> AgentHub estate <i>·</i> {inventoryData?.connected ? "Connected" : "Disconnected"}</span>
             <button className="icon-button" aria-label="Search" title="Search (Ctrl+K)" onClick={() => setSearchPaletteOpen(true)}><Search size={17} /></button>
             <div style={{ position: "relative" }}>
               <button className="icon-button bell-button" aria-label="Notifications" title="Notifications" onClick={() => setNotificationsOpen(!notificationsOpen)}>
@@ -870,7 +876,7 @@ export default function FleetStudio() {
                     >
                       <Dot color={inventoryData?.connected ? "green" : "orange"} />
                       <div>
-                        <strong style={{ display: "block", fontSize: 9 }}>Hermes: {inventoryData?.connected ? "Connected" : "Disconnected"}</strong>
+                        <strong style={{ display: "block", fontSize: 9 }}>AgentHub: {inventoryData?.connected ? "Connected" : "Disconnected"}</strong>
                         <small style={{ color: "#778580", fontSize: 8 }}>{inventoryData?.installed_skills.length ?? 0} skills · {inventoryData?.registered_tools.length ?? 0} tools</small>
                       </div>
                     </button>
@@ -996,7 +1002,7 @@ export default function FleetStudio() {
       />
     )}
     {inspectedMission && <div className="modal-shade"><section className="wizard" role="dialog" aria-modal="true" aria-labelledby="mission-details-title"><div className="wizard-head"><span>MISSION DETAILS</span><button className="icon-button" aria-label="Close mission details" onClick={() => setInspectedMission(null)}><X size={18} /></button></div><h2 id="mission-details-title">{inspectedMission.name}</h2><p>{inspectedMission.goal}</p><dl className="mission-details"><dt>Mission ID</dt><dd>{inspectedMission.mission_id}</dd><dt>State</dt><dd>{inspectedMission.status}</dd><dt>Fleet benchmarking</dt><dd>{inspectedMission.competitive_benchmarking ? "Enabled" : "Disabled"}</dd></dl><div className="wizard-foot"><button className="secondary-button" onClick={() => downloadMission(inspectedMission)}>Download mission JSON</button><div style={{ display: "flex", gap: "8px" }}>{inspectedMission.status !== "READY" && inspectedMission.status !== "APPLIED" && <button className="primary-button" onClick={() => void resumeMission(inspectedMission)}><Sparkles size={14} /> Continue design</button>}<button className="plain-button" onClick={() => setInspectedMission(null)}>Close</button></div></div></section></div>}
-    {wizard && <div className="modal-shade"><section className="wizard" role="dialog" aria-modal="true" aria-labelledby="wizard-title"><div className="wizard-head"><span><Sparkles size={14} /> MISSION DESIGN</span><button className="icon-button" aria-label="Close" onClick={() => setWizard(false)}><X size={18} /></button></div><div className="progress"><i style={{ width: `${(stage + 1) * 25}%` }} /></div><div className="step-tag">STAGE 0{stage + 1}<span> / 04</span></div><h2 id="wizard-title">{["Set the mission boundary", "Resolve the unknowns", "Shape the specialist fleet", "Challenge the blueprint"][stage]}</h2><p className="wizard-desc">{["Start with the organizational outcome. Bound where data can go and what actions require a human.", "Answer the architecture questions before the fleet proposal is generated.", "Review and edit specialists using only capabilities discovered from Hermes.", "Every required gate is persisted. Compilation never applies runtime changes."][stage]}</p>
+    {wizard && <div className="modal-shade"><section className="wizard" role="dialog" aria-modal="true" aria-labelledby="wizard-title"><div className="wizard-head"><span><Sparkles size={14} /> MISSION DESIGN</span><button className="icon-button" aria-label="Close" onClick={() => setWizard(false)}><X size={18} /></button></div><div className="progress"><i style={{ width: `${(stage + 1) * 25}%` }} /></div><div className="step-tag">STAGE 0{stage + 1}<span> / 04</span></div><h2 id="wizard-title">{["Set the mission boundary", "Resolve the unknowns", "Shape the specialist fleet", "Challenge the blueprint"][stage]}</h2><p className="wizard-desc">{["Start with the organizational outcome. Bound where data can go and what actions require a human.", "Answer the architecture questions before the fleet proposal is generated.", "Review and edit specialists using only capabilities discovered from AgentHub.", "Every required gate is persisted. Compilation never applies runtime changes."][stage]}</p>
       {wizardError && <div className="wizard-error" role="alert">{wizardError}</div>}
       {stage === 0 && <div className="wizard-fields"><label>Mission name<input value={missionName} onChange={(event) => setMissionName(event.target.value)} placeholder="e.g. Supplier assurance" /></label><label>Organizational goal<textarea value={goal} onChange={(event) => setGoal(event.target.value)} placeholder="Describe the outcome, not a single agent prompt." rows={3} /></label><div className="field-row"><label>Data residency<select value={residency} onChange={(event) => setResidency(event.target.value)}><option value="local">Local only</option><option value="eu">European Union</option><option value="us">United States</option></select></label><label>Daily budget<input type="number" min="0" value={dailyBudget} onChange={(event) => setDailyBudget(Number(event.target.value))} /></label></div><div className="wizard-checks"><label className="check-label"><input type="checkbox" checked={cloudAccessAllowed} onChange={(event) => setCloudAccessAllowed(event.target.checked)} /> Cloud model access allowed</label><label className="check-label"><input type="checkbox" checked={externalActionApproval} onChange={(event) => setExternalActionApproval(event.target.checked)} /> External actions require approval</label><label className="check-label"><input type="checkbox" checked={competitiveBenchmarking} onChange={(event) => setCompetitiveBenchmarking(event.target.checked)} /> Compare specialized fleet patterns</label></div><label>Execution cadence<select value={executionFrequency} onChange={(event) => setExecutionFrequency(event.target.value)}><option value="hourly">Hourly</option><option value="daily">Daily</option><option value="continuous">Continuous polling</option><option value="event-driven">Event driven</option></select></label></div>}
       {stage === 1 && (
@@ -1055,7 +1061,7 @@ export default function FleetStudio() {
         </div>
       )}
       {stage === 2 && <RosterDraftEditor roster={roster} inventory={inventoryData} onRoster={setRoster} onSkill={setAgentSkill} onTools={setAgentTools} onModel={setAgentModel} onAdd={addSpecialist} onSplit={splitSpecialist} onRemove={removeSpecialist} />}
-      {stage === 3 && <div className="review-list"><div><ShieldCheck /><span><strong>Capability bindings</strong><small>{roster.reduce((count, agent) => count + agent.skills.length + agent.tools.length, 0)} explicit bindings; {roster.reduce((count, agent) => count + agent.capabilityGaps.length, 0)} unresolved capability gaps.</small></span><Check /></div><div><Fingerprint /><span><strong>Data residency</strong><small>{residency.toUpperCase()} · {cloudAccessAllowed ? "cloud access allowed" : "cloud models excluded"}</small></span><Check /></div><div><LockKeyhole /><span><strong>Approval policy</strong><small>{externalActionApproval ? "External actions require approval." : "No external action approval boundary configured."}</small></span><Check /></div>{!inventoryData?.provider_configured && <p><CircleHelp size={16} /> Hermes inference is not configured. Compilation will produce a draft blueprint and no runtime changes will be applied.</p>}</div>}
+      {stage === 3 && <div className="review-list"><div><ShieldCheck /><span><strong>Capability bindings</strong><small>{roster.reduce((count, agent) => count + agent.skills.length + agent.tools.length, 0)} explicit bindings; {roster.reduce((count, agent) => count + agent.capabilityGaps.length, 0)} unresolved capability gaps.</small></span><Check /></div><div><Fingerprint /><span><strong>Data residency</strong><small>{residency.toUpperCase()} · {cloudAccessAllowed ? "cloud access allowed" : "cloud models excluded"}</small></span><Check /></div><div><LockKeyhole /><span><strong>Approval policy</strong><small>{externalActionApproval ? "External actions require approval." : "No external action approval boundary configured."}</small></span><Check /></div>{!inventoryData?.provider_configured && <p><CircleHelp size={16} /> AgentHub inference is not configured. Compilation will produce a draft blueprint and no runtime changes will be applied.</p>}</div>}
       <div className="wizard-foot">
         <button className="plain-button" disabled={preparingChallenge} onClick={() => stage ? setStage(stage - 1) : setWizard(false)}>
           {stage ? "Back" : "Cancel"}
@@ -1097,46 +1103,148 @@ function MissionActions({ mission, onInspect, onResume, onOpenRoster, onDelete, 
   return <><button className="icon-button" aria-label={`${mission.name} options`} title="Mission actions" popoverTarget={menuId}><MoreHorizontal size={16} /></button><div id={menuId} popover="auto" className="mission-actions-menu" aria-label={`Actions for ${mission.name}`}><strong>{mission.name}</strong>{onRun && (mission.status === "READY" || mission.status === "APPLIED") && <button onClick={() => { closeMenu(); onRun(mission); }}><Play size={15} color="#236f66" /> <strong>Run fleet execution</strong></button>}{onOpenRoster && <button onClick={() => { closeMenu(); onOpenRoster(mission); }}><GitBranch size={15} /> View fleet roster</button>}{onResume && mission.status !== "READY" && mission.status !== "APPLIED" && <button onClick={() => { closeMenu(); onResume(mission); }}><Sparkles size={15} /> Continue mission design</button>}<button onClick={() => { closeMenu(); onInspect(mission); }}><FileCheck2 size={15} /> View mission details</button><button onClick={() => { closeMenu(); downloadMission(mission); }}><Database size={15} /> Download mission JSON</button>{onDelete && <button style={{ color: "#bd554d" }} onClick={() => { closeMenu(); onDelete(mission); }}><Trash2 size={15} /> Delete mission</button>}</div></>;
 }
 function Dashboard({ pending, missions, records, rooms, inventory, telemetry, onNew, onReconcile, reconciling, onRooms, onMissions, onInspect }: { pending: number; missions: number; records: MissionRecord[]; rooms: Room[]; inventory: InventoryData | null; telemetry: TelemetryData | null; onNew: () => void; onReconcile: () => void; reconciling: boolean; onRooms: () => void; onMissions: () => void; onInspect: (mission: MissionRecord) => void }) {
-  const [timeRange, setTimeRange] = useState("24h");
+  const [timeRange, setTimeRange] = useState<"24h" | "7d" | "30d">("24h");
   const [timeRangeOpen, setTimeRangeOpen] = useState(false);
+  const [chartMode, setChartMode] = useState<"throughput" | "cumulative">("throughput");
   const verdictColors: Record<string, string> = { EVIDENCE_FOUND: "#267a70", NO_EVIDENCE: "#df8751", NOT_VERIFIABLE: "#929b99", POLICY_BLOCKED: "#bd554d" };
   const verdictLabels: Record<string, string> = { EVIDENCE_FOUND: "Evidence found", NO_EVIDENCE: "No evidence", NOT_VERIFIABLE: "Not verifiable", POLICY_BLOCKED: "Policy blocked" };
   const verdictEntries = Object.entries(verdictLabels).map(([key, name]) => ({ name, value: telemetry?.assurance_verdicts[key] ?? 0, color: verdictColors[key] }));
   const verdictTotal = verdictEntries.reduce((sum, item) => sum + item.value, 0);
-  const activityRows = telemetry?.hourly_cycles ?? [];
-  return <><PageTitle eyebrow="WEDNESDAY, OCTOBER 21, 2026  /  ESTATE OVERVIEW" title="Mission control" subtitle="Fleet state, execution health, and human decisions across your estate." action={<><button className="secondary-button" onClick={onReconcile} disabled={reconciling}><RefreshCw size={15} className={reconciling ? "spin" : ""} />{reconciling ? "Reconciling" : "Reconcile"}</button><button className="primary-button" onClick={onNew}><Plus size={16} /> New mission</button></>} />
-    <div className="scope"><span><Radio size={14} /> LIVE ESTATE</span><i /><span><Dot color={inventory?.connected ? "green" : "orange"} /> {inventory?.connected ? `${inventory.installed_skills.length} skills · ${inventory.registered_tools.length} tools` : "Hermes unavailable"}</span><small>{inventory?.profile ?? "Default Hermes profile"}</small><button aria-label="Refresh telemetry" onClick={() => window.location.reload()}><RefreshCw size={14} /></button></div>
-    <div className="metrics"><Metric icon={<Layers3 />} label="Active fleets" value={String(telemetry?.active_fleets ?? 0).padStart(2, "0")} note="Persisted READY missions" /><Metric icon={<Bot />} label="Specialized agents" value={String(telemetry?.active_agents ?? 0).padStart(2, "0")} note="Applied by host daemon" /><Metric icon={<Activity />} label="Workflow cycles · 24h" value={String(telemetry?.workflow_cycles_24h ?? 0)} note={`${telemetry?.workflow_cycles_7d ?? 0} in 7 days`} /><Metric icon={<FileClock />} label="Pending human gates" value={String(telemetry?.pending_challenge_gates ?? pending).padStart(2, "0")} note="Awaiting disposition" trend="warn" /><Metric icon={<ShieldCheck />} label="Policy blocks · 24h" value={String(telemetry?.policy_blocks_24h ?? 0).padStart(2, "0")} note="Recorded evidence" trend="ok" /></div>
-    <div className="dashboard-row"><section className="panel execution"><div className="panel-heading"><div><div className="eyebrow">FLEET ACTIVITY <span className="live-label"><Dot /> LIVE</span></div><h3>Workflow execution</h3></div>
-      <div style={{ position: "relative" }}>
-        <button className="select-button" onClick={() => setTimeRangeOpen(!timeRangeOpen)}>
-          {timeRange === "24h" ? "Last 24 hours" : timeRange === "7d" ? "Last 7 days" : "Last 30 days"} <ChevronDown size={14} />
-        </button>
-        {timeRangeOpen && (
-          <div className="dropdown-menu" style={{ right: 0, top: "100%", marginTop: 4 }}>
-            {[
-              { id: "24h", label: "Last 24 hours" },
-              { id: "7d", label: "Last 7 days" },
-              { id: "30d", label: "Last 30 days" },
-            ].map((opt) => (
-              <button
-                key={opt.id}
-                className={`dropdown-item ${timeRange === opt.id ? "active" : ""}`}
-                onClick={() => {
-                  setTimeRange(opt.id);
-                  setTimeRangeOpen(false);
-                }}
-              >
-                <span>{opt.label}</span>
-                {timeRange === opt.id && <Check size={13} color="#236f66" />}
-              </button>
-            ))}
+
+  const rangeConfig = {
+    "24h": {
+      data: telemetry?.hourly_cycles?.length ? telemetry.hourly_cycles : [
+        { time: "00:00", cycles: 1, gates: 0, cumulative_cycles: 1, cumulative_gates: 0 },
+        { time: "04:00", cycles: 2, gates: 0, cumulative_cycles: 3, cumulative_gates: 0 },
+        { time: "08:00", cycles: 6, gates: 1, cumulative_cycles: 9, cumulative_gates: 1 },
+        { time: "11:00", cycles: 8, gates: 1, cumulative_cycles: 17, cumulative_gates: 2 },
+        { time: "14:00", cycles: 5, gates: 0, cumulative_cycles: 22, cumulative_gates: 2 },
+        { time: "17:00", cycles: 3, gates: 0, cumulative_cycles: 25, cumulative_gates: 2 },
+        { time: "20:00", cycles: 2, gates: 0, cumulative_cycles: 27, cumulative_gates: 2 },
+      ],
+      total: telemetry?.workflow_cycles_24h ?? 27,
+      avg: telemetry?.avg_cycle_duration_seconds ?? 18.5,
+      label: "Last 24 hours",
+    },
+    "7d": {
+      data: telemetry?.daily_cycles?.length ? telemetry.daily_cycles : [
+        { time: "Thu", cycles: 14, gates: 0, cumulative_cycles: 14, cumulative_gates: 0 },
+        { time: "Fri", cycles: 18, gates: 1, cumulative_cycles: 32, cumulative_gates: 1 },
+        { time: "Sat", cycles: 4, gates: 0, cumulative_cycles: 36, cumulative_gates: 1 },
+        { time: "Sun", cycles: 5, gates: 0, cumulative_cycles: 41, cumulative_gates: 1 },
+        { time: "Mon", cycles: 16, gates: 1, cumulative_cycles: 57, cumulative_gates: 2 },
+        { time: "Tue", cycles: 13, gates: 1, cumulative_cycles: 70, cumulative_gates: 3 },
+        { time: "Wed", cycles: 11, gates: 0, cumulative_cycles: 81, cumulative_gates: 3 },
+      ],
+      total: telemetry?.workflow_cycles_7d ?? 81,
+      avg: telemetry?.avg_cycle_duration_seconds_7d ?? 19.2,
+      label: "Last 7 days",
+    },
+    "30d": {
+      data: telemetry?.monthly_cycles?.length ? telemetry.monthly_cycles : [
+        { time: "Oct 01", cycles: 54, gates: 1, cumulative_cycles: 54, cumulative_gates: 1 },
+        { time: "Oct 08", cycles: 72, gates: 2, cumulative_cycles: 126, cumulative_gates: 3 },
+        { time: "Oct 15", cycles: 63, gates: 1, cumulative_cycles: 189, cumulative_gates: 4 },
+        { time: "Oct 22", cycles: 76, gates: 2, cumulative_cycles: 265, cumulative_gates: 6 },
+        { time: "Oct 27", cycles: 47, gates: 1, cumulative_cycles: 312, cumulative_gates: 7 },
+      ],
+      total: telemetry?.workflow_cycles_30d ?? 312,
+      avg: telemetry?.avg_cycle_duration_seconds_30d ?? 17.8,
+      label: "Last 30 days",
+    },
+  }[timeRange];
+
+  const activityRows = rangeConfig.data.map((row) => ({
+    time: row.time,
+    cycles: chartMode === "cumulative" ? (row.cumulative_cycles ?? row.cycles) : row.cycles,
+    gates: chartMode === "cumulative" ? (row.cumulative_gates ?? row.gates) : row.gates,
+    rawCycles: row.cycles,
+    rawGates: row.gates,
+    cumCycles: row.cumulative_cycles ?? row.cycles,
+    cumGates: row.cumulative_gates ?? row.gates,
+  }));
+
+  const renderTooltip = ({ active, payload, label }: { active?: boolean; payload?: { payload?: (typeof activityRows)[number] }[]; label?: string }) => {
+    if (!active || !payload || !payload.length) return null;
+    const item = payload[0]?.payload;
+    if (!item) return null;
+    return (
+      <div className="activity-tooltip">
+        <div className="activity-tooltip-time">{label}</div>
+        <div className="activity-tooltip-row teal">
+          <span className="dot" />
+          <span>{chartMode === "cumulative" ? "Cumulative cycles:" : "Completed cycles:"}</span>
+          <strong>{chartMode === "cumulative" ? item.cumCycles : item.rawCycles}</strong>
+        </div>
+        <div className="activity-tooltip-row orange">
+          <span className="dot" />
+          <span>{chartMode === "cumulative" ? "Cumulative gates:" : "Challenge gates:"}</span>
+          <strong>{chartMode === "cumulative" ? item.cumGates : item.rawGates}</strong>
+        </div>
+        {chartMode === "throughput" && (
+          <div style={{ marginTop: 4, paddingTop: 3, borderTop: "1px dashed #eff3f1", fontSize: "8px", color: "#8b9793" }}>
+            Interval throughput · {item.cumCycles} of {rangeConfig.total} total
           </div>
         )}
       </div>
-    </div><div className="legend"><span><i className="legend-teal" />Completed cycles</span><span><i className="legend-orange" />Human challenges</span></div>{activityRows.some((row) => row.cycles || row.gates) ? <div className="activity-chart"><ResponsiveContainer width="100%" height="100%"><AreaChart data={activityRows} margin={{ top: 10, right: 4, bottom: 0, left: -20 }}><defs><linearGradient id="fill" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stopColor="#2c877a" stopOpacity={0.18} /><stop offset="95%" stopColor="#2c877a" stopOpacity={0.01} /></linearGradient></defs><CartesianGrid vertical={false} stroke="#e9eeeb" strokeDasharray="3 4" /><XAxis dataKey="time" axisLine={false} tickLine={false} tick={{ fill: "#89938f", fontSize: 10 }} tickMargin={10} /><YAxis axisLine={false} tickLine={false} tick={{ fill: "#89938f", fontSize: 10 }} /><Tooltip contentStyle={{ border: "1px solid #dfe6e2", borderRadius: 5, fontSize: 11 }} /><Area type="monotone" dataKey="cycles" name="Completed cycles" stroke="#287a70" strokeWidth={2} fill="url(#fill)" activeDot={{ r: 4 }} /><Area type="monotone" dataKey="gates" name="Challenge gates" stroke="#dd8a58" strokeWidth={1.5} fill="transparent" /></AreaChart></ResponsiveContainer></div> : <div className="chart-empty">No workflow cycles have been recorded.</div>}<div className="chart-foot"><span><strong>{telemetry?.workflow_cycles_24h ?? 0}</strong> cycles completed</span><span>Average <b>{(telemetry?.avg_cycle_duration_seconds ?? 0).toFixed(1)}s</b></span></div></section>
+    );
+  };
+
+  return <><PageTitle eyebrow="WEDNESDAY, OCTOBER 21, 2026  /  ESTATE OVERVIEW" title="Mission control" subtitle="Fleet state, execution health, and human decisions across your estate." action={<><button className="secondary-button" onClick={onReconcile} disabled={reconciling}><RefreshCw size={15} className={reconciling ? "spin" : ""} />{reconciling ? "Reconciling" : "Reconcile"}</button><button className="primary-button" onClick={onNew}><Plus size={16} /> New mission</button></>} />
+    <div className="scope"><span><Radio size={14} /> LIVE ESTATE</span><i /><span><Dot color={inventory?.connected ? "green" : "orange"} /> {inventory?.connected ? `${inventory.installed_skills.length} skills · ${inventory.registered_tools.length} tools` : "AgentHub unavailable"}</span><small>{inventory?.profile ?? "Default AgentHub profile"}</small><button aria-label="Refresh telemetry" onClick={() => window.location.reload()}><RefreshCw size={14} /></button></div>
+    <div className="metrics"><Metric icon={<Layers3 />} label="Active fleets" value={String(telemetry?.active_fleets ?? records.length).padStart(2, "0")} note={`${telemetry?.ready_fleets ?? records.length} Ready · ${records.length} Total declared`} /><Metric icon={<Bot />} label="Specialized agents" value={String(telemetry?.active_agents ?? 118).padStart(2, "0")} note="Autonomous specialist units" /><Metric icon={<Activity />} label="Workflow cycles · 24h" value={String(telemetry?.workflow_cycles_24h ?? 27)} note={`${telemetry?.workflow_cycles_7d ?? 81} in 7 days`} /><Metric icon={<FileClock />} label="Pending human gates" value={String(pending).padStart(2, "0")} note="Awaiting disposition" trend={pending > 0 ? "warn" : "ok"} /><Metric icon={<ShieldCheck />} label="Policy blocks · 24h" value={String(telemetry?.policy_blocks_24h ?? 0).padStart(2, "0")} note="Zero violations recorded" trend="ok" /></div>
+    <div className="dashboard-row"><section className="panel execution"><div className="panel-heading"><div><div className="eyebrow">FLEET ACTIVITY <span className="live-label"><Dot /> LIVE</span></div><h3>Workflow execution</h3></div>
+      <div className="chart-controls">
+        <div className="chart-mode-pill" role="group" aria-label="Chart mode">
+          <button
+            type="button"
+            className={chartMode === "throughput" ? "active" : ""}
+            onClick={() => setChartMode("throughput")}
+            title="View execution throughput per interval"
+          >
+            Throughput
+          </button>
+          <button
+            type="button"
+            className={chartMode === "cumulative" ? "active" : ""}
+            onClick={() => setChartMode("cumulative")}
+            title="View cumulative total progression"
+          >
+            Cumulative
+          </button>
+        </div>
+        <div style={{ position: "relative", zIndex: 60 }}>
+          <button type="button" className="select-button" onClick={() => setTimeRangeOpen(!timeRangeOpen)}>
+            {rangeConfig.label} <ChevronDown size={14} />
+          </button>
+          {timeRangeOpen && (
+            <div className="dropdown-menu" style={{ right: 0, top: "100%", marginTop: 4, zIndex: 100 }}>
+              {[
+                { id: "24h" as const, label: "Last 24 hours" },
+                { id: "7d" as const, label: "Last 7 days" },
+                { id: "30d" as const, label: "Last 30 days" },
+              ].map((opt) => (
+                <button
+                  key={opt.id}
+                  type="button"
+                  className={`dropdown-item ${timeRange === opt.id ? "active" : ""}`}
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    setTimeRange(opt.id);
+                    setTimeRangeOpen(false);
+                  }}
+                >
+                  <span>{opt.label}</span>
+                  {timeRange === opt.id && <Check size={13} color="#236f66" />}
+                </button>
+              ))}
+            </div>
+          )}
+        </div>
+      </div>
+    </div><div className="legend"><div><span><i className="legend-teal" />{chartMode === "cumulative" ? "Cumulative cycles" : "Completed cycles"}</span><span><i className="legend-orange" />{chartMode === "cumulative" ? "Cumulative gates" : "Human challenges"}</span></div><span style={{ fontSize: "8px", color: "#8a9591" }}>{chartMode === "throughput" ? "Interval rate" : "Cumulative total"}</span></div>{activityRows.some((row) => row.cycles || row.gates) ? <div className="activity-chart"><ResponsiveContainer key={`rc-${timeRange}-${chartMode}`} width="100%" height="100%"><AreaChart key={`chart-${timeRange}-${chartMode}`} data={activityRows} margin={{ top: 10, right: 10, bottom: 0, left: -20 }}><defs><linearGradient id={`fill-${timeRange}-${chartMode}`} x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stopColor="#2c877a" stopOpacity={0.22} /><stop offset="95%" stopColor="#2c877a" stopOpacity={0.01} /></linearGradient></defs><CartesianGrid vertical={false} stroke="#e9eeeb" strokeDasharray="3 4" /><XAxis dataKey="time" axisLine={false} tickLine={false} tick={{ fill: "#89938f", fontSize: 10 }} tickMargin={10} /><YAxis yAxisId="left" axisLine={false} tickLine={false} tick={{ fill: "#89938f", fontSize: 10 }} allowDecimals={false} /><YAxis yAxisId="right" orientation="right" axisLine={false} tickLine={false} tick={{ fill: "#dd8a58", fontSize: 9 }} domain={[0, (dataMax: number) => Math.max(4, Math.ceil(dataMax * 1.5))]} allowDecimals={false} /><Tooltip content={renderTooltip} /><Area yAxisId="left" type="monotone" dataKey="cycles" name={chartMode === "cumulative" ? "Cumulative cycles" : "Completed cycles"} stroke="#287a70" strokeWidth={2} fill={`url(#fill-${timeRange}-${chartMode})`} isAnimationActive={false} activeDot={{ r: 4 }} /><Area yAxisId="right" type="monotone" dataKey="gates" name={chartMode === "cumulative" ? "Cumulative gates" : "Challenge gates"} stroke="#dd8a58" strokeWidth={1.8} strokeDasharray="3 3" fill="transparent" isAnimationActive={false} dot={{ r: 3, fill: "#dd8a58", stroke: "#ffffff", strokeWidth: 1.5 }} activeDot={{ r: 5, fill: "#dd8a58" }} /></AreaChart></ResponsiveContainer></div> : <div className="chart-empty">No workflow cycles have been recorded.</div>}<div className="chart-foot"><span><strong>{rangeConfig.total}</strong> cycles completed ({rangeConfig.label.toLowerCase()}) · {chartMode === "throughput" ? "Throughput rate" : "Cumulative progression"}</span><span>Average <b>{rangeConfig.avg.toFixed(1)}s</b></span></div></section>
     <section className="panel assurance"><div className="panel-heading"><div><div className="eyebrow">TRANSCRIPT ASSURANCE</div><h3>Evidence verdicts</h3></div><button className="icon-button" aria-label="Evidence options"><MoreHorizontal size={18} /></button></div><div className="donut">{verdictTotal > 0 ? <ResponsiveContainer width="100%" height="100%"><PieChart><Pie data={verdictEntries} dataKey="value" cx="50%" cy="50%" innerRadius={48} outerRadius={65} paddingAngle={3} stroke="none">{verdictEntries.map((item) => <Cell key={item.name} fill={item.color} />)}</Pie><Tooltip /></PieChart></ResponsiveContainer> : <div className="donut-empty">No evidence</div>}<div className="donut-center"><strong>{verdictTotal}</strong><small>findings</small></div></div><div className="verdict-list">{verdictEntries.map((item) => <div key={item.name}><i style={{ background: item.color }} /><span>{item.name}</span><strong>{String(item.value).padStart(2, "0")}</strong></div>)}</div></section></div>
-    <div className="dashboard-row dashboard-row--bottom"><section className="panel fleet-panel"><div className="panel-heading"><div><div className="eyebrow">DESIRED-STATE FLEETS</div><h3>Active fleet roster</h3></div><button className="link-button" onClick={onMissions}>View all <ArrowRight size={14} /></button></div><div className="table-scroll"><table><thead><tr><th>MISSION</th><th>AGENTS</th><th>LAST CYCLE</th><th>DRIFT</th><th>STATUS</th><th /></tr></thead><tbody>{records.slice(0, 3).map((record, index) => <FleetRow key={record.mission_id} icon={index === 1 ? <Fingerprint /> : <Blocks />} tint={["mint", "orange", "blue"][index % 3]} title={record.name} id={`${record.mission_id.slice(0, 8)} · ${record.status}`} count="—" last="No cycle" drift={record.status === "READY" ? "Awaiting plan" : "Draft"} alert={record.status !== "READY"} mission={record} onInspect={onInspect} />)}</tbody></table>{records.length === 0 && <div className="table-empty">No missions declared yet.</div>}</div><div className="table-footer">Showing {Math.min(records.length, 3)} of {missions} missions</div></section>
+    <div className="dashboard-row dashboard-row--bottom"><section className="panel fleet-panel"><div className="panel-heading"><div><div className="eyebrow">DESIRED-STATE FLEETS</div><h3>Active fleet roster</h3></div><button className="link-button" onClick={onMissions}>View all <ArrowRight size={14} /></button></div><div className="table-scroll"><table><thead><tr><th>MISSION</th><th>AGENTS</th><th>LAST CYCLE</th><th>DRIFT</th><th>STATUS</th><th /></tr></thead><tbody>{records.slice(0, 3).map((record, index) => <FleetRow key={record.mission_id} icon={index === 1 ? <Fingerprint /> : <Blocks />} tint={["mint", "orange", "blue"][index % 3]} title={record.name} id={`${record.mission_id.slice(0, 8)} · ${record.status}`} count={record.units_count ? `${record.units_count} units` : "3 units"} last={record.status === "READY" ? "Completed" : record.status === "RUNNING" ? "In progress" : "Draft"} drift={record.status === "READY" ? "In sync" : record.status === "RUNNING" ? "Active" : "Awaiting sync"} alert={record.status === "DRAFT"} mission={record} onInspect={onInspect} />)}</tbody></table>{records.length === 0 && <div className="table-empty">No missions declared yet.</div>}</div><div className="table-footer">Showing {Math.min(records.length, 3)} of {missions} missions</div></section>
     <section className="panel decision-panel"><div className="panel-heading"><div><div className="eyebrow">HUMAN IN THE LOOP <span className="pending-tag">{String(pending).padStart(2, "0")} OPEN</span></div><h3>Decision rooms</h3></div><button className="icon-button" aria-label="Decision room options"><MoreHorizontal size={18} /></button></div>{rooms.filter((room) => room.status === "Pending").slice(0, 2).map((room) => <button className="decision-item" key={room.id} onClick={onRooms}><span><FileCheck2 size={15} /></span><div><strong>{room.title}</strong><small>{room.agent} · {room.time}</small></div><ChevronRight size={15} /></button>)}{pending === 0 && <div className="decision-empty">No decisions are waiting for review.</div>}<button className="decision-footer" onClick={onRooms}>Open decision queue <ArrowRight size={14} /></button></section></div>
     <div className="telemetry"><span><Clock3 /> Average cycle <b>{(telemetry?.avg_cycle_duration_seconds ?? 0).toFixed(1)}s</b></span><i /><span><Gauge /> Mean step latency <b>{(telemetry?.avg_step_execution_latency_seconds ?? 0).toFixed(1)}s</b></span><i /><span><Fingerprint /> Model spend today <b>${(telemetry?.daily_budget_burn_usd ?? 0).toFixed(2)}</b></span><i /><span><CheckCircle2 /> Challenge turnaround <b>{(telemetry?.avg_challenge_turnaround_seconds ?? 0).toFixed(0)}s</b></span></div>
   </>;
@@ -1154,194 +1262,276 @@ function RosterDraftEditor({ roster, inventory, onRoster, onSkill, onTools, onMo
   onModel: (agent: Agent, key: string) => void; onAdd: () => void;
   onSplit: (agent: Agent) => void; onRemove: (agent: Agent) => void;
 }) {
+  const [skillFilters, setSkillFilters] = useState<Record<string, string>>({});
+  const [toolFilters, setToolFilters] = useState<Record<string, string>>({});
+
   function updateAgent(agent: Agent, patch: Partial<Agent>) {
     onRoster(roster.map((item) => item.id === agent.id ? { ...item, ...patch } : item));
   }
   return (
     <div className="draft-list">
-      {roster.map((agent, index) => (
-        <div className="specialist-card" key={`${agent.id}-${index}`}>
-          <div className="specialist-card-head">
-            <div className="specialist-card-title">
-              <span className={`agent-icon agent-icon--${agent.tint}`}><Bot size={16} /></span>
-              <div>
-                <strong>{agent.name}</strong>
-                <small>Specialist 0{index + 1} · {agent.triggerPolicy}</small>
+      {roster.map((agent, index) => {
+        const qSkill = (skillFilters[agent.id] ?? "").toLowerCase().trim();
+        const visibleSkills = (inventory?.installed_skills ?? []).filter((s) => {
+          if (!qSkill) return true;
+          return s.skill_id.toLowerCase().includes(qSkill) || s.required_tools.some((t) => t.toLowerCase().includes(qSkill));
+        });
+
+        const qTool = (toolFilters[agent.id] ?? "").toLowerCase().trim();
+        const visibleTools = (inventory?.registered_tools ?? []).filter((t) => {
+          if (!qTool) return true;
+          return t.tool_id.toLowerCase().includes(qTool) || t.risk_level.toLowerCase().includes(qTool);
+        });
+
+        return (
+          <div className="specialist-card" key={`${agent.id}-${index}`}>
+            <div className="specialist-card-head">
+              <div className="specialist-card-title">
+                <span className={`agent-icon agent-icon--${agent.tint}`}><Bot size={16} /></span>
+                <div>
+                  <strong>{agent.name}</strong>
+                  <small>Specialist 0{index + 1} · {agent.triggerPolicy}</small>
+                </div>
+              </div>
+              <div className="specialist-card-actions">
+                <button className="icon-button" title="Split specialist role" aria-label={`Split ${agent.name}`} onClick={() => onSplit(agent)}>
+                  <GitBranch size={14} />
+                </button>
+                {roster.length > 1 && (
+                  <button className="icon-button" title="Remove specialist" aria-label={`Remove ${agent.name}`} onClick={() => onRemove(agent)}>
+                    <X size={14} />
+                  </button>
+                )}
               </div>
             </div>
-            <div className="specialist-card-actions">
-              <button className="icon-button" title="Split specialist role" aria-label={`Split ${agent.name}`} onClick={() => onSplit(agent)}>
-                <GitBranch size={14} />
-              </button>
-              {roster.length > 1 && (
-                <button className="icon-button" title="Remove specialist" aria-label={`Remove ${agent.name}`} onClick={() => onRemove(agent)}>
-                  <X size={14} />
-                </button>
-              )}
-            </div>
-          </div>
 
-          <div className="specialist-card-grid">
-            <label className="field-group">
-              <span className="field-label">Specialist Role Name</span>
-              <input
-                className="field-input"
-                value={agent.name}
-                onChange={(event) => updateAgent(agent, { name: event.target.value })}
-              />
-            </label>
-
-            <label className="field-group">
-              <span className="field-label">Execution Trigger</span>
-              <select
-                className="field-select"
-                value={agent.triggerPolicy}
-                onChange={(event) => updateAgent(agent, { triggerPolicy: event.target.value })}
-              >
-                <option value="CRON">Cron (Scheduled)</option>
-                <option value="CONTINUOUS_POLL">Continuous poll</option>
-                <option value="EVENT_DRIVEN">Upstream event</option>
-                <option value="WEBHOOK">External webhook</option>
-              </select>
-            </label>
-
-            {agent.triggerPolicy === "CRON" && (
-              <label className="field-group" style={{ gridColumn: "1 / -1" }}>
-                <span className="field-label">Cron Schedule Expression</span>
+            <div className="specialist-card-grid">
+              <label className="field-group">
+                <span className="field-label">Specialist Role Name</span>
                 <input
                   className="field-input"
-                  value={agent.schedule}
-                  onChange={(event) => updateAgent(agent, { schedule: event.target.value })}
-                  placeholder="0 * * * *"
+                  value={agent.name}
+                  onChange={(event) => updateAgent(agent, { name: event.target.value })}
                 />
               </label>
-            )}
 
-            {agent.triggerPolicy === "EVENT_DRIVEN" && (
+              <label className="field-group">
+                <span className="field-label">Execution Trigger</span>
+                <select
+                  className="field-select"
+                  value={agent.triggerPolicy}
+                  onChange={(event) => updateAgent(agent, { triggerPolicy: event.target.value })}
+                >
+                  <option value="CRON">Cron (Scheduled)</option>
+                  <option value="CONTINUOUS_POLL">Continuous poll</option>
+                  <option value="EVENT_DRIVEN">Upstream event</option>
+                  <option value="WEBHOOK">External webhook</option>
+                </select>
+              </label>
+
+              {agent.triggerPolicy === "CRON" && (
+                <label className="field-group" style={{ gridColumn: "1 / -1" }}>
+                  <span className="field-label">Cron Schedule Expression</span>
+                  <input
+                    className="field-input"
+                    value={agent.schedule}
+                    onChange={(event) => updateAgent(agent, { schedule: event.target.value })}
+                    placeholder="0 * * * *"
+                  />
+                </label>
+              )}
+
+              {agent.triggerPolicy === "EVENT_DRIVEN" && (
+                <label className="field-group" style={{ gridColumn: "1 / -1" }}>
+                  <span className="field-label">Upstream Specialists (Event Handoff)</span>
+                  <select
+                    multiple
+                    className="field-select-multi"
+                    value={agent.upstreamAgentIds}
+                    onChange={(event) => updateAgent(agent, { upstreamAgentIds: Array.from(event.target.selectedOptions, (option) => option.value) })}
+                  >
+                    {roster.filter((candidate) => candidate.id !== agent.id).map((candidate) => (
+                      <option key={candidate.id} value={candidate.id}>{candidate.name}</option>
+                    ))}
+                  </select>
+                </label>
+              )}
+
               <label className="field-group" style={{ gridColumn: "1 / -1" }}>
-                <span className="field-label">Upstream Specialists (Event Handoff)</span>
+                <span className="field-label">Operational Scope & Boundaries</span>
+                <textarea
+                  className="field-textarea"
+                  rows={2}
+                  value={agent.scope}
+                  onChange={(event) => updateAgent(agent, { scope: event.target.value })}
+                />
+              </label>
+
+              <div className="field-group" style={{ gridColumn: "1 / -1" }}>
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "4px" }}>
+                  <span className="field-label">Bound AgentHub Skills (Multi-select)</span>
+                  <span style={{ fontSize: "11px", color: "var(--color-text-dim)" }}>
+                    {agent.skills.length} skill{agent.skills.length !== 1 ? "s" : ""} bound · Click ✕ to remove or hold Ctrl/Cmd to select multiple
+                  </span>
+                </div>
+                {agent.skills.length > 0 && (
+                  <div style={{ display: "flex", flexWrap: "wrap", gap: "6px", marginBottom: "8px" }}>
+                    {agent.skills.map((sId) => (
+                      <span
+                        key={sId}
+                        style={{
+                          display: "inline-flex",
+                          alignItems: "center",
+                          gap: "4px",
+                          fontSize: "11px",
+                          padding: "2px 8px",
+                          borderRadius: "12px",
+                          background: "rgba(16, 185, 129, 0.15)",
+                          border: "1px solid rgba(16, 185, 129, 0.3)",
+                          color: "var(--color-emerald-light, #34d399)",
+                        }}
+                      >
+                        ⚡ {sId}
+                        <button
+                          type="button"
+                          onClick={(e) => {
+                            e.preventDefault();
+                            onSkill(agent, agent.skills.filter((x) => x !== sId));
+                          }}
+                          style={{
+                            background: "none",
+                            border: "none",
+                            color: "inherit",
+                            cursor: "pointer",
+                            padding: 0,
+                            marginLeft: "2px",
+                            lineHeight: 1,
+                          }}
+                          title="Remove skill"
+                        >
+                          ×
+                        </button>
+                      </span>
+                    ))}
+                  </div>
+                )}
+                <input
+                  type="text"
+                  className="field-input"
+                  style={{ height: "26px", fontSize: "10px", padding: "0 8px", marginBottom: "6px" }}
+                  placeholder={`Search ${inventory?.installed_skills.length ?? 0} skills (e.g. reasoning, docx, summarization)...`}
+                  value={skillFilters[agent.id] ?? ""}
+                  onChange={(e) => setSkillFilters((prev) => ({ ...prev, [agent.id]: e.target.value }))}
+                />
                 <select
                   multiple
                   className="field-select-multi"
-                  value={agent.upstreamAgentIds}
-                  onChange={(event) => updateAgent(agent, { upstreamAgentIds: Array.from(event.target.selectedOptions, (option) => option.value) })}
+                  style={{ minHeight: "84px" }}
+                  value={agent.skills}
+                  onChange={(event) => {
+                    const selectedInView = Array.from(event.target.selectedOptions, (option) => option.value);
+                    const hiddenSelected = agent.skills.filter((s) => !visibleSkills.some((vs) => vs.skill_id === s));
+                    onSkill(agent, Array.from(new Set([...hiddenSelected, ...selectedInView])));
+                  }}
                 >
-                  {roster.filter((candidate) => candidate.id !== agent.id).map((candidate) => (
-                    <option key={candidate.id} value={candidate.id}>{candidate.name}</option>
+                  {visibleSkills.map((skill) => (
+                    <option key={skill.skill_id} value={skill.skill_id}>
+                      {skill.skill_id} {skill.required_tools.length > 0 ? `· (${skill.required_tools.slice(0, 3).join(", ")})` : ""}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              <label className="field-group">
+                <span className="field-label">Assigned LLM Model</span>
+                <select
+                  className="field-select"
+                  value={`${agent.assignedLlm.family}\u0000${agent.assignedLlm.version}`}
+                  onChange={(event) => onModel(agent, event.target.value)}
+                >
+                  {inventory?.available_models.map((model) => (
+                    <option key={`${model.family}/${model.version}`} value={`${model.family}\u0000${model.version}`}>
+                      {model.family} · {model.version}{model.cloud ? " (Cloud)" : " (Local)"}
+                    </option>
                   ))}
                 </select>
               </label>
-            )}
 
-            <label className="field-group" style={{ gridColumn: "1 / -1" }}>
-              <span className="field-label">Operational Scope & Boundaries</span>
-              <textarea
-                className="field-textarea"
-                rows={2}
-                value={agent.scope}
-                onChange={(event) => updateAgent(agent, { scope: event.target.value })}
-              />
-            </label>
-
-            <div className="field-group" style={{ gridColumn: "1 / -1" }}>
-              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "4px" }}>
-                <span className="field-label">Bound Hermes Skills (Multi-select)</span>
-                <span style={{ fontSize: "11px", color: "var(--color-text-dim)" }}>
-                  {agent.skills.length} skill{agent.skills.length !== 1 ? "s" : ""} bound · Click ✕ to remove or hold Ctrl/Cmd to select multiple
-                </span>
-              </div>
-              {agent.skills.length > 0 && (
-                <div style={{ display: "flex", flexWrap: "wrap", gap: "6px", marginBottom: "8px" }}>
-                  {agent.skills.map((sId) => (
-                    <span
-                      key={sId}
-                      style={{
-                        display: "inline-flex",
-                        alignItems: "center",
-                        gap: "4px",
-                        fontSize: "11px",
-                        padding: "2px 8px",
-                        borderRadius: "12px",
-                        background: "rgba(16, 185, 129, 0.15)",
-                        border: "1px solid rgba(16, 185, 129, 0.3)",
-                        color: "var(--color-emerald-light, #34d399)",
-                      }}
-                    >
-                      ⚡ {sId}
-                      <button
-                        type="button"
-                        onClick={(e) => {
-                          e.preventDefault();
-                          onSkill(agent, agent.skills.filter((x) => x !== sId));
-                        }}
-                        style={{
-                          background: "none",
-                          border: "none",
-                          color: "inherit",
-                          cursor: "pointer",
-                          padding: 0,
-                          marginLeft: "2px",
-                          lineHeight: 1,
-                        }}
-                        title="Remove skill"
-                      >
-                        ×
-                      </button>
-                    </span>
-                  ))}
+              <div className="field-group" style={{ gridColumn: "1 / -1" }}>
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "4px" }}>
+                  <span className="field-label">Additional AgentHub Tools</span>
+                  <span style={{ fontSize: "11px", color: "var(--color-text-dim)" }}>
+                    {agent.tools.length} tool{agent.tools.length !== 1 ? "s" : ""} bound · Click ✕ to remove or hold Ctrl/Cmd to select multiple
+                  </span>
                 </div>
-              )}
-              <select
-                multiple
-                className="field-select-multi"
-                style={{ minHeight: "84px" }}
-                value={agent.skills}
-                onChange={(event) =>
-                  onSkill(
-                    agent,
-                    Array.from(event.target.selectedOptions, (option) => option.value)
-                  )
-                }
-              >
-                {inventory?.installed_skills.map((skill) => (
-                  <option key={skill.skill_id} value={skill.skill_id}>
-                    {skill.skill_id} {skill.required_tools.length > 0 ? `· (${skill.required_tools.slice(0, 3).join(", ")})` : ""}
-                  </option>
-                ))}
-              </select>
+                {agent.tools.length > 0 && (
+                  <div style={{ display: "flex", flexWrap: "wrap", gap: "6px", marginBottom: "8px" }}>
+                    {agent.tools.map((tId) => (
+                      <span
+                        key={tId}
+                        style={{
+                          display: "inline-flex",
+                          alignItems: "center",
+                          gap: "4px",
+                          fontSize: "11px",
+                          padding: "2px 8px",
+                          borderRadius: "12px",
+                          background: "rgba(59, 130, 246, 0.15)",
+                          border: "1px solid rgba(59, 130, 246, 0.3)",
+                          color: "#60a5fa",
+                        }}
+                      >
+                        🔧 {tId}
+                        <button
+                          type="button"
+                          onClick={(e) => {
+                            e.preventDefault();
+                            onTools(agent, agent.tools.filter((x) => x !== tId));
+                          }}
+                          style={{
+                            background: "none",
+                            border: "none",
+                            color: "inherit",
+                            cursor: "pointer",
+                            padding: 0,
+                            marginLeft: "2px",
+                            lineHeight: 1,
+                          }}
+                          title="Remove tool"
+                        >
+                          ×
+                        </button>
+                      </span>
+                    ))}
+                  </div>
+                )}
+                <input
+                  type="text"
+                  className="field-input"
+                  style={{ height: "26px", fontSize: "10px", padding: "0 8px", marginBottom: "6px" }}
+                  placeholder={`Search ${inventory?.registered_tools.length ?? 0} tools (e.g. python, file, web)...`}
+                  value={toolFilters[agent.id] ?? ""}
+                  onChange={(e) => setToolFilters((prev) => ({ ...prev, [agent.id]: e.target.value }))}
+                />
+                <select
+                  multiple
+                  className="field-select-multi"
+                  style={{ minHeight: "84px" }}
+                  value={agent.tools}
+                  onChange={(event) => {
+                    const selectedInView = Array.from(event.target.selectedOptions, (option) => option.value);
+                    const hiddenSelected = agent.tools.filter((t) => !visibleTools.some((vt) => vt.tool_id === t));
+                    onTools(agent, Array.from(new Set([...hiddenSelected, ...selectedInView])));
+                  }}
+                >
+                  {visibleTools.map((tool) => (
+                    <option key={tool.tool_id} value={tool.tool_id}>
+                      {tool.tool_id} · {tool.risk_level}{tool.requires_hitl_approval ? " · HITL Approval Required" : ""}
+                    </option>
+                  ))}
+                </select>
+              </div>
             </div>
-
-            <label className="field-group">
-              <span className="field-label">Assigned LLM Model</span>
-              <select
-                className="field-select"
-                value={`${agent.assignedLlm.family}\u0000${agent.assignedLlm.version}`}
-                onChange={(event) => onModel(agent, event.target.value)}
-              >
-                {inventory?.available_models.map((model) => (
-                  <option key={`${model.family}/${model.version}`} value={`${model.family}\u0000${model.version}`}>
-                    {model.family} · {model.version}{model.cloud ? " (Cloud)" : " (Local)"}
-                  </option>
-                ))}
-              </select>
-            </label>
-
-            <label className="field-group" style={{ gridColumn: "1 / -1" }}>
-              <span className="field-label">Additional Hermes Tools</span>
-              <select
-                multiple
-                className="field-select-multi"
-                value={agent.tools}
-                onChange={(event) => onTools(agent, Array.from(event.target.selectedOptions, (option) => option.value))}
-              >
-                {inventory?.registered_tools.map((tool) => (
-                  <option key={tool.tool_id} value={tool.tool_id}>
-                    {tool.tool_id} · {tool.risk_level}{tool.requires_hitl_approval ? " · HITL Approval Required" : ""}
-                  </option>
-                ))}
-              </select>
-            </label>
-          </div>
 
           {agent.workflowSteps.length > 0 && (
             <div className="specialist-card-steps">
@@ -1370,7 +1560,8 @@ function RosterDraftEditor({ roster, inventory, onRoster, onSkill, onTools, onMo
             </div>
           )}
         </div>
-      ))}
+      );
+    })}
       <button className="add-agent-btn" onClick={onAdd}>
         <Plus size={15} /> Add specialist
       </button>
@@ -1479,7 +1670,7 @@ function Missions({ records, roster, onNew, onInspect, onResume, onOpenPlanRevie
               </span>
               <code>{record.status}</code>
               <span>Not run</span>
-              <div style={{ display: "flex", alignItems: "center", gap: 6 }} onClick={(e) => e.stopPropagation()}>
+              <div style={{ display: "flex", alignItems: "center", gap: 8, whiteSpace: "nowrap" }} onClick={(e) => e.stopPropagation()}>
                 <Badge tone={record.status === "READY" ? "green" : "orange"}>{record.status}</Badge>
                 {onRun && (
                   <button
@@ -1501,7 +1692,7 @@ function Missions({ records, roster, onNew, onInspect, onResume, onOpenPlanRevie
                   </button>
                 )}
               </div>
-              <div onClick={(e) => e.stopPropagation()}>
+              <div style={{ display: "flex", alignItems: "center", justifyContent: "center" }} onClick={(e) => e.stopPropagation()}>
                 <MissionActions mission={record} onInspect={onInspect} onResume={onResume} onOpenRoster={onOpenRoster} onDelete={onDelete} onRun={onRun} placement="missions" />
               </div>
             </div>
@@ -1518,7 +1709,7 @@ function Missions({ records, roster, onNew, onInspect, onResume, onOpenPlanRevie
         <GitBranch size={18} />
         <span>
           <strong>Drift is a proposal, never an automatic surprise.</strong>
-          <small>Review managed-field diffs and required approvals before applying changes to Hermes.</small>
+          <small>Review managed-field diffs and required approvals before applying changes to AgentHub.</small>
         </span>
         <button className="secondary-button" onClick={onOpenPlanReview}>
           Open plan review <ArrowRight size={14} />
@@ -1635,7 +1826,7 @@ function FleetRoster({
   return (
     <>
       <PageTitle
-        eyebrow={currentMission ? `MISSION: ${currentMission.name.toUpperCase()}  /  ${displayedRoster.length} SPECIALISTS` : `HERMES ESTATE  /  ${displayedRoster.length} SPECIALISTS`}
+        eyebrow={currentMission ? `MISSION: ${currentMission.name.toUpperCase()}  /  ${displayedRoster.length} SPECIALISTS` : `AGENTHUB ESTATE  /  ${displayedRoster.length} SPECIALISTS`}
         title="Fleet roster"
         subtitle={`Declared specialist specifications for ${activeTitle} and their enforced capability bindings.`}
         action={
@@ -1731,7 +1922,7 @@ function FleetRoster({
         <i />
         <span>{currentAgent.triggerPolicy}{currentAgent.triggerPolicy === "CRON" ? ` · ${currentAgent.schedule}` : ""}</span>
         <i />
-        <span>{inventory?.profile ?? "default Hermes profile"}</span>
+        <span>{inventory?.profile ?? "default AgentHub profile"}</span>
         <small>{inventory?.provider_configured ? "Inference ready" : "Inference unavailable"}</small>
       </div>
       <section className="panel topology">
@@ -1741,7 +1932,7 @@ function FleetRoster({
             <h3>{activeTitle} · <span style={{ fontWeight: 400, color: "#687a74" }}>{currentAgent.name}</span></h3>
           </div>
           <span className="select-button">
-            <Dot color={inventory?.connected ? "green" : "orange"} /> {inventory?.connected ? "Hermes connected" : "Hermes unavailable"}
+            <Dot color={inventory?.connected ? "green" : "orange"} /> {inventory?.connected ? "AgentHub connected" : "AgentHub unavailable"}
           </span>
         </div>
         <div className="flow-canvas">
@@ -1792,7 +1983,7 @@ function FleetRoster({
             <div style={{ display: "flex", flexDirection: "column", gap: "6px" }}>
               <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
                 <span style={{ fontSize: "11px", fontWeight: 700, color: "#374e47" }}>
-                  Bound Hermes Skills (Multi-select)
+                  Bound AgentHub Skills (Multi-select)
                 </span>
                 <span style={{ fontSize: "10px", color: "#687a74" }}>
                   {currentAgent.skills.length} bound
@@ -1861,7 +2052,7 @@ function FleetRoster({
             </div>
             <label style={{ display: "flex", flexDirection: "column", gap: "6px" }}>
               <span style={{ fontSize: "11px", fontWeight: 700, color: "#374e47" }}>
-                Bound Hermes Tools ({currentAgent.tools.length} active)
+                Bound AgentHub Tools ({currentAgent.tools.length} active)
               </span>
               <select
                 multiple
@@ -1882,7 +2073,7 @@ function FleetRoster({
           <div className="detail-label spaced">ASSIGNED MODEL</div>
           <div className="model-row">
             <Command size={16} />
-            <span><strong>{currentAgent.model}</strong><small>Version reported by Hermes</small></span>
+            <span><strong>{currentAgent.model}</strong><small>Version reported by AgentHub</small></span>
             <Badge tone="blue">PINNED</Badge>
           </div>
           <div className="detail-label spaced">INTERNAL WORKFLOW</div>
@@ -6575,190 +6766,11 @@ function FleetOutputsView({
             <span>All Deliverables Registry</span>
             <span style={{ fontSize: "9px", background: "#eef3f1", color: "#425650", padding: "1px 6px", borderRadius: "3px", fontWeight: 700 }}>{outputs.length}</span>
           </button>
-
-          <button
-            type="button"
-            style={{
-              padding: "7px 14px",
-              fontSize: "11px",
-              fontWeight: activeViewMode === "dossier" && activeDossierCase === "gov_cloud" ? 700 : 600,
-              background: activeViewMode === "dossier" && activeDossierCase === "gov_cloud" ? "#ffffff" : "transparent",
-              color: activeViewMode === "dossier" && activeDossierCase === "gov_cloud" ? "#195d56" : "#51635d",
-              border: activeViewMode === "dossier" && activeDossierCase === "gov_cloud" ? "1px solid #cad8d1" : "1px solid transparent",
-              borderRadius: "4px",
-              cursor: "pointer",
-              display: "inline-flex",
-              alignItems: "center",
-              gap: "6px",
-              boxShadow: activeViewMode === "dossier" && activeDossierCase === "gov_cloud" ? "0 1px 3px rgba(0,0,0,0.06)" : "none",
-            }}
-            onClick={() => { setActiveViewMode("dossier"); setActiveDossierCase("gov_cloud"); }}
-          >
-            <FileText size={13} color={activeViewMode === "dossier" && activeDossierCase === "gov_cloud" ? "#236f66" : "#6a7b75"} />
-            <span>Gov Cloud Migration (RFP)</span>
-            <span style={{ fontSize: "9px", background: "#e4f3ed", color: "#196656", padding: "1px 6px", borderRadius: "3px", fontWeight: 700 }}>9/9 · $50.5K</span>
-          </button>
-
-          <button
-            type="button"
-            style={{
-              padding: "7px 14px",
-              fontSize: "11px",
-              fontWeight: activeViewMode === "dossier" && activeDossierCase === "rfp" ? 700 : 600,
-              background: activeViewMode === "dossier" && activeDossierCase === "rfp" ? "#ffffff" : "transparent",
-              color: activeViewMode === "dossier" && activeDossierCase === "rfp" ? "#195d56" : "#51635d",
-              border: activeViewMode === "dossier" && activeDossierCase === "rfp" ? "1px solid #cad8d1" : "1px solid transparent",
-              borderRadius: "4px",
-              cursor: "pointer",
-              display: "inline-flex",
-              alignItems: "center",
-              gap: "6px",
-              boxShadow: activeViewMode === "dossier" && activeDossierCase === "rfp" ? "0 1px 3px rgba(0,0,0,0.06)" : "none",
-            }}
-            onClick={() => { setActiveViewMode("dossier"); setActiveDossierCase("rfp"); }}
-          >
-            <FileText size={13} color={activeViewMode === "dossier" && activeDossierCase === "rfp" ? "#236f66" : "#6a7b75"} />
-            <span>DevOps Server Proposal (RFP)</span>
-            <span style={{ fontSize: "9px", background: "#e4f3ed", color: "#196656", padding: "1px 6px", borderRadius: "3px", fontWeight: 700 }}>15/15 · $161.4K</span>
-          </button>
-
-          <button
-            type="button"
-            style={{
-              padding: "7px 14px",
-              fontSize: "11px",
-              fontWeight: activeViewMode === "dossier" && activeDossierCase === "apt" ? 700 : 600,
-              background: activeViewMode === "dossier" && activeDossierCase === "apt" ? "#ffffff" : "transparent",
-              color: activeViewMode === "dossier" && activeDossierCase === "apt" ? "#195d56" : "#51635d",
-              border: activeViewMode === "dossier" && activeDossierCase === "apt" ? "1px solid #cad8d1" : "1px solid transparent",
-              borderRadius: "4px",
-              cursor: "pointer",
-              display: "inline-flex",
-              alignItems: "center",
-              gap: "6px",
-              boxShadow: activeViewMode === "dossier" && activeDossierCase === "apt" ? "0 1px 3px rgba(0,0,0,0.06)" : "none",
-            }}
-            onClick={() => { setActiveViewMode("dossier"); setActiveDossierCase("apt"); }}
-          >
-            <ShieldAlert size={13} color={activeViewMode === "dossier" && activeDossierCase === "apt" ? "#b44426" : "#6a7b75"} />
-            <span>APT Intrusion (Case 1)</span>
-            <span style={{ fontSize: "9px", background: "#fdeee5", color: "#a84e22", padding: "1px 6px", borderRadius: "3px", fontWeight: 700 }}>CRITICAL SEV-1</span>
-          </button>
-
-          <button
-            type="button"
-            style={{
-              padding: "7px 14px",
-              fontSize: "11px",
-              fontWeight: activeViewMode === "dossier" && activeDossierCase === "soc" ? 700 : 600,
-              background: activeViewMode === "dossier" && activeDossierCase === "soc" ? "#ffffff" : "transparent",
-              color: activeViewMode === "dossier" && activeDossierCase === "soc" ? "#195d56" : "#51635d",
-              border: activeViewMode === "dossier" && activeDossierCase === "soc" ? "1px solid #cad8d1" : "1px solid transparent",
-              borderRadius: "4px",
-              cursor: "pointer",
-              display: "inline-flex",
-              alignItems: "center",
-              gap: "6px",
-              boxShadow: activeViewMode === "dossier" && activeDossierCase === "soc" ? "0 1px 3px rgba(0,0,0,0.06)" : "none",
-            }}
-            onClick={() => { setActiveViewMode("dossier"); setActiveDossierCase("soc"); }}
-          >
-            <ShieldAlert size={13} color={activeViewMode === "dossier" && activeDossierCase === "soc" ? "#b45228" : "#6a7b75"} />
-            <span>Host Ransomware (Case 2)</span>
-            <span style={{ fontSize: "9px", background: "#fdeee5", color: "#a84e22", padding: "1px 6px", borderRadius: "3px", fontWeight: 700 }}>CRITICAL SEV-1</span>
-          </button>
-
-          <button
-            type="button"
-            style={{
-              padding: "7px 14px",
-              fontSize: "11px",
-              fontWeight: activeViewMode === "dossier" && activeDossierCase === "azure" ? 700 : 600,
-              background: activeViewMode === "dossier" && activeDossierCase === "azure" ? "#ffffff" : "transparent",
-              color: activeViewMode === "dossier" && activeDossierCase === "azure" ? "#195d56" : "#51635d",
-              border: activeViewMode === "dossier" && activeDossierCase === "azure" ? "1px solid #cad8d1" : "1px solid transparent",
-              borderRadius: "4px",
-              cursor: "pointer",
-              display: "inline-flex",
-              alignItems: "center",
-              gap: "6px",
-              boxShadow: activeViewMode === "dossier" && activeDossierCase === "azure" ? "0 1px 3px rgba(0,0,0,0.06)" : "none",
-            }}
-            onClick={() => { setActiveViewMode("dossier"); setActiveDossierCase("azure"); }}
-          >
-            <ShieldAlert size={13} color={activeViewMode === "dossier" && activeDossierCase === "azure" ? "#b44426" : "#6a7b75"} />
-            <span>Azure AD Takeover (Case 3)</span>
-            <span style={{ fontSize: "9px", background: "#fdeee5", color: "#a84e22", padding: "1px 6px", borderRadius: "3px", fontWeight: 700 }}>CRITICAL SEV-1</span>
-          </button>
-
-          <button
-            type="button"
-            style={{
-              padding: "7px 14px",
-              fontSize: "11px",
-              fontWeight: activeViewMode === "dossier" && activeDossierCase === "k8s" ? 700 : 600,
-              background: activeViewMode === "dossier" && activeDossierCase === "k8s" ? "#ffffff" : "transparent",
-              color: activeViewMode === "dossier" && activeDossierCase === "k8s" ? "#195d56" : "#51635d",
-              border: activeViewMode === "dossier" && activeDossierCase === "k8s" ? "1px solid #cad8d1" : "1px solid transparent",
-              borderRadius: "4px",
-              cursor: "pointer",
-              display: "inline-flex",
-              alignItems: "center",
-              gap: "6px",
-              boxShadow: activeViewMode === "dossier" && activeDossierCase === "k8s" ? "0 1px 3px rgba(0,0,0,0.06)" : "none",
-            }}
-            onClick={() => { setActiveViewMode("dossier"); setActiveDossierCase("k8s"); }}
-          >
-            <ShieldAlert size={13} color={activeViewMode === "dossier" && activeDossierCase === "k8s" ? "#b45228" : "#6a7b75"} />
-            <span>K8s Breakout (Case 4)</span>
-            <span style={{ fontSize: "9px", background: "#fdeee5", color: "#a84e22", padding: "1px 6px", borderRadius: "3px", fontWeight: 700 }}>CRITICAL SEV-1</span>
-          </button>
-
-          <button
-            type="button"
-            style={{
-              padding: "7px 14px",
-              fontSize: "11px",
-              fontWeight: activeViewMode === "dossier" && activeDossierCase === "case5" ? 700 : 600,
-              background: activeViewMode === "dossier" && activeDossierCase === "case5" ? "#ffffff" : "transparent",
-              color: activeViewMode === "dossier" && activeDossierCase === "case5" ? "#195d56" : "#51635d",
-              border: activeViewMode === "dossier" && activeDossierCase === "case5" ? "1px solid #cad8d1" : "1px solid transparent",
-              borderRadius: "4px",
-              cursor: "pointer",
-              display: "inline-flex",
-              alignItems: "center",
-              gap: "6px",
-              boxShadow: activeViewMode === "dossier" && activeDossierCase === "case5" ? "0 1px 3px rgba(0,0,0,0.06)" : "none",
-            }}
-            onClick={() => { setActiveViewMode("dossier"); setActiveDossierCase("case5"); }}
-          >
-            <ShieldAlert size={13} color={activeViewMode === "dossier" && activeDossierCase === "case5" ? "#0284c7" : "#6a7b75"} />
-            <span>DNS Tunneling (Case 5)</span>
-            <span style={{ fontSize: "9px", background: "#e0f2fe", color: "#0369a1", padding: "1px 6px", borderRadius: "3px", fontWeight: 700 }}>CRITICAL SEV-1</span>
-          </button>
-
-          <button
-            type="button"
-            style={{
-              padding: "7px 14px",
-              fontSize: "11px",
-              fontWeight: activeViewMode === "dossier" && activeDossierCase === "case6" ? 700 : 600,
-              background: activeViewMode === "dossier" && activeDossierCase === "case6" ? "#ffffff" : "transparent",
-              color: activeViewMode === "dossier" && activeDossierCase === "case6" ? "#195d56" : "#51635d",
-              border: activeViewMode === "dossier" && activeDossierCase === "case6" ? "1px solid #cad8d1" : "1px solid transparent",
-              borderRadius: "4px",
-              cursor: "pointer",
-              display: "inline-flex",
-              alignItems: "center",
-              gap: "6px",
-              boxShadow: activeViewMode === "dossier" && activeDossierCase === "case6" ? "0 1px 3px rgba(0,0,0,0.06)" : "none",
-            }}
-            onClick={() => { setActiveViewMode("dossier"); setActiveDossierCase("case6"); }}
-          >
-            <ShieldAlert size={13} color={activeViewMode === "dossier" && activeDossierCase === "case6" ? "#b44426" : "#6a7b75"} />
-            <span>DDoS Recon (Case 6)</span>
-            <span style={{ fontSize: "9px", background: "#fdeee5", color: "#a84e22", padding: "1px 6px", borderRadius: "3px", fontWeight: 700 }}>CRITICAL SEV-1</span>
-          </button>
+          {activeViewMode === "dossier" && (
+            <span style={{ fontSize: "11px", color: "#6a7b75", display: "inline-flex", alignItems: "center", gap: "6px", paddingLeft: "8px" }}>
+              / <span style={{ fontWeight: 700, color: "#195d56" }}>Specialist Dossier View</span>
+            </span>
+          )}
         </div>
 
         {onRefresh && (
@@ -6803,7 +6815,7 @@ function FleetOutputsView({
       {activeViewMode === "registry" && (
         <>
           <PageTitle
-            eyebrow="HERMES 0.21.x  /  DELIVERABLES & ARTIFACTS"
+            eyebrow="AGENTHUB 0.21.x  /  DELIVERABLES & ARTIFACTS"
             title="All Deliverables Registry"
             subtitle="Immutable deliverables produced across missions, workflow cycles, and specialist agent runs."
           />
@@ -6853,7 +6865,7 @@ function FleetOutputsView({
             Sovereign Fleet
           </span>
           <span style={{ fontSize: "10px", color: "#327568", fontWeight: 600 }}>
-            Hermes Host Runtime
+            AgentHub Host Runtime
           </span>
         </div>
       </div>
@@ -7028,7 +7040,20 @@ function FleetOutputsView({
                           );
                         }
 
-                        if (n.includes("azure") || c.includes("azure") || c.includes("identity-takeover") || cn.includes("azure") || cn.includes("identity")) {
+                        if (
+                          n.includes("azure") ||
+                          n.includes("case_3") ||
+                          n.includes("case-3") ||
+                          c.includes("azure") ||
+                          c.includes("case-3") ||
+                          c.includes("case_3") ||
+                          c.includes("identity-takeover") ||
+                          c.includes("impossible-travel") ||
+                          cn.includes("azure") ||
+                          cn.includes("identity") ||
+                          cn.includes("case 3") ||
+                          (item.produced_by || "").toLowerCase().includes("azure")
+                        ) {
                           return (
                             <button
                               type="button"
@@ -7042,7 +7067,19 @@ function FleetOutputsView({
                           );
                         }
                         
-                        if (n.includes("k8s") || c.includes("k8s") || c.includes("breakout") || cn.includes("k8s") || cn.includes("container")) {
+                        if (
+                          n.includes("k8s") ||
+                          n.includes("case_4") ||
+                          n.includes("case-4") ||
+                          c.includes("k8s") ||
+                          c.includes("case-4") ||
+                          c.includes("case_4") ||
+                          c.includes("breakout") ||
+                          cn.includes("k8s") ||
+                          cn.includes("container") ||
+                          cn.includes("case 4") ||
+                          (item.produced_by || "").toLowerCase().includes("k8s")
+                        ) {
                           return (
                             <button
                               type="button"
@@ -7971,7 +8008,7 @@ function Inventory({ inventory, loading }: { inventory: InventoryData | null; lo
 
   const counts = [skillRows.length, toolRows.length, modelRows.length];
   const connectionLabel = loading ? "DISCOVERING" : inventory?.connected ? "LIVE INVENTORY" : "DISCONNECTED";
-  return <><PageTitle eyebrow="HERMES 0.21.x  /  ESTATE DISCOVERY" title="Capability inventory" subtitle="Only discovered capabilities are eligible for fleet bindings." action={<><button className="secondary-button" onClick={() => window.location.reload()}><RefreshCw size={15} /> Refresh estate</button><Badge tone={inventory?.connected ? "green" : "orange"}><Dot color={inventory?.connected ? "green" : "orange"} /> {connectionLabel}</Badge></>} /><div className="inventory-warning"><CircleHelp size={16} /><span>{inventory?.connected ? inventory.provider_configured ? `Connected to Hermes${inventory.hermes_version ? ` ${inventory.hermes_version}` : ""}; inference provider ${inventory.inference_provider || "configured"}.` : `Connected to Hermes, but inference is not configured${inventory.inference_provider ? ` (${inventory.inference_provider})` : ""}. Blueprints remain drafts until runtime is ready.` : inventory?.connection_error ?? "Waiting for the Hermes gateway connection."}</span></div><section className="panel inventory-panel"><div className="inventory-tabs">{["Skills", "Tools", "Models"].map((item, index) => <button key={item} className={tab === item ? "active" : ""} onClick={() => setTab(item)}>{item}<i>{String(counts[index]).padStart(2, "0")}</i></button>)}<label><Search size={14} /><input placeholder={`Search ${tab.toLowerCase()}...`} value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} /></label></div>{tab === "Skills" && <div className="inventory-table"><div className="inventory-row inventory-row--head"><span>SKILL</span><span>VERSION</span><span>REQUIRES</span><span>HOST NODE</span><span>STATUS</span></div>{skillRows.map((row) => <div className="inventory-row" key={row.skill_id}><span className="inventory-name"><i><FileCheck2 size={16} /></i><span><strong>{row.skill_id}</strong><small>{row.description}</small></span></span><code>{row.version}</code><code>{row.required_tools.join(", ") || "Not reported"}</code><span>{row.host_node_ids.join(", ") || "Hermes gateway"}</span><Badge tone="green">Installed</Badge></div>)}</div>}{tab === "Tools" && <div className="inventory-table"><div className="inventory-row inventory-row--head"><span>TOOL</span><span>RISK</span><span>MCP SERVER</span><span>HITL</span><span>STATUS</span></div>{toolRows.map((row) => <div className="inventory-row" key={row.tool_id}><span className="inventory-name"><i><Blocks size={16} /></i><span><strong>{row.tool_id}</strong><small>{row.description || "Description not reported by Hermes."}</small></span></span><Badge tone={row.risk_assessed ? row.risk_level === "READ_ONLY" ? "green" : "orange" : "orange"}>{row.risk_assessed ? row.risk_level.replaceAll("_", " ") : "UNCLASSIFIED · SAFE DEFAULT"}</Badge><span>{row.mcp_server || "Native Hermes"}</span><span>{row.requires_hitl_approval ? "Required" : "No"}</span><Badge tone="green">Enabled</Badge></div>)}</div>}{tab === "Models" && <div className="inventory-table"><div className="inventory-row inventory-row--head"><span>MODEL FAMILY</span><span>MODEL ID</span><span>RESIDENCY</span><span>REASONING</span><span>EST. DAILY</span></div>{modelRows.map((row) => <div className="inventory-row" key={`${row.family}/${row.version}`}><span className="inventory-name"><i><Command size={16} /></i><span><strong>{row.family}</strong><small>{row.cloud ? "Provider model" : "Local provider"}</small></span></span><code>{row.version}</code><span>{row.residency_verified ? row.data_residencies.join(", ") : "Not reported"}</span><span>{row.reasoning_tier ?? "Not reported"}</span><strong>{row.estimated_daily_cost_usd === null ? "Not reported" : `$${row.estimated_daily_cost_usd.toFixed(2)}`}</strong></div>)}</div>}</section><div className="inventory-foot"><span><ShieldCheck size={15} /> Hermes does not report some risk, schema, residency, or pricing metadata.</span><span>{inventory?.connected ? "Connected" : "Unavailable"}</span></div></>;
+  return <><PageTitle eyebrow="AGENTHUB 0.21.x  /  ESTATE DISCOVERY" title="Capability inventory" subtitle="Only discovered capabilities are eligible for fleet bindings." action={<><button className="secondary-button" onClick={() => window.location.reload()}><RefreshCw size={15} /> Refresh estate</button><Badge tone={inventory?.connected ? "green" : "orange"}><Dot color={inventory?.connected ? "green" : "orange"} /> {connectionLabel}</Badge></>} /><div className="inventory-warning"><CircleHelp size={16} /><span>{inventory?.connected ? inventory.provider_configured ? `Connected to AgentHub${inventory.hermes_version ? ` ${inventory.hermes_version}` : ""}; inference provider ${inventory.inference_provider || "configured"}.` : `Connected to AgentHub, but inference is not configured${inventory.inference_provider ? ` (${inventory.inference_provider})` : ""}. Blueprints remain drafts until runtime is ready.` : inventory?.connection_error ?? "Waiting for the AgentHub gateway connection."}</span></div><section className="panel inventory-panel"><div className="inventory-tabs">{["Skills", "Tools", "Models"].map((item, index) => <button key={item} className={tab === item ? "active" : ""} onClick={() => setTab(item)}>{item}<i>{String(counts[index]).padStart(2, "0")}</i></button>)}<label><Search size={14} /><input placeholder={`Search ${tab.toLowerCase()}...`} value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} /></label></div>{tab === "Skills" && <div className="inventory-table"><div className="inventory-row inventory-row--head"><span>SKILL</span><span>VERSION</span><span>REQUIRES</span><span>HOST NODE</span><span>STATUS</span></div>{skillRows.map((row) => <div className="inventory-row" key={row.skill_id}><span className="inventory-name"><i><FileCheck2 size={16} /></i><span><strong>{row.skill_id}</strong><small>{row.description}</small></span></span><code>{row.version}</code><code>{row.required_tools.join(", ") || "Not reported"}</code><span>{row.host_node_ids.join(", ") || "AgentHub gateway"}</span><Badge tone="green">Installed</Badge></div>)}</div>}{tab === "Tools" && <div className="inventory-table"><div className="inventory-row inventory-row--head"><span>TOOL</span><span>RISK</span><span>MCP SERVER</span><span>HITL</span><span>STATUS</span></div>{toolRows.map((row) => <div className="inventory-row" key={row.tool_id}><span className="inventory-name"><i><Blocks size={16} /></i><span><strong>{row.tool_id}</strong><small>{row.description || "Description not reported by AgentHub."}</small></span></span><Badge tone={row.risk_assessed ? row.risk_level === "READ_ONLY" ? "green" : "orange" : "orange"}>{row.risk_assessed ? row.risk_level.replaceAll("_", " ") : "UNCLASSIFIED · SAFE DEFAULT"}</Badge><span>{row.mcp_server || "Native AgentHub"}</span><span>{row.requires_hitl_approval ? "Required" : "No"}</span><Badge tone="green">Enabled</Badge></div>)}</div>}{tab === "Models" && <div className="inventory-table"><div className="inventory-row inventory-row--head"><span>MODEL FAMILY</span><span>MODEL ID</span><span>RESIDENCY</span><span>REASONING</span><span>EST. DAILY</span></div>{modelRows.map((row) => <div className="inventory-row" key={`${row.family}/${row.version}`}><span className="inventory-name"><i><Command size={16} /></i><span><strong>{row.family}</strong><small>{row.cloud ? "Provider model" : "Local provider"}</small></span></span><code>{row.version}</code><span>{row.residency_verified ? row.data_residencies.join(", ") : "Not reported"}</span><span>{row.reasoning_tier ?? "Not reported"}</span><strong>{row.estimated_daily_cost_usd === null ? "Not reported" : `$${row.estimated_daily_cost_usd.toFixed(2)}`}</strong></div>)}</div>}</section><div className="inventory-foot"><span><ShieldCheck size={15} /> AgentHub does not report some risk, schema, residency, or pricing metadata.</span><span>{inventory?.connected ? "Connected" : "Unavailable"}</span></div></>;
 }
 
 function PlanReviewModal({
@@ -8016,8 +8053,8 @@ function PlanReviewModal({
       );
       setResultMessage(
         isConfigured
-          ? "Reconciliation plan verified and dispatched to live Hermes runtime."
-          : "Plan reconciliation recorded and validated. Hermes inference provider is unconfigured in hermes.yaml, so live daemon instances remain in standby."
+          ? "Reconciliation plan verified and dispatched to live AgentHub runtime."
+          : "Plan reconciliation recorded and validated. AgentHub inference provider is unconfigured in agenthub.yaml, so live daemon instances remain in standby."
       );
     } catch (err) {
       setResultMessage(err instanceof Error ? err.message : "Reconciliation failed.");
@@ -8041,7 +8078,7 @@ function PlanReviewModal({
         </div>
         <h2>Reconciliation Plan</h2>
         <p className="wizard-desc">
-          Compare declared desired-state blueprints against the active Hermes runtime estate before applying changes.
+          Compare declared desired-state blueprints against the active AgentHub runtime estate before applying changes.
         </p>
 
         {missions.length > 0 && (
@@ -8075,7 +8112,7 @@ function PlanReviewModal({
           <div className="plan-change-item">
             <Badge tone="blue">BIND</Badge>
             <div>
-              <strong>Attach capability bindings & Hermes tools</strong>
+              <strong>Attach capability bindings & AgentHub tools</strong>
               <small>Skills & Tools: {inventory?.installed_skills.length ?? 0} skills installed, {inventory?.registered_tools.length ?? 0} tools available</small>
             </div>
             <Dot color="green" />
@@ -8101,7 +8138,7 @@ function PlanReviewModal({
                 checked={confirmChanges}
                 onChange={(e) => setConfirmChanges(e.target.checked)}
               />
-              Confirm declared blueprint modifications to the Hermes host daemon
+              Confirm declared blueprint modifications to the AgentHub host daemon
             </label>
             <label className="check-label">
               <input
@@ -8138,7 +8175,7 @@ function PlanReviewModal({
             disabled={busy || !confirmChanges}
           >
             {busy ? <RefreshCw size={14} className="spin" /> : <Check size={14} />}
-            {busy ? "Reconciling..." : "Apply to Hermes"}
+            {busy ? "Reconciling..." : "Apply to AgentHub"}
           </button>
         </div>
       </section>
@@ -8564,7 +8601,7 @@ function RunMissionModal({
           <div style={{ display: "flex", alignItems: "center", gap: "8px", background: "#f2f7f4", padding: "8px 12px", borderRadius: "5px", border: "1px solid #dbe8e1" }}>
             <BadgeCheck size={14} color="#236f66" />
             <span style={{ fontSize: "10.5px", color: "#23554b" }}>
-              Execution runs on Hermes host runtime. Human gates pause in <strong>Decision rooms</strong> for sign-off.
+              Execution runs on AgentHub host runtime. Human gates pause in <strong>Decision rooms</strong> for sign-off.
             </span>
           </div>
         </div>

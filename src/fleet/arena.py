@@ -294,15 +294,27 @@ class FleetArenaComposer:
         if profiles.sync_all_profiles_mcp_url():
             gateway_needs_restart = True
 
-        # Single gateway restart if any profiles were created
-        if gateway_needs_restart:
+        # Single gateway restart only if brand new profiles were actually created
+        if gateway_needs_restart and bool(manifest.profiles_to_create):
             import time as _time
             from src.hermes.active_runs import ActiveRuns
 
             active = ActiveRuns()
-            if active.any_active(quiet_seconds=0):
+            # Also check if any direct workflows are currently running in FastAPI app
+            is_workflow_running = False
+            try:
+                from src.api.main import app as fastapi_app
+                direct_wf = getattr(fastapi_app.state, "direct_workflows", {})
+                for wf_id, wf_st in direct_wf.items():
+                    if isinstance(wf_st, dict) and wf_st.get("status") == "running":
+                        is_workflow_running = True
+                        break
+            except Exception:
+                pass
+
+            if is_workflow_running or active.any_active(quiet_seconds=0):
                 logger.warning(
-                    "Another Hermes run is active; skipping gateway restart. "
+                    "Another Hermes or direct workflow run is active; skipping gateway restart. "
                     "Fleet profiles will load on the next restart."
                 )
             else:

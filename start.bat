@@ -1,20 +1,25 @@
 @echo off
 REM AgentHub One-Command Starter for Windows Command Prompt
+cd /d "%~dp0"
 
-REM Check and automatically start Temporal container stack (Postgres + Server + Web UI on 8234)
+
+REM Check and auto-start Temporal container stack only if Docker is running
 where docker >nul 2>&1
 if %ERRORLEVEL% EQU 0 (
-    echo [*] Checking Docker and auto-starting Temporal Web UI stack...
-    docker compose up -d postgresql temporal temporal-ui >nul 2>&1
+    docker info >nul 2>&1
+    if %ERRORLEVEL% EQU 0 (
+        echo [*] Docker active: ensuring Temporal container stack is started...
+        docker compose up -d postgresql temporal temporal-ui >nul 2>&1
+    )
 )
 
-:loop
 echo [*] Launching AgentHub Orchestrator and Worker Runner...
 IF EXIST ".venv\Scripts\python.exe" (
     .venv\Scripts\python.exe run.py
 ) ELSE (
     python run.py
 )
-echo [!] AgentHub stopped. Restarting in 2 seconds... (Press Ctrl+C to stop)
-timeout /t 2 /nobreak >nul 2>&1
-goto loop
+
+if %ERRORLEVEL% NEQ 0 (
+    echo [!] AgentHub exited with code %ERRORLEVEL%.
+)

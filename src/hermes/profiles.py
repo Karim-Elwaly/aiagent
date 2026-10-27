@@ -656,25 +656,62 @@ class HermesProfiles:
             changed = True
             logger.info("Updated dedicated SOUL.md for fleet specialist '%s'", profile_name)
 
-        # 4. Strict Skill Isolation: Purge unwanted cloned skills
+        # 4. Strict Skill Isolation & Preservation
         allowed_skills = set(skills or [])
-        purge_cloned_skills(pdir, allowed_skills=allowed_skills)
-
-        # Copy allowed skills from library to profile dir
         lib = self.list_available_library_skills()
         p_skills = pdir / "skills"
         p_skills.mkdir(parents=True, exist_ok=True)
-        for sname in allowed_skills:
-            target = p_skills / sname
-            if not target.is_dir() or not (target / "SKILL.md").is_file():
-                meta = lib.get(sname)
-                if meta:
+
+        unrestricted = (
+            not allowed_skills
+            or allowed_skills == {"general_reasoning"}
+            or "all" in allowed_skills
+            or "*" in allowed_skills
+        )
+
+        if unrestricted:
+            # Maintain full capabilities: copy all available Hermes library skills into profile
+            for sname, meta in lib.items():
+                target = p_skills / sname
+                if not target.is_dir() or not (target / "SKILL.md").is_file():
                     src = meta["path"]
                     if src.is_dir():
                         shutil.copytree(src, target, dirs_exist_ok=True)
                     elif src.is_file():
                         target.mkdir(parents=True, exist_ok=True)
                         shutil.copy2(src, target / "SKILL.md")
+        else:
+            # Resolve requested skills against lib keys or tags
+            resolved_skills: set[str] = set()
+            for sname in allowed_skills:
+                clean = sname.lower()
+                clean_under = clean.replace("-", "_")
+                clean_dash = clean.replace("_", "-")
+                matched_key = None
+                if clean in lib:
+                    matched_key = clean
+                elif clean_dash in lib:
+                    matched_key = clean_dash
+                elif clean_under in lib:
+                    matched_key = clean_under
+                else:
+                    for k, meta in lib.items():
+                        tags = set(meta.get("tags") or [])
+                        if clean in tags or clean_dash in tags or clean_under in tags:
+                            matched_key = k
+                            break
+                if matched_key:
+                    resolved_skills.add(matched_key)
+                    target = p_skills / matched_key
+                    if not target.is_dir() or not (target / "SKILL.md").is_file():
+                        src = lib[matched_key]["path"]
+                        if src.is_dir():
+                            shutil.copytree(src, target, dirs_exist_ok=True)
+                        elif src.is_file():
+                            target.mkdir(parents=True, exist_ok=True)
+                            shutil.copy2(src, target / "SKILL.md")
+
+            purge_cloned_skills(pdir, allowed_skills=resolved_skills)
 
         # Write skill documents to skills_root / profile_name
         sdir = self.skills_root / profile_name
@@ -703,21 +740,23 @@ class HermesProfiles:
 
         self.write_profile_config(profile_name, config_to_set)
 
-        # 6. Toolsets: Enable skills and any required tools
-        wanted_toolsets = ["skills"]
+        # 6. Toolsets: Enable skills, core tools, and requested capabilities
+        wanted_toolsets = ["skills", "file", "code_execution", "web", "browser", "terminal", "memory", "todo"]
         for t in (tools or []):
-            if any(k in t.lower() for k in ["file", "read", "write", "upload", "path", "dir"]):
-                if "file" not in wanted_toolsets:
-                    wanted_toolsets.append("file")
-            if any(k in t.lower() for k in ["python", "code", "eval", "math"]):
-                if "code_execution" not in wanted_toolsets:
-                    wanted_toolsets.append("code_execution")
-            if any(k in t.lower() for k in ["command", "terminal", "bash", "shell", "exec"]):
-                if "terminal" not in wanted_toolsets:
-                    wanted_toolsets.append("terminal")
-            if any(k in t.lower() for k in ["web", "http", "curl", "url", "search"]):
-                if "web" not in wanted_toolsets:
-                    wanted_toolsets.append("web")
+            clean_t = t.lower()
+            if clean_t.startswith("hermes_toolset_"):
+                ts = clean_t.replace("hermes_toolset_", "")
+                if ts not in wanted_toolsets:
+                    wanted_toolsets.append(ts)
+            if any(k in clean_t for k in ["vision", "image", "screenshot"]):
+                if "vision" not in wanted_toolsets:
+                    wanted_toolsets.append("vision")
+            if any(k in clean_t for k in ["computer", "desktop", "mouse", "keyboard"]):
+                if "computer_use" not in wanted_toolsets:
+                    wanted_toolsets.append("computer_use")
+            if any(k in clean_t for k in ["session", "chat"]):
+                if "session_search" not in wanted_toolsets:
+                    wanted_toolsets.append("session_search")
 
         self.apply_toolsets(profile_name, sorted(wanted_toolsets))
 
@@ -973,12 +1012,22 @@ class HermesProfiles:
                         "content": content[:2000].lower(),
                     }
 
-        lib_dir = self.get_skills_library_dir()
-        if lib_dir:
-            _index_dir(lib_dir)
-
-        # Augment with data/hermes_skills
-        _index_dir(ROOT_DIR / "data" / "hermes_skills")
+        candidate_dirs = [
+            self.home / "profiles" / "default" / "skills",
+            self.home / "profiles" / DEFAULT_PROFILE / "skills",
+            self.home / "skills",
+            Path.home() / ".hermes" / "skills",
+            ROOT_DIR / "data" / "hermes_skills",
+        ]
+        seen_dirs: set[Path] = set()
+        for c in candidate_dirs:
+            try:
+                resolved = c.resolve()
+                if resolved not in seen_dirs and resolved.is_dir():
+                    seen_dirs.add(resolved)
+                    _index_dir(resolved)
+            except Exception:
+                pass
         return skills_meta
 
     def match_skills_for_task(

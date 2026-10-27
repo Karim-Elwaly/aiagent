@@ -14,7 +14,7 @@ const geistMono = Geist_Mono({
 
 export const metadata: Metadata = {
   title: "Fleet Studio | Mission Control",
-  description: "Desired-state governance and assurance for Hermes agent fleets.",
+  description: "Desired-state governance and assurance for AgentHub agent fleets.",
 };
 
 export default function RootLayout({ children }: LayoutProps<"/">) {

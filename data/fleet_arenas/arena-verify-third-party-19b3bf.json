@@ -1,0 +1,156 @@
+{
+  "arena_id": "arena-verify-third-party-19b3bf",
+  "arena_name": "Supplier assurance",
+  "arena_slug": "verify-third-party",
+  "mission_prompt": "Verify third-party vendor compliance and security standards automatically.",
+  "strategy_profile": "STANDARD",
+  "units": [
+    {
+      "profile_name": "fleet-verify-third-par-model-ingest-vendor-",
+      "unit_codename": "MODEL-INGEST-VENDOR-BASE",
+      "task_id": "t1",
+      "task_name": "Model & Ingest Vendor Baseline Dataset",
+      "operational_stage": "RECON_INGESTION",
+      "scoped_tools": [
+        "data_analysis",
+        "execute_python",
+        "general_reasoning"
+      ],
+      "required_skills": [
+        "data_analysis",
+        "code_execution",
+        "general_reasoning"
+      ],
+      "description": "Create a structured tabular representation of third\u2011party vendors, including fields such as vendor name, industry sector, location, existing certifications (ISO\u202f27001, SOC\u202f2, PCI\u2011DSS, etc.), audit history, and any known security incidents. If no external files are supplied, autonomously synthesize a realistic dataset with at least 10 diverse vendors.",
+      "input_contract": "Requires verified outputs from upstream dependency nodes: [None - Initial Branch Node]",
+      "output_contract": "A Pandas DataFrame (or equivalent) containing vendor metadata ready for compliance evaluation.",
+      "profile_exists": false,
+      "attached_files": []
+    },
+    {
+      "profile_name": "fleet-verify-third-par-evaluate-vendor-comp",
+      "unit_codename": "EVALUATE-VENDOR-COMPLIAN",
+      "task_id": "t2",
+      "task_name": "Evaluate Vendor Compliance Against Security Standards",
+      "operational_stage": "CROSS_VERIFICATION",
+      "scoped_tools": [
+        "data_analysis",
+        "execute_python",
+        "general_reasoning"
+      ],
+      "required_skills": [
+        "data_analysis",
+        "code_execution",
+        "general_reasoning"
+      ],
+      "description": "For each vendor in the dataset, compare their certifications and audit findings against a predefined set of security standards (ISO\u202f27001, SOC\u202f2, NIST\u202f800\u201153, PCI\u2011DSS). Compute a compliance score per standard and flag any gaps or missing controls. Generate a structured summary table with compliance status, risk level, and recommended remediation actions.",
+      "input_contract": "Requires verified outputs from upstream dependency nodes: [t1]",
+      "output_contract": "A compliance assessment matrix detailing scores, gaps, and remediation priorities for each vendor.",
+      "profile_exists": false,
+      "attached_files": []
+    },
+    {
+      "profile_name": "fleet-verify-third-par-generate-vendor-comp",
+      "unit_codename": "GENERATE-VENDOR-COMPLIAN",
+      "task_id": "t3",
+      "task_name": "Generate Vendor Compliance Report",
+      "operational_stage": "DELIVERABLE_SYNTHESIS",
+      "scoped_tools": [
+        "general_reasoning",
+        "summarization",
+        "summarize_to_presentation"
+      ],
+      "required_skills": [
+        "summarization",
+        "general_reasoning"
+      ],
+      "description": "Synthesize the compliance assessment matrix into a concise, executive\u2011ready report. Include an overview of overall vendor risk posture, high\u2011priority gaps, and actionable next steps (e.g., request updated audit reports, negotiate contractual clauses). Format the output as plain text or Markdown suitable for sharing with procurement and security teams.",
+      "input_contract": "Requires verified outputs from upstream dependency nodes: [t2]",
+      "output_contract": "A structured compliance report summarizing findings and recommendations.",
+      "profile_exists": false,
+      "attached_files": []
+    }
+  ],
+  "dag": {
+    "goal": "Automatically verify third\u2011party vendor compliance against relevant security standards (e.g., ISO\u202f27001, SOC\u202f2, NIST\u202f800\u201153) and generate a concise compliance assessment report.",
+    "reasoning": "The request requires automated ingestion of vendor information, mapping that data to industry security frameworks, scoring compliance, and producing an actionable summary. No local files are provided, so the first phase must synthesize or ingest a realistic baseline dataset. Subsequent phases perform evaluation and reporting.",
+    "tasks": [
+      {
+        "id": "t1",
+        "name": "Model & Ingest Vendor Baseline Dataset",
+        "description": "Create a structured tabular representation of third\u2011party vendors, including fields such as vendor name, industry sector, location, existing certifications (ISO\u202f27001, SOC\u202f2, PCI\u2011DSS, etc.), audit history, and any known security incidents. If no external files are supplied, autonomously synthesize a realistic dataset with at least 10 diverse vendors.",
+        "required_skills": [
+          "data_analysis",
+          "code_execution",
+          "general_reasoning"
+        ],
+        "expected_output": "A Pandas DataFrame (or equivalent) containing vendor metadata ready for compliance evaluation.",
+        "dependencies": [],
+        "risk_level": "low",
+        "max_retries": 2,
+        "timeout_seconds": 300,
+        "parameters": {},
+        "agent_id": null,
+        "hermes_profile": "fleet-verify-third-par-model-ingest-vendor-",
+        "specialist_spec": null,
+        "_hermes_profile": "fleet-verify-third-par-model-ingest-vendor-"
+      },
+      {
+        "id": "t2",
+        "name": "Evaluate Vendor Compliance Against Security Standards",
+        "description": "For each vendor in the dataset, compare their certifications and audit findings against a predefined set of security standards (ISO\u202f27001, SOC\u202f2, NIST\u202f800\u201153, PCI\u2011DSS). Compute a compliance score per standard and flag any gaps or missing controls. Generate a structured summary table with compliance status, risk level, and recommended remediation actions.",
+        "required_skills": [
+          "data_analysis",
+          "code_execution",
+          "general_reasoning"
+        ],
+        "expected_output": "A compliance assessment matrix detailing scores, gaps, and remediation priorities for each vendor.",
+        "dependencies": [
+          "t1"
+        ],
+        "risk_level": "low",
+        "max_retries": 2,
+        "timeout_seconds": 300,
+        "parameters": {},
+        "agent_id": null,
+        "hermes_profile": "fleet-verify-third-par-evaluate-vendor-comp",
+        "specialist_spec": null,
+        "_hermes_profile": "fleet-verify-third-par-evaluate-vendor-comp"
+      },
+      {
+        "id": "t3",
+        "name": "Generate Vendor Compliance Report",
+        "description": "Synthesize the compliance assessment matrix into a concise, executive\u2011ready report. Include an overview of overall vendor risk posture, high\u2011priority gaps, and actionable next steps (e.g., request updated audit reports, negotiate contractual clauses). Format the output as plain text or Markdown suitable for sharing with procurement and security teams.",
+        "required_skills": [
+          "summarization",
+          "general_reasoning"
+        ],
+        "expected_output": "A structured compliance report summarizing findings and recommendations.",
+        "dependencies": [
+          "t2"
+        ],
+        "risk_level": "low",
+        "max_retries": 1,
+        "timeout_seconds": 120,
+        "parameters": {},
+        "agent_id": null,
+        "hermes_profile": "fleet-verify-third-par-generate-vendor-comp",
+        "specialist_spec": null,
+        "_hermes_profile": "fleet-verify-third-par-generate-vendor-comp"
+      }
+    ],
+    "estimated_completion_seconds": 60
+  },
+  "status": "draft",
+  "created_at": 1793128122.7539425,
+  "updated_at": 1793128122.7539425,
+  "profiles_to_create": [
+    "fleet-verify-third-par-evaluate-vendor-comp",
+    "fleet-verify-third-par-generate-vendor-comp",
+    "fleet-verify-third-par-model-ingest-vendor-"
+  ],
+  "profiles_existing": [],
+  "workflow_id": null,
+  "agent_id": null,
+  "resilience": "standard"
+}
