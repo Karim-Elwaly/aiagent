@@ -8584,12 +8584,10 @@ function RunMissionModal({
   const defaultPath =
     (mission.clarification_answers?.["source-log-path"] as string) ||
     (mission.clarification_answers?.["target_path"] as string) ||
+    // Require at least one backslash after drive letter so bare 'D' never matches
     (mission.goal?.match(/([a-zA-Z]:\\[^\s"'\n]+)/)?.[0] ?? "") ||
     (typeof window !== "undefined"
-      ? localStorage.getItem("agenthub_last_target_path") ||
-        (mission.name?.toLowerCase().includes("sec") || mission.goal?.toLowerCase().includes("sec")
-          ? "D:\\Security-logs-test\\attack-cases-benchmark\\case-4-k8s-linux-container-breakout\\raw-logs"
-          : "")
+      ? (localStorage.getItem("agenthub_last_target_path") ?? "")
       : "");
 
   const [targetPath, setTargetPath] = useState<string>(defaultPath);
@@ -8658,27 +8656,63 @@ function RunMissionModal({
         <div className="wizard-fields" style={{ display: "flex", flexDirection: "column", gap: "14px" }}>
           <label style={{ display: "flex", flexDirection: "column", gap: "6px", fontSize: "11px", fontWeight: 700, color: "#253b35" }}>
             <span>Target directory or local path (Optional)</span>
-            <input
-              type="text"
-              value={targetPath}
-              onChange={(e) => {
-                setTargetPath(e.target.value);
-                if (typeof window !== "undefined" && e.target.value) {
-                  localStorage.setItem("agenthub_last_target_path", e.target.value);
-                }
-              }}
-              placeholder="e.g. D:\Security-logs-test\attack-cases-benchmark\case-4-k8s-linux-container-breakout\raw-logs"
-              style={{
-                padding: "8px 12px",
-                fontSize: "11px",
-                border: "1px solid #c9d8d1",
-                borderRadius: "5px",
-                background: "#ffffff",
-                color: "#162a26",
-                outline: "none",
-                fontFamily: "var(--font-geist-mono), monospace",
-              }}
-            />
+            <div style={{ position: "relative", display: "flex", alignItems: "center" }}>
+              <input
+                type="text"
+                value={targetPath}
+                onChange={(e) => {
+                  setTargetPath(e.target.value);
+                  if (typeof window !== "undefined") {
+                    if (e.target.value) {
+                      localStorage.setItem("agenthub_last_target_path", e.target.value);
+                    } else {
+                      localStorage.removeItem("agenthub_last_target_path");
+                    }
+                  }
+                }}
+                placeholder="e.g. D:\Security-logs-test\attack-cases-benchmark\case-4-k8s-linux-container-breakout\raw-logs"
+                style={{
+                  flex: 1,
+                  padding: "8px 32px 8px 12px",
+                  fontSize: "11px",
+                  border: "1px solid #c9d8d1",
+                  borderRadius: "5px",
+                  background: "#ffffff",
+                  color: "#162a26",
+                  outline: "none",
+                  fontFamily: "var(--font-geist-mono), monospace",
+                  width: "100%",
+                }}
+              />
+              {targetPath && (
+                <button
+                  type="button"
+                  aria-label="Clear path"
+                  onClick={() => {
+                    setTargetPath("");
+                    if (typeof window !== "undefined") {
+                      localStorage.removeItem("agenthub_last_target_path");
+                    }
+                  }}
+                  style={{
+                    position: "absolute",
+                    right: "8px",
+                    top: "50%",
+                    transform: "translateY(-50%)",
+                    background: "none",
+                    border: "none",
+                    cursor: "pointer",
+                    padding: "2px",
+                    display: "flex",
+                    alignItems: "center",
+                    color: "#8a9e97",
+                    lineHeight: 1,
+                  }}
+                >
+                  <X size={13} />
+                </button>
+              )}
+            </div>
             <small style={{ color: "#6a7c76", fontWeight: 400, fontSize: "10px" }}>
               Specialist agents will inspect this local directory path directly using terminal tools.
             </small>
