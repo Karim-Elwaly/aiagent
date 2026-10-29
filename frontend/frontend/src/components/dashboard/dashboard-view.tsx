@@ -300,15 +300,15 @@ export function Dashboard({
     label,
   }: {
     active?: boolean;
-    payload?: { payload?: (typeof activityRows)[number] }[];
-    label?: string;
+    payload?: ReadonlyArray<{ payload?: (typeof activityRows)[number] }>;
+    label?: string | number;
   }) => {
     if (!active || !payload || !payload.length) return null;
     const item = payload[0]?.payload;
     if (!item) return null;
     return (
       <div className="activity-tooltip">
-        <div className="activity-tooltip-time">{label}</div>
+        <div className="activity-tooltip-time">{String(label ?? "")}</div>
         <div className="activity-tooltip-row teal">
           <span className="dot" />
           <span>{chartMode === "cumulative" ? "Cumulative cycles:" : "Completed cycles:"}</span>
