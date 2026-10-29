@@ -1,0 +1,145 @@
+{
+  "arena_id": "arena-create-tutorial-videos-c42f8b",
+  "arena_name": "Youtube",
+  "arena_slug": "create-tutorial-videos",
+  "mission_prompt": "Create tutorial videos for youtube scripts",
+  "strategy_profile": "STANDARD",
+  "units": [
+    {
+      "profile_name": "fleet-create-tutorial--define-series-struct",
+      "unit_codename": "DEFINE-SERIES-STRUCTURE-",
+      "task_id": "t1",
+      "task_name": "Define Series Structure & Content Outline",
+      "operational_stage": "RECON_INGESTION",
+      "scoped_tools": [
+        "general_reasoning"
+      ],
+      "required_skills": [
+        "general_reasoning"
+      ],
+      "description": "Determine the overall theme, episode count, target audience, key learning objectives for each video, and a high\u2011level outline that includes intro, main points, examples, and call\u2011to\u2011action. Use general reasoning to craft a compelling narrative arc.",
+      "input_contract": "Requires verified outputs from upstream dependency nodes: [None - Initial Branch Node]",
+      "output_contract": "A structured series plan with episode titles, durations, learning goals, and content flow.",
+      "profile_exists": false,
+      "attached_files": []
+    },
+    {
+      "profile_name": "fleet-create-tutorial--write-detailed-youtu",
+      "unit_codename": "WRITE-DETAILED-YOUTUBE-S",
+      "task_id": "t2",
+      "task_name": "Write Detailed YouTube Scripts for Each Episode",
+      "operational_stage": "DEEP_ANALYSIS",
+      "scoped_tools": [
+        "general_reasoning",
+        "summarization",
+        "summarize_to_presentation"
+      ],
+      "required_skills": [
+        "general_reasoning",
+        "summarization"
+      ],
+      "description": "For every episode defined in t1, produce a full script including spoken dialogue, on\u2011screen prompts, suggested visuals or animations, and timestamps. Ensure scripts are engaging, concise, and optimized for SEO keywords.",
+      "input_contract": "Requires verified outputs from upstream dependency nodes: [t1]",
+      "output_contract": "A set of complete video scripts ready for recording.",
+      "profile_exists": false,
+      "attached_files": []
+    },
+    {
+      "profile_name": "fleet-create-tutorial--compile-final-delive",
+      "unit_codename": "COMPILE-FINAL-DELIVERABL",
+      "task_id": "t3",
+      "task_name": "Compile Final Deliverables & Production Checklist",
+      "operational_stage": "DELIVERABLE_SYNTHESIS",
+      "scoped_tools": [
+        "summarization",
+        "summarize_to_presentation"
+      ],
+      "required_skills": [
+        "summarization"
+      ],
+      "description": "Aggregate all scripts into a single document, add production notes (camera angles, props, music cues), and create a checklist for filming. Summarize key points for each video to aid the creator during shooting.",
+      "input_contract": "Requires verified outputs from upstream dependency nodes: [t2]",
+      "output_contract": "A comprehensive production package including scripts, visual prompts, and a step\u2011by\u2011step filming guide.",
+      "profile_exists": false,
+      "attached_files": []
+    }
+  ],
+  "dag": {
+    "goal": "Generate a complete set of YouTube tutorial videos by creating engaging scripts for each episode.",
+    "reasoning": "The request is a creative content\u2011generation task that requires multiple stages: defining the series structure, drafting individual video scripts, and preparing final deliverables. This aligns with the multi\u2011phase content creation pattern (Phase\u202f1: strategic planning; Phase\u202f2: script writing; Phase\u202f3: synthesis of final assets).",
+    "tasks": [
+      {
+        "id": "t1",
+        "name": "Define Series Structure & Content Outline",
+        "description": "Determine the overall theme, episode count, target audience, key learning objectives for each video, and a high\u2011level outline that includes intro, main points, examples, and call\u2011to\u2011action. Use general reasoning to craft a compelling narrative arc.",
+        "required_skills": [
+          "general_reasoning"
+        ],
+        "expected_output": "A structured series plan with episode titles, durations, learning goals, and content flow.",
+        "dependencies": [],
+        "risk_level": "low",
+        "max_retries": 2,
+        "timeout_seconds": 300,
+        "parameters": {},
+        "agent_id": null,
+        "hermes_profile": "fleet-create-tutorial--define-series-struct",
+        "specialist_spec": null,
+        "_hermes_profile": "fleet-create-tutorial--define-series-struct"
+      },
+      {
+        "id": "t2",
+        "name": "Write Detailed YouTube Scripts for Each Episode",
+        "description": "For every episode defined in t1, produce a full script including spoken dialogue, on\u2011screen prompts, suggested visuals or animations, and timestamps. Ensure scripts are engaging, concise, and optimized for SEO keywords.",
+        "required_skills": [
+          "general_reasoning",
+          "summarization"
+        ],
+        "expected_output": "A set of complete video scripts ready for recording.",
+        "dependencies": [
+          "t1"
+        ],
+        "risk_level": "low",
+        "max_retries": 2,
+        "timeout_seconds": 600,
+        "parameters": {},
+        "agent_id": null,
+        "hermes_profile": "fleet-create-tutorial--write-detailed-youtu",
+        "specialist_spec": null,
+        "_hermes_profile": "fleet-create-tutorial--write-detailed-youtu"
+      },
+      {
+        "id": "t3",
+        "name": "Compile Final Deliverables & Production Checklist",
+        "description": "Aggregate all scripts into a single document, add production notes (camera angles, props, music cues), and create a checklist for filming. Summarize key points for each video to aid the creator during shooting.",
+        "required_skills": [
+          "summarization"
+        ],
+        "expected_output": "A comprehensive production package including scripts, visual prompts, and a step\u2011by\u2011step filming guide.",
+        "dependencies": [
+          "t2"
+        ],
+        "risk_level": "low",
+        "max_retries": 1,
+        "timeout_seconds": 300,
+        "parameters": {},
+        "agent_id": null,
+        "hermes_profile": "fleet-create-tutorial--compile-final-delive",
+        "specialist_spec": null,
+        "_hermes_profile": "fleet-create-tutorial--compile-final-delive"
+      }
+    ],
+    "estimated_completion_seconds": 60
+  },
+  "status": "draft",
+  "created_at": 1793186648.0831854,
+  "updated_at": 1793186648.0831854,
+  "profiles_to_create": [
+    "fleet-create-tutorial--compile-final-delive",
+    "fleet-create-tutorial--define-series-struct",
+    "fleet-create-tutorial--write-detailed-youtu"
+  ],
+  "profiles_existing": [],
+  "workflow_id": null,
+  "agent_id": null,
+  "resilience": "standard"
+}

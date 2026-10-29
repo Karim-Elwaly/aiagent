@@ -1,0 +1,148 @@
+{
+  "arena_id": "arena-cross-functional-group-ff09a5",
+  "arena_name": "Proposal",
+  "arena_slug": "cross-functional-group",
+  "mission_prompt": "a cross-functional group responsible for managing, writing, reviewing, and submitting a company's response to a client or vendor",
+  "strategy_profile": "STANDARD",
+  "units": [
+    {
+      "profile_name": "fleet-cross-functional-define-group-structu",
+      "unit_codename": "DEFINE-GROUP-STRUCTURE-C",
+      "task_id": "t1",
+      "task_name": "Define Group Structure & Core Responsibilities",
+      "operational_stage": "RECON_INGESTION",
+      "scoped_tools": [
+        "general_reasoning"
+      ],
+      "required_skills": [
+        "general_reasoning"
+      ],
+      "description": "Identify the key functional roles (e.g., Content Lead, Legal Reviewer, Compliance Officer, Technical Writer, Project Manager) and map their primary responsibilities, decision\u2011making authority, and collaboration touchpoints. Produce a concise table summarizing each role.",
+      "input_contract": "Requires verified outputs from upstream dependency nodes: [None - Initial Branch Node]",
+      "output_contract": "Table of roles with responsibilities and authority levels",
+      "profile_exists": false,
+      "attached_files": []
+    },
+    {
+      "profile_name": "fleet-cross-functional-design-response-work",
+      "unit_codename": "DESIGN-RESPONSE-WORKFLOW",
+      "task_id": "t2",
+      "task_name": "Design Response Workflow & Template Library",
+      "operational_stage": "DEEP_ANALYSIS",
+      "scoped_tools": [
+        "general_reasoning",
+        "summarization",
+        "summarize_to_presentation"
+      ],
+      "required_skills": [
+        "general_reasoning",
+        "summarization"
+      ],
+      "description": "Create a step\u2011by\u2011step workflow diagram (or textual flow) that shows the lifecycle from request receipt to final submission. Include checkpoints for drafting, internal review, legal/compliance sign\u2011off, and client/vendor approval. Also draft a set of standardized response templates (e.g., acknowledgment, escalation, resolution).",
+      "input_contract": "Requires verified outputs from upstream dependency nodes: [t1]",
+      "output_contract": "Workflow description and sample template outlines",
+      "profile_exists": false,
+      "attached_files": []
+    },
+    {
+      "profile_name": "fleet-cross-functional-compile-final-guide-",
+      "unit_codename": "COMPILE-FINAL-GUIDE-GOVE",
+      "task_id": "t3",
+      "task_name": "Compile Final Guide & Governance Playbook",
+      "operational_stage": "DELIVERABLE_SYNTHESIS",
+      "scoped_tools": [
+        "general_reasoning",
+        "summarization",
+        "summarize_to_presentation"
+      ],
+      "required_skills": [
+        "general_reasoning",
+        "summarization"
+      ],
+      "description": "Integrate outputs from t1 and t2 into a single, coherent playbook. Include sections on role definitions, workflow steps, template usage guidelines, quality\u2011control checklists, escalation paths, and metrics for measuring response effectiveness (e.g., turnaround time, client satisfaction). Provide a brief executive summary.",
+      "input_contract": "Requires verified outputs from upstream dependency nodes: [t2]",
+      "output_contract": "Comprehensive playbook document ready for distribution",
+      "profile_exists": false,
+      "attached_files": []
+    }
+  ],
+  "dag": {
+    "goal": "Provide a structured framework and documentation for a cross\u2011functional group that manages the creation, review, and submission of company responses to clients or vendors.",
+    "reasoning": "The request is conceptual and requires design of roles, processes, templates, and governance. It can be satisfied with high\u2011level reasoning and content generation, so we use three sequential phases: define responsibilities, build workflow & templates, then synthesize a final guide.",
+    "tasks": [
+      {
+        "id": "t1",
+        "name": "Define Group Structure & Core Responsibilities",
+        "description": "Identify the key functional roles (e.g., Content Lead, Legal Reviewer, Compliance Officer, Technical Writer, Project Manager) and map their primary responsibilities, decision\u2011making authority, and collaboration touchpoints. Produce a concise table summarizing each role.",
+        "required_skills": [
+          "general_reasoning"
+        ],
+        "expected_output": "Table of roles with responsibilities and authority levels",
+        "dependencies": [],
+        "risk_level": "low",
+        "max_retries": 2,
+        "timeout_seconds": 120,
+        "parameters": {},
+        "agent_id": null,
+        "hermes_profile": "fleet-cross-functional-define-group-structu",
+        "specialist_spec": null,
+        "_hermes_profile": "fleet-cross-functional-define-group-structu"
+      },
+      {
+        "id": "t2",
+        "name": "Design Response Workflow & Template Library",
+        "description": "Create a step\u2011by\u2011step workflow diagram (or textual flow) that shows the lifecycle from request receipt to final submission. Include checkpoints for drafting, internal review, legal/compliance sign\u2011off, and client/vendor approval. Also draft a set of standardized response templates (e.g., acknowledgment, escalation, resolution).",
+        "required_skills": [
+          "general_reasoning",
+          "summarization"
+        ],
+        "expected_output": "Workflow description and sample template outlines",
+        "dependencies": [
+          "t1"
+        ],
+        "risk_level": "low",
+        "max_retries": 2,
+        "timeout_seconds": 180,
+        "parameters": {},
+        "agent_id": null,
+        "hermes_profile": "fleet-cross-functional-design-response-work",
+        "specialist_spec": null,
+        "_hermes_profile": "fleet-cross-functional-design-response-work"
+      },
+      {
+        "id": "t3",
+        "name": "Compile Final Guide & Governance Playbook",
+        "description": "Integrate outputs from t1 and t2 into a single, coherent playbook. Include sections on role definitions, workflow steps, template usage guidelines, quality\u2011control checklists, escalation paths, and metrics for measuring response effectiveness (e.g., turnaround time, client satisfaction). Provide a brief executive summary.",
+        "required_skills": [
+          "general_reasoning",
+          "summarization"
+        ],
+        "expected_output": "Comprehensive playbook document ready for distribution",
+        "dependencies": [
+          "t2"
+        ],
+        "risk_level": "low",
+        "max_retries": 2,
+        "timeout_seconds": 240,
+        "parameters": {},
+        "agent_id": null,
+        "hermes_profile": "fleet-cross-functional-compile-final-guide-",
+        "specialist_spec": null,
+        "_hermes_profile": "fleet-cross-functional-compile-final-guide-"
+      }
+    ],
+    "estimated_completion_seconds": 60
+  },
+  "status": "draft",
+  "created_at": 1793186451.5867062,
+  "updated_at": 1793186451.5867062,
+  "profiles_to_create": [
+    "fleet-cross-functional-compile-final-guide-",
+    "fleet-cross-functional-define-group-structu",
+    "fleet-cross-functional-design-response-work"
+  ],
+  "profiles_existing": [],
+  "workflow_id": null,
+  "agent_id": null,
+  "resilience": "standard"
+}

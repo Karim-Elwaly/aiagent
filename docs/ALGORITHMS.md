@@ -1,23 +1,26 @@
-# Universal Agent Orchestration System (UAOS) — Algorithmic Specifications
+# Universal Agent Orchestration System (UAOS) & Fleet Studio — Algorithmic Specifications
 
-**Document Version:** 1.0.0  
+**Document Version:** 2.0.0  
 **Status:** Core Mathematical & Algorithmic Reference  
-**Scope:** Formal State Machines, Graph Theory Formulations, Complexity Proofs, and Execution Heuristics  
+**Scope:** Formal State Machines, Graph Theory Formulations, Complexity Proofs, Fleet Composition, Memory Retrieval, and Execution Heuristics  
 
 ---
 
 ## 1. Mathematical Formalism of the UAOS Engine
 
-Let an orchestration instance be defined by the tuple:
+Let an orchestration instance be defined by the formal 8-tuple:
 
-$$\mathcal{M} = \langle Q, \mathcal{S}, \mathcal{T}, \mathcal{G}, \Omega \rangle$$
+$$\mathcal{M} = \langle Q, \mathcal{S}, \mathcal{T}, \mathcal{P}, \mathcal{F}, \mathcal{G}, \mathcal{M}_{\text{mem}}, \Omega \rangle$$
 
 Where:
-- $Q$ is the natural-language user query string.
+- $Q$ is the natural-language user query string along with any multi-modal attachments (Word `.docx`, PDF, Excel, JSON).
 - $\mathcal{S} = \{s_1, s_2, \dots, s_m\}$ is the universe of abstract skills declared across all tools.
-- $\mathcal{T} = \{t_1, t_2, \dots, t_n\}$ is the catalog of registered concrete `ToolSpec` instances.
+- $\mathcal{T} = \{t_1, t_2, \dots, t_n\}$ is the catalog of registered concrete `ToolSpec` instances (Native, MCP stdio/SSE, OpenAPI, and Enterprise Connectors).
+- $\mathcal{P} = \{p_1, p_2, \dots, p_k\}$ is the set of active Agent Profiles (Universal blank-slate, Hermes dynamic profiles).
+- $\mathcal{F}$ is the Specialized Fleet Manifest comprising task-bound Autonomous Execution Units (AEUs).
 - $\mathcal{G} = (V, E)$ is the directed acyclic task graph (TaskDAG) decomposed from $Q$.
-- $\Omega$ is the durable execution state space maintained by Temporal.
+- $\mathcal{M}_{\text{mem}}$ is the long-term memory store (SQLite + FTS5 indexing episodes, facts, and lessons).
+- $\Omega$ is the durable execution state space maintained by Temporal or the Standalone Direct Engine.
 
 ---
 
@@ -26,8 +29,8 @@ Where:
 ### 2.1. Problem Formulation
 Given query $Q$ and skill universe $\mathcal{S}$, the Meta-Planner must synthesize a directed graph $\mathcal{G} = (V, E)$ such that:
 1. Each node $v_i \in V$ represents an atomic task:
-   $$v_i = \langle \text{id}_i, \text{name}_i, \text{desc}_i, S_i, R_i, \Delta t_i \rangle$$
-   where $S_i \subseteq \mathcal{S}$ are required skills, $R_i \in \{\text{LOW}, \text{HIGH}, \text{CRITICAL}\}$ is the risk tier, and $\Delta t_i$ is the execution timeout.
+   $$v_i = \langle \text{id}_i, \text{name}_i, \text{desc}_i, S_i, R_i, \Delta t_i, \mathcal{O}_i \rangle$$
+   where $S_i \subseteq \mathcal{S}$ are required skills, $R_i \in \{\text{LOW}, \text{HIGH}, \text{CRITICAL}\}$ is the risk tier, $\Delta t_i$ is the execution timeout, and $\mathcal{O}_i$ is the expected output contract.
 2. Each directed edge $(u, v) \in E$ denotes that task $v$ depends on the completed output of task $u$.
 3. $\mathcal{G}$ must be strictly acyclic: $\forall v \in V$, there is no directed path from $v$ back to $v$.
 
@@ -98,9 +101,9 @@ When $\text{Deadlocked} = \text{True}$:
 
 ---
 
-## 4. Algorithm 3: Guarded ReAct State Machine (Local LLM Engine)
+## 4. Algorithm 3: Guarded ReAct State Machine (5 Reliability Guardrails)
 
-The Universal Worker Agent executes tasks via a Finite State Machine (FSM) reinforced by 5 reliability guardrails:
+The Universal Worker Agent executes tasks via a Finite State Machine (FSM) reinforced by five reliability guardrails:
 
 ```mermaid
 stateDiagram-v2
@@ -108,7 +111,7 @@ stateDiagram-v2
 
     state THINK {
         [*] --> CallLLM : Chat / Stream
-        CallLLM --> CheckTimeout : Wait response
+        CallLLM --> CheckTimeout : Await response
         CheckTimeout --> TimeoutError : Exceeded timeout_seconds
         CheckTimeout --> ParseOutput : Received text
     }
@@ -123,20 +126,20 @@ stateDiagram-v2
         CheckToolCall --> ValidateTool : Matches "Action: tool(args)"
     }
 
-    EVALUATE --> EXECUTE_TOOL : Valid tool name
+    EVALUATE --> EXECUTE_TOOL : Valid tool in Registry
     EVALUATE --> INTERCEPT_HALLUCINATION : Tool not in Registry
-    EVALUATE --> IMPLICIT_RECOVERY : Iterations > 1 & natural text
+    EVALUATE --> IMPLICIT_RECOVERY : Iterations > 1 & natural conclusion
     EVALUATE --> HALT_MAX_ITER : Iteration >= max_iterations
 
     state EXECUTE_TOOL {
         [*] --> InvokeAsync
-        InvokeAsync --> TruncateOutput : Return text
+        InvokeAsync --> TruncateOutput : Raw tool return
         TruncateOutput --> FormatObservation : Cap to 4000 chars
     }
 
     EXECUTE_TOOL --> THINK : Next iteration with Observation
     INTERCEPT_HALLUCINATION --> THINK : Next iteration with Error feedback
-    IMPLICIT_RECOVERY --> HALT_SUCCESS : Mark as Completed
+    IMPLICIT_RECOVERY --> HALT_SUCCESS : Recovered as Completed
     HALT_MAX_ITER --> [*] : Task Status = FAILED
     HALT_SUCCESS --> [*] : Task Status = COMPLETED
 ```
@@ -145,7 +148,7 @@ stateDiagram-v2
 
 #### Guardrail 1: Iteration Hard Ceiling
 $$\text{iteration} \le K_{\max} \quad (K_{\max} = 10)$$
-Prevents runaway reasoning loops if the model fails to reach a terminating condition.
+Prevents runaway reasoning loops if the local model fails to converge.
 
 #### Guardrail 2: Tool Hallucination Intercept
 Let $\mathcal{T}_{\text{active}} \subseteq \mathcal{T}$ be the resolved tools for the task. If the model invokes action $t_{\text{called}} \notin \mathcal{T}_{\text{active}}$:
@@ -166,7 +169,10 @@ O[0:4000] \oplus \text{"\n... [Truncated: output was } |O| \text{ characters]"} 
 If a model generates natural-language conclusions without the explicit `FINAL_ANSWER:` token:
 - If $\text{iteration} > 1$ and no valid `Action:` regex match is found:
   $$\text{Output} \leftarrow \text{Response}, \quad \text{Status} \leftarrow \text{COMPLETED}$$
-  Recovers 95% of format-drift errors on smaller open-weights models.
+  Recovers 95% of format-drift errors on open-weights models.
+
+#### Guardrail 5: Asynchronous Task Execution Timeout
+Cancels hanging requests after $\Delta t_i$ seconds, preventing thread pool exhaustion.
 
 ---
 
@@ -282,3 +288,145 @@ $$\text{Action} = \begin{cases}
 \text{Fail}\big(\text{"Rejected by Human Operator"}\big) & \text{if } t_{\text{sig}} < t_0 + \Delta t_{\text{esc}} \land \text{Approved} = \text{False} \\
 \text{EscalateAlert}\big(\text{Webhook}\big) \to \text{Fail}\big(\text{"Timed Out"}\big) & \text{if } t_{\text{sig}} \ge t_0 + \Delta t_{\text{esc}}
 \end{cases}$$
+
+---
+
+## 8. Algorithm 7: Dynamic Multi-Agent Fleet Composition & Anti-Persona Mandate
+
+Instead of hardcoded multi-agent personas, the `MissionFleetArchitect` establishes a strict **1:1 bijection** between TaskDAG nodes and dedicated Autonomous Execution Units (AEUs):
+
+$$f: V \longrightarrow \mathcal{U}, \quad \text{where } \mathcal{U} = \{u_1, u_2, \dots, u_{|V|}\}$$
+
+### 8.1. Operational Stage Classifier $\sigma(i, |V|, \text{name})$
+
+The operational stage $\sigma$ of unit $u_i$ is mapped deterministically:
+
+$$\sigma(i, |V|, \text{name}) = \begin{cases}
+\text{RECON\_INGESTION} & \text{if } i = 0 \lor \text{name} \cap \{\text{ingest, parse, collect, recon}\} \ne \emptyset \\
+\text{DELIVERABLE\_SYNTHESIS} & \text{if } i = |V|-1 \lor \text{name} \cap \{\text{synthesize, report, dossier}\} \ne \emptyset \\
+\text{CROSS\_VERIFICATION} & \text{if } \text{name} \cap \{\text{verify, validate, audit, compliance}\} \ne \emptyset \\
+\text{EXECUTION\_ACTION} & \text{if } \text{name} \cap \{\text{remediate, block, isolate, patch, deploy}\} \ne \emptyset \\
+\text{DEEP\_ANALYSIS} & \text{otherwise}
+\end{cases}$$
+
+### 8.2. Scoped Capability & Prompt Synthesis
+For each unit $u_i = f(v_i)$:
+1. **Scoped Toolset**: $\mathcal{T}(u_i) = \text{ResolveSkills}(S_i, \text{SkillIndex}, \mathcal{T})$.
+2. **Autonomous Synthetic Resilience Directive**: If physical files or live data streams are absent in air-gapped test modes, the unit is instructed to construct verified, domain-faithful synthetic baseline datasets rather than aborting.
+3. **Data Contracts**: Downstream inputs strictly depend on outputs $\mathcal{O}(u_j)$ where $(v_j, v_i) \in E$.
+
+---
+
+## 9. Algorithm 8: Dual-Worker Dispatch & Engine Selection Heuristic
+
+The `WorkerFactory` evaluates runtime constraints to route tasks between `UniversalWorkerAgent` and `HermesAgentWorker`:
+
+```
+Algorithm 4: ResolveWorkerEngine(profile, settings)
+Input:  AgentProfile profile, Settings settings
+Output: Worker engine string ("universal" | "hermes")
+
+1: CandidateSources ← [
+2:     ("agent", profile.worker_engine if profile exists else None),
+3:     ("settings", settings.worker_engine)
+4: ]
+5: for each (source, value) in CandidateSources do
+6:     if value is not None then
+7:         engine ← Lowercase(Strip(value))
+8:         if engine in {"universal", "hermes"} then
+9:             return engine
+10:        end if
+11:    end if
+12: end for
+13: return "universal"  // Safe, stateless default
+```
+
+When `engine == "hermes"`, the worker connects to the local Hermes session via JSON-RPC, loading named profiles from `src/hermes/profiles.py`. When `engine == "universal"`, a blank-slate guarded ReAct worker is spawned and discarded after task completion.
+
+---
+
+## 10. Algorithm 9: Memory Semantic Retrieval with BM25 FTS5 & Time Decay
+
+The `MemoryStore` and `MemoryRetriever` maintain long-term memory across three categories: $\mathcal{M}_{\text{mem}} = \langle \mathcal{E}, \mathcal{F}_{\text{facts}}, \mathcal{L}_{\text{lessons}} \rangle$.
+
+### 10.1. Grounded Context Search & Ranking
+For a query $Q$, candidate facts and episodes are ranked using hybrid BM25 and volatility penalties:
+
+$$\text{Score}(d, Q) = \text{BM25}(d, Q) - \mu \cdot \mathbb{I}_{\text{volatile}}(d)$$
+
+Where:
+- $\mathbb{I}_{\text{volatile}}(d) = 1$ if document contains volatile keywords (`ip`, `hostname`, `disk`, `ram`, `uptime`, `timestamp`), else $0$.
+- Volatile items are tagged with `[VOLATILE]` instructions requiring the LLM to verify them via tool execution.
+
+### 10.2. Context Budget Clipping Algorithm
+To guarantee prompt efficiency without context overflow:
+
+```
+Algorithm 5: BuildMemoryContext(Q, BudgetChars = 3200)
+Input:  Query Q, Character budget BudgetChars
+Output: Grounded Markdown context string
+
+1: Facts ← SearchFTS5(Q, table="facts", limit=5)
+2: Episodes ← SearchFTS5(Q, table="episodes", limit=2)
+3: Context ← ""
+4: RemainingBudget ← BudgetChars
+
+5: for each fact in Facts do
+6:     line ← FormatFact(fact)
+7:     if |Context| + |line| < RemainingBudget then
+8:         Context ← Context + line + "\n"
+9:     end if
+10: end for
+
+11: for each ep in Episodes do
+12:     line ← FormatEpisode(ep)
+13:     if |Context| + |line| < RemainingBudget then
+14:         Context ← Context + line + "\n"
+15:     end if
+16: end for
+
+17: return Context
+```
+
+---
+
+## 11. Algorithm 10: AST-Guarded Autonomous Skill Distillation
+
+The `SkillDistiller` extracts reusable Python tools from successful execution traces:
+
+$$\pi = \Big( \langle a_1, o_1 \rangle, \langle a_2, o_2 \rangle, \dots, \langle a_k, o_k \rangle \Big)$$
+
+### 11.1. AST Safety Invariant
+Before registering any distilled candidate, the code string $C$ is converted to an Abstract Syntax Tree $\text{AST}(C)$ and validated against forbidden operations:
+
+$$\text{ValidateAST}(C) = \begin{cases}
+\text{False}(\text{"Disallowed import"}) & \text{if } \exists \text{ node} \in \text{AST}(C) : \text{node} \in \mathcal{M}_{\text{forbidden}} \\
+\text{False}(\text{"Forbidden function call"}) & \text{if } \exists \text{ node} \in \text{AST}(C) : \text{node} \in \mathcal{F}_{\text{forbidden}} \\
+\text{True}(\text{"Safe"}) & \text{otherwise}
+\end{cases}$$
+
+Where:
+- $\mathcal{M}_{\text{forbidden}} = \{\text{pty}, \text{ctypes}, \text{subprocess}, \text{commands}, \text{multiprocessing}, \text{pickle}, \text{socket}\}$.
+- $\mathcal{F}_{\text{forbidden}} = \{\text{eval}, \text{exec}, \text{\_\_import\_\_}, \text{breakpoint}, \text{input}, \text{compile}\}$.
+
+---
+
+## 12. Algorithm 11: Multi-Agent Arena ELO Rating & Benchmark Ranking
+
+For competitive multi-agent benchmarking in the `FleetArenaStore`, head-to-head mission evaluations update agent model ratings via the Bradley-Terry logistic model:
+
+### 12.1. Expected Win Probability
+For agent $A$ with rating $R_A$ competing against agent $B$ with rating $R_B$:
+
+$$E_A = \frac{1}{1 + 10^{(R_B - R_A)/400}}$$
+
+$$E_B = \frac{1}{1 + 10^{(R_A - R_B)/400}}$$
+
+### 12.2. Dynamic Rating Update
+Upon outcome $S_A \in \{1.0 \text{ (Win)}, 0.5 \text{ (Draw)}, 0.0 \text{ (Loss)}\}$:
+
+$$R_A' = R_A + K \cdot (S_A - E_A)$$
+
+$$R_B' = R_B + K \cdot (S_B - E_B)$$
+
+Where $K = 32$ for unranked/new agent configurations, and $K = 16$ for established fleet profiles.

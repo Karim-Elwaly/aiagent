@@ -1,108 +1,158 @@
-# UAOS — Universal Agent Orchestration System
+# UAOS & Fleet Studio — Sovereign Multi-Agent Orchestration & Governance
 
-**UAOS** is a dynamic, self-hosted multi-agent orchestration architecture designed to solve **any** user problem without relying on hardcoded specialized agents. 
+**UAOS (Universal Agent Orchestration System)** and **Fleet Studio** form an enterprise-grade, self-hosted multi-agent orchestration, governance, and control plane designed to solve complex multi-modal problems without relying on hardcoded, brittle agent silos.
 
-Instead of creating separate agent implementations for every use case (e.g. SOC analysts, financial analysts, document summarizers), UAOS decomposes incoming problems into dynamic task DAGs, injects abstract skills and synthesized personas at runtime, and executes them with a **Universal Worker Agent** powered by local LLMs (Ollama, vLLM, LM Studio, llama.cpp) and durable orchestration via **Temporal**.
-
-📖 **Deep-Dive Specifications:**
-- [🏛️ **System Architecture Document (`docs/ARCHITECTURE.md`)**](file:///d:/projects/aiagent/docs/ARCHITECTURE.md) — Complete end-to-end component topology, data flows, sequence diagrams, and security matrix.
-- [📐 **Algorithmic Specifications (`docs/ALGORITHMS.md`)**](file:///d:/projects/aiagent/docs/ALGORITHMS.md) — Mathematical formulations, Kahn's DAG cycle detection, guarded ReAct state machines, and greedy skill set-cover proofs.
+Instead of handcrafting specialized conversational agents (e.g., dedicated SOC analysts, document summarizers, or pricing estimators) that easily drift off-task, UAOS decomposes user missions into **dynamic task DAGs**, synthesizes dedicated **Autonomous Execution Units (AEUs)** per task node, enforces strict **sovereign air-gap governance**, and executes them across **Dual Worker Engines** (`UniversalWorkerAgent` & `HermesAgentWorker`) backed by durable **Temporal** orchestration or a lightweight **Standalone Direct Engine**.
 
 ---
 
-## 🏛️ Architecture Overview
+📖 **Authoritative Deep-Dive Specifications:**
+- 🏛️ [**System Architecture Document (`docs/ARCHITECTURE.md`)**](file:///d:/projects/aiagent/docs/ARCHITECTURE.md) — Complete component topologies, communication protocols, dual-worker lifecycle, sequence diagrams, and security matrix.
+- 📐 [**Algorithmic Specifications (`docs/ALGORITHMS.md`)**](file:///d:/projects/aiagent/docs/ALGORITHMS.md) — Mathematical formalisms, Kahn's DAG cycle validation, 5-guardrail ReAct FSM, greedy skill resolution, BM25 memory retrieval, AST-guarded skill distillation, and Arena ELO ranking.
+- 🎯 [**Enterprise RFP Demo Guide (`docs/FLEET_STUDIO_PROPOSAL_DEMO_GUIDE.md`)**](file:///d:/projects/aiagent/docs/FLEET_STUDIO_PROPOSAL_DEMO_GUIDE.md) — Step-by-step walkthrough converting raw RFP documents into submission-ready proposals and pricing models.
+- 🚀 [**Interactive Demo Script (`docs/DEMO_GUIDE.md`)**](file:///d:/projects/aiagent/docs/DEMO_GUIDE.md) — Fast-track verification script for live audience demonstrations.
+
+---
+
+## 🏛️ System Architecture Topology
 
 ```
-                      ┌──────────────────────┐
-                      │      User Query      │
-                      └──────────┬───────────┘
-                                 │
-                                 ▼
-                     ┌───────────────────────┐
-                     │     Meta-Planner      │ ◄── [ToolRegistry Skills Catalog]
-                     │  (Task Decomposition) │
-                     └──────────┬────────────┘
-                                │ Produces TaskDAG (Tasks + Skill Requirements)
-                                ▼
-                     ┌───────────────────────┐
-                     │   Temporal Workflow   │ ◄── Durable state, crash recovery
-                     │      (DAG Router)     │
-                     └──────────┬────────────┘
-                                │
-        ┌───────────────────────┴───────────────────────┐
-        │ Iterates through ready tasks                  │
-        ▼                                               ▼
-┌──────────────────┐                         ┌──────────────────────┐
-│  Skill/Tool      │                         │  Persona Synthesizer │
-│  Injector        │                         │  (Dynamic System     │
-│  (Maps skills    │                         │   Prompt Injection)  │
-│   to ToolSpecs)  │                         └──────────┬───────────┘
-└───────┬──────────┘                                    │
-        │ Resolved Tools                                │ Dynamic Prompt
-        └───────────────────────┬───────────────────────┘
-                                │
-                                ▼
-                   ┌───────────────────────────┐
-                   │  Universal Worker Agent   │
-                   │  • Born Blank Slate       │
-                   │  • Guarded ReAct Loop     │
-                   │  • Destroyed After Task   │
-                   │  • Zero Memory Leak       │
-                   └────────────┬──────────────┘
-                                │ TaskResult
-                                ▼
-                   ┌───────────────────────────┐
-                   │     Temporal Workflow     │ ◄── Human Approval (Signals)
-                   │  • DAG Progress Check     │     for High/Critical Risk
-                   │  • Re-plan on Deadlock    │
-                   └────────────┬──────────────┘
-                                │ All Tasks Done
-                                ▼
-                   ┌───────────────────────────┐
-                   │     Response Assembler    │
-                   │   (Synthesizes Final Ans) │
-                   └───────────────────────────┘
+                      ┌─────────────────────────────────────────┐
+                      │    User Query & Multi-Modal Inputs      │
+                      │   (Word .docx, PDF, Excel, JSON, REST)  │
+                      └────────────────────┬────────────────────┘
+                                           │
+                                           ▼
+                      ┌─────────────────────────────────────────┐
+                      │              Meta-Planner               │ ◄── [ToolRegistry Skills Index]
+                      │     (TaskDAG Dynamic Decomposition)     │ ◄── [FTS5 Long-Term Memory]
+                      └────────────────────┬────────────────────┘
+                                           │ Produces TaskDAG (Nodes, Dependencies & Risk Tiers)
+                                           ▼
+                      ┌─────────────────────────────────────────┐
+                      │         MissionFleetArchitect           │ ◄── Anti-Persona Mandate:
+                      │    (Synthesizes Dedicated AEUs per Node)│     1 Task Node = 1 Micro-Agent
+                      └────────────────────┬────────────────────┘
+                                           │
+                                           ▼
+                      ┌─────────────────────────────────────────┐
+                      │       Durable Temporal Workflow         │ ◄── SQLite/Postgres Event Replay
+                      │   (DAG Router / Standalone Direct Fall) │ ◄── Non-blocking signal pause
+                      └────────────────────┬────────────────────┘
+                                           │
+         ┌─────────────────────────────────┴─────────────────────────────────┐
+         │ High / Critical Risk Detected                                     │ Standard Low-Risk Path
+         ▼                                                                   ▼
+┌─────────────────────────────────┐                         ┌─────────────────────────────────┐
+│     Decision Rooms (HITL)       │                         │         Worker Factory          │
+│ • Live 15-Min Countdown Timer   │                         │  • Resolves Engine per Profile  │
+│ • Human Guidance Comment Input  │                         │  • Universal vs Hermes Native   │
+│ • JSON Parameter Overrides      │                         └────────────────┬────────────────┘
+│ • Auto-Escalation Webhook Alert │                                          │
+└────────────────┬────────────────┘                                          │
+                 │ Approved with Operator Guidance                           │
+                 └─────────────────────────┬─────────────────────────────────┘
+                                           │
+         ┌─────────────────────────────────┴─────────────────────────────────┐
+         ▼                                                                   ▼
+┌─────────────────────────────────┐                         ┌─────────────────────────────────┐
+│     Universal Worker Agent      │                         │       Hermes Agent Worker       │
+│ • Born Blank-Slate per Task     │                         │ • Hermes v0.21.x Native Engine  │
+│ • 5-Guardrail ReAct FSM         │                         │ • Dynamic Profile Provisioning  │
+│ • Tool Hallucination Intercept  │                         │ • Local Loopback JSON-RPC Bridge│
+│ • Zero Cross-Task Memory Leak   │                         │ • Native Hermes Skills Catalog  │
+└────────────────┬────────────────┘                         └────────────────┬────────────────┘
+                 │                                                           │
+                 └─────────────────────────┬─────────────────────────────────┘
+                                           │ Scoped Tool Invocations
+                                           ▼
+                      ┌─────────────────────────────────────────┐
+                      │    Standardized Protocol & Tool Fabric  │
+                      │ • Model Context Protocol (stdio / SSE)  │
+                      │ • OpenAPI 3.0 / Swagger Auto-Importer   │
+                      │ • 13 Enterprise Security Connectors     │
+                      │ • Native Subprocess Code / File Tools   │
+                      └────────────────────┬────────────────────┘
+                                           │ Execution Traces & Outputs
+                                           ▼
+                      ┌─────────────────────────────────────────┐
+                      │           Response Assembler            │
+                      │  • Synthesizes Deliverable Artifacts    │
+                      │  • AST Skill Distiller (Extracts Tools) │
+                      │  • SQLite FTS5 Memory Update (Episodes) │
+                      └────────────────────┬────────────────────┘
+                                           │ Real-Time SSE Streams
+                                           ▼
+                      ┌─────────────────────────────────────────┐
+                      │        Fleet Studio Control Plane       │
+                      │    (Next.js 16 / React 19 / xyflow DAG) │
+                      └─────────────────────────────────────────┘
 ```
 
 ---
 
-## 🔑 Key Architectural Principles
+## 🔑 Key Architectural Breakthroughs
 
-1. **No Hardcoded Domain Agents**: There is only **one** worker implementation (`UniversalWorkerAgent`). The persona (prompt) and skills (tools) are injected dynamically per-task.
-2. **Abstract Skills vs Concrete Tools**: The Meta-Planner only sees high-level capability names (`web_search`, `code_execution`, `file_read`). Concrete Python functions and parameters are bound at execution time by the `ToolRegistry`.
-3. **5 Guardrails for Local LLM Reliability**:
-   - **Max Iterations**: Prevents infinite reasoning/tool-calling loops.
-   - **Tool Name Validation**: Intercepts hallucinated tool names with feedback so the model self-corrects.
-   - **Observation Size Capping**: Truncates large tool responses to prevent context window overflow.
-   - **Implicit Final Answer**: Treats non-tool-call text as answer if the local model forgets protocol formatting.
-   - **Timeout per Task**: Guards against hung inference servers.
-4. **Durable Orchestration (Temporal)**:
-   - Resilient against crashes: if worker nodes restart, Temporal replays event history from SQLite/Postgres.
-   - Human-in-the-loop (HITL) approval gates use Temporal Signals, pausing without consuming CPU/GPU cycles.
+1. **Anti-Persona Mandate (1 Task Node = 1 Dedicated Micro-Agent)**:
+   - There are no static, monolithic agent roles.
+   - For every task node in the decomposed DAG, the `MissionFleetArchitect` synthesizes a dedicated **Autonomous Execution Unit (AEU)** with bespoke instructions, scoped tools, and synthetic resilience directives.
+2. **Dual Worker Execution Engines**:
+   - **`UniversalWorkerAgent`**: A pure blank-slate ReAct worker with zero memory leaks between tasks, defended by **5 Local LLM Reliability Guardrails**:
+     - *Iteration Ceiling*: Halts runaway loops at $K_{\max} = 10$.
+     - *Tool Hallucination Intercept*: Provides real-time feedback with registered tool names when models hallucinate commands.
+     - *Observation Capping*: Truncates responses at 4,000 characters to safeguard the context window.
+     - *Implicit Final Answer*: Captures valid output when small models omit syntax tags.
+     - *Execution Timeout*: Async cancellation preventing frozen inference sockets.
+   - **`HermesAgentWorker`**: Native integration with Hermes Agent v0.21.x, supporting persistent profiles, dynamic provisioning, skills catalog, loopback bridge, and an embedded MCP Server.
+3. **Sovereign Decision Rooms & Human-in-the-Loop (HITL)**:
+   - High-risk and critical actions cleanly suspend execution via Temporal Signals.
+   - Operators can review pending operations in the interactive modal, provide **guidance feedback**, and override task parameters in real time.
+   - Includes a live **15-minute countdown timer** racing against an automatic escalation policy.
+4. **Standardized Tool Ecosystem**:
+   - **Model Context Protocol (MCP)**: Native stdio and SSE client + embedded Hermes MCP Server.
+   - **OpenAPI 3.0 / Swagger Auto-Importer**: Ingests external REST APIs instantly with HTTP risk tiering (GET=LOW, POST=HIGH, DELETE=CRITICAL).
+   - **13 Enterprise Security Connectors**: Direct integration with CrowdStrike Falcon, Microsoft Defender, Microsoft Entra ID, Sentinel, Splunk, Elasticsearch, Fortigate, Okta, Palo Alto Networks, SentinelOne, TheHive, VirusTotal, and AbuseIPDB.
+5. **Long-Term Memory & Skill Distillation**:
+   - **Memory Store**: SQLite database with FTS5 virtual tables indexing past execution episodes, verified system facts, and operational lessons with automatic secret masking.
+   - **Skill Distiller**: Analyzes successful multi-step workflow traces, synthesizes reusable Python tools, verifies safety via static **AST inspection** (blocking forbidden imports and calls), and promotes them into the active `ToolRegistry`.
+
+---
+
+## 🌐 Network Topology & Active Endpoints
+
+| Service / Component | Default Port / URL | Description | Status Check |
+| :--- | :--- | :--- | :--- |
+| **Fleet Studio Web UI** | `http://localhost:3000/` | Next.js 16 / React 19 / Turbopack / xyflow Mission Control | Rendered in browser |
+| **AgentHub API Gateway** | `http://localhost:8001/` *(or `8000`)* | FastAPI backend for execution, streaming, uploads, and auth | `GET /auth/me` or `/health` |
+| **Interactive API Docs** | `http://localhost:8001/docs` | Swagger / OpenAPI interactive documentation | Interactive in browser |
+| **Temporal Web UI** | `http://localhost:8234/` *(or `8233`)* | Temporal durable workflow execution dashboard | Browser dashboard |
+| **Temporal Server gRPC** | `localhost:7234` *(or `7233`)* | gRPC durable state log | Auto-probed by launcher |
+| **Local Sovereign LLM** | `http://<IP>:1234/v1` | LM Studio, Ollama, or vLLM OpenAI-compatible server | `GET /v1/models` |
 
 ---
 
 ## 🚀 Quickstart
 
 ### Prerequisites
-- Python 3.11+
-- [Ollama](https://ollama.ai) (or vLLM / LM Studio / llama.cpp) running a model (e.g. `llama3.1:8b` or `qwen2.5:7b`)
-- Running [Temporal Server](https://temporal.io) (e.g. `localhost:7233`)
+- **Python 3.11+**
+- **Node.js 18+ & npm** (for Fleet Studio UI)
+- **Docker Desktop** (optional, for Temporal container stack — standalone fallback is built-in)
+- Local LLM server (e.g., [LM Studio](https://lmstudio.ai), [Ollama](https://ollama.ai), or vLLM)
 
 ---
 
 ### ⚡ One-Command Start (Recommended)
 
-Start both the **Temporal Worker** and the **FastAPI Gateway** simultaneously with a single command:
+Start the entire autonomous backend (Temporal Worker + FastAPI Gateway + Auto Port Detection) with a single command:
+
+**On Windows (Command Prompt):**
+```cmd
+start.bat
+```
 
 **On Windows (PowerShell):**
 ```powershell
 .\start.ps1
-```
-
-**On Windows (CMD):**
-```cmd
-start.bat
 ```
 
 **Cross-Platform (Python):**
@@ -110,189 +160,130 @@ start.bat
 python run.py
 ```
 
-**On Linux/macOS:**
-```bash
-chmod +x start.sh && ./start.sh
-```
-
 `run.py` automatically:
-1. Validates your Python version (3.11+)
-2. Probes connection to your Temporal Server (`localhost:7233`)
-3. Spawns both the **Temporal Worker Runner** and **FastAPI Gateway** concurrently
-4. Provides graceful unified shutdown on `Ctrl+C`
+1. Validates Python 3.11+ and configures the Windows Proactor event loop.
+2. Checks Temporal connectivity (ports `7234/7233`) and auto-starts Docker containers if available.
+3. Automatically scans and binds available gateway ports (`8001` or `8000`).
+4. Spawns the **Temporal Worker Runner** and **FastAPI Gateway** with unified Ctrl+C shutdown.
 
 ---
 
-### 🛠️ Manual / Step-by-Step Setup
+### 🎨 Starting the Fleet Studio Web Control Plane
 
-If you prefer to run services in separate terminals:
+In a separate terminal:
 
 ```bash
-# 1. Setup virtual environment & dependencies
+cd frontend/frontend
+npm install
+npm run dev
+```
+
+Open **`http://localhost:3000`** in your browser to access Fleet Studio Mission Control!
+
+---
+
+## 🛠️ Step-by-Step Manual Setup
+
+If you prefer to run services individually:
+
+```bash
+# 1. Setup Python virtual environment & dependencies
 python -m venv .venv
 source .venv/bin/activate  # On Windows: .venv\Scripts\activate
 pip install -e ".[dev]"
 cp .env.example .env
 
-# 2. Start Temporal Server (if not already running)
-docker compose up -d temporal
+# 2. Start Temporal container stack (if using Docker)
+docker compose up -d postgresql temporal temporal-ui
 
 # 3. Terminal 1: Run Temporal Worker
 python -m src.orchestrator.worker_runner
 
 # 4. Terminal 2: Run FastAPI Gateway
-uvicorn src.api.main:app --port 8000 --reload
+uvicorn src.api.main:app --port 8001 --reload
+
+# 5. Terminal 3: Run Fleet Studio Frontend
+cd frontend/frontend
+npm run dev
 ```
 
-- **UAOS Mission Control Dashboard**: `http://localhost:8000` (or `8001`)
-- **Interactive API Docs**: `http://localhost:8000/docs`
-- **Temporal Web UI**: `http://localhost:8233`
+---
+
+## ⚙️ Dynamic LLM Configuration & VM Connection
+
+You can connect to any local or remote OpenAI-compatible inference server (LM Studio, Ollama, vLLM) **directly from the UI without restarting services**:
+
+1. Open `http://localhost:3000/` (or the backend at `http://localhost:8001/`).
+2. Click **`⚙️ LLM Connection`** in the header.
+3. Enter your server's endpoint: `http://<IP>:1234/v1` (e.g., `http://192.168.1.50:1234/v1`).
+4. Click **`🔄 Detect Models`** — queries `/v1/models` and populates the available model IDs automatically.
+5. Click **`🔌 Test Connection`** to measure latency and verify token throughput.
+6. Click **`Save & Apply`** — both the Meta-Planner and Worker Agents switch to the new model immediately at runtime.
 
 ---
 
-## 🎨 Web UI & Dynamic LLM Connection
+## 🛡️ Sovereign Decision Rooms & HITL Approval Gates
 
-UAOS includes a modern, glassmorphic **Mission Control Dashboard** served directly at `http://localhost:8000`.
-
-### Connecting to LM Studio on a Remote VM
-You can connect to LM Studio running on a remote VM or local PC **directly from the UI**:
-
-1. Open `http://localhost:8000/` in your browser.
-2. Click the **`⚙️ LLM Connection`** button in the header bar.
-3. Enter your VM's IP address and port: `http://<VM_IP>:1234/v1` (e.g. `http://192.168.1.50:1234/v1`).
-4. Click **`🔄 Detect Models from VM`** — UAOS queries LM Studio's `/v1/models` and populates the available models automatically.
-5. Click **`🔌 Test Connection`** to test latency and connectivity.
-6. Click **`Save & Apply`** — the MetaPlanner and Universal Worker Agents immediately switch to the remote VM model at runtime without restarting!
-
-> **Note for LM Studio on Remote VM**: In LM Studio's Local Server tab on your VM, make sure **"Serve on Local Network"** is enabled (or bound to `0.0.0.0` instead of `127.0.0.1`), and port `1234` is allowed in your VM firewall.
-
-### Interactive Human Approval Gate (HITL)
-Click **`🛡️ Approval Gate`** in the header or on the TaskDAG legend to inspect the interactive approval modal:
-- **Live 15-Minute Countdown**: Ticking timer showing the time remaining before automatic escalation.
-- **Human Operator Guidance Feedback**: Type guidance instructions that are injected directly into the paused agent's prompt upon approval.
-- **Task Parameters Override (JSON)**: Review and modify task parameters before confirming execution.
-
+When tasks perform sensitive or irreversible actions (such as mutating production databases, deleting files, or executing system commands):
+1. **Air-Gap Verification**: Pre-flight scanners inspect data residency constraints before execution.
+2. **Interactive Approval Modal**:
+   - **15-Minute Countdown Timer**: Displays remaining time before auto-escalation.
+   - **Operator Guidance Input**: Reviewers can inject instructions (e.g., *"Approved, but filter results to 2024 and verify backup checksum first"*) that are injected directly into the worker prompt.
+   - **Parameter Overrides**: Operators can edit the JSON payload before confirming.
+   - **Automatic Escalation**: If the countdown expires without human response, the workflow triggers the `escalate_approval` activity, alerting administrators via webhooks.
 
 ---
 
-## 🔌 Standardized Tool Ecosystem (MCP & OpenAPI)
-
-UAOS eliminates custom tool wrapper code by standardizing on open protocols:
-
-### 1. Model Context Protocol (MCP)
-Connect to any community MCP server via `stdio` (subprocess) or `sse` (HTTP/SSE):
-- Click **`🔌 Tool Integrations`** in the Mission Control header.
-- Choose a standard preset (*GitHub, PostgreSQL, Slack, SQLite, Filesystem*) or enter a custom command/URL.
-- Click **`Connect MCP Server`**: UAOS automatically queries `tools/list`, derives abstract skills for the Meta-Planner, categorizes risk levels, and wraps tools into the ReAct worker loop.
-- API: `POST /api/tools/mcp/connect`, `GET /api/tools/mcp/servers`, `POST /api/tools/mcp/disconnect`.
-
-### 2. OpenAPI 3.0 / Swagger Auto-Importer
-Instantly import whole REST APIs into callable agent tools:
-- Paste raw JSON/YAML or enter an OpenAPI spec URL (e.g. Petstore, Jira, internal microservice).
-- Provide an optional Base URL override and Bearer token / API key.
-- Click **`Import & Register Tools`**: Endpoints are parsed into typed `ToolSpec` objects with parameter validation and HTTP risk tiers (GET=LOW, POST=HIGH, DELETE=CRITICAL).
-- API: `POST /api/tools/openapi/import`, `DELETE /api/tools/{tool_id}`.
-
----
-
-## ⚡ Real-Time Streaming & Interactive Human-in-the-Loop
-
-UAOS provides an enterprise-grade real-time streaming pipeline and interactive approval workflow:
-
-### 1. Server-Sent Events (SSE) Streaming
-- **`LocalLLMClient.chat_stream`**: Streams token deltas chunk-by-chunk from local LLM inference engines (Ollama, vLLM, LM Studio) with zero buffering delay.
-- **`EventBus` Pub/Sub**: In-memory event broadcaster featuring a circular ring buffer ($C=500$) for history replay, ensuring newly connected or refreshed browser clients immediately receive past tokens and state transitions.
-- **Universal Worker Callbacks**: Emits character-by-character reasoning tokens (`token`), tool execution start badges (`tool_start`), and completion notifications (`tool_end`) during the ReAct loop.
-- **Endpoint**: `GET /stream/{workflow_id}` streams events directly to the Mission Control dashboard.
-
-### 2. Interactive Human Approval Gate (HITL)
-- **Operator Guidance Feedback**: Reviewers can inject guidance comments (e.g., *"Approved, but make sure to exclude 2023 archived data and verify backup checksum"*) directly into the agent's prompt before execution resumes.
-- **Parameter Override Editor**: Interactive collapsible JSON editor in the approval modal enabling reviewers to tune or restrict task parameters at runtime before approval.
-- **15-Minute Countdown Timer & Auto-Escalation**: Approval gates pause durably via Temporal (`workflow.wait_condition`) racing against an escalation timeout (default 15 minutes / 900s). If the approval gate times out, an automatic escalation policy executes (`escalate_approval` activity), broadcasting critical alerts to administrators.
-
----
-
-## 📡 API Reference
+## 📡 Core API Reference
 
 ### `POST /solve`
 Submit a problem and wait synchronously for the full result.
 ```bash
-curl -X POST http://localhost:8000/solve \
+curl -X POST http://localhost:8001/solve \
   -H "Content-Type: application/json" \
-  -d '{"query": "Analyze recent cybersecurity vulnerabilities in OpenSSL and suggest mitigations"}'
+  -d '{"query": "Analyze cybersecurity vulnerabilities in OpenSSL and generate mitigations"}'
 ```
 
 ### `POST /solve/async`
-Submit a problem asynchronously and get a workflow ID immediately.
+Submit a problem asynchronously and receive a workflow tracking ID immediately.
 ```bash
-curl -X POST http://localhost:8000/solve/async \
+curl -X POST http://localhost:8001/solve/async \
   -H "Content-Type: application/json" \
-  -d '{"query": "Calculate the factorial of 25 and write results to file"}'
+  -d '{"query": "Parse uploaded government RFP and generate tiered labor pricing"}'
 ```
 
 ### `GET /stream/{workflow_id}`
-Connect to real-time Server-Sent Events (SSE) stream for live tokens, tool lifecycle events, and approval requests.
+Connect to real-time Server-Sent Events (SSE) streaming live reasoning tokens, tool start/end badges, and approval alerts.
 ```bash
-curl -N http://localhost:8000/stream/uaos-wf-123
+curl -N http://localhost:8001/stream/uaos-wf-123
 ```
 
-### `GET /status/{workflow_id}`
-Check execution progress, query pending task details, or verify if a workflow is awaiting human approval.
-
 ### `POST /approve/{workflow_id}`
-Approve or reject a paused task with optional operator guidance and runtime parameter overrides.
+Approve or reject a paused task with optional guidance and parameter overrides.
 ```bash
-curl -X POST http://localhost:8000/approve/uaos-wf-123 \
+curl -X POST http://localhost:8001/approve/uaos-wf-123 \
   -H "Content-Type: application/json" \
   -d '{
     "approved": true,
-    "guidance": "Approved, but execute in sandbox container first.",
+    "guidance": "Approved, execute within sandbox container first.",
     "modified_params": {"dry_run": true, "max_results": 10}
   }'
 ```
 
 ### `GET /tools`
-List all registered tools, their parameters, source types (`native`, `mcp`, `openapi`), and the abstract skills they satisfy.
+List all registered tools, their parameter schemas, risk tiers, and abstract skills satisfied.
 
 ---
 
-## 🛠️ Adding New Tools
-
-Adding a capability requires **zero changes** to orchestration or planning code. Simply define an async function and expose a `ToolSpec` ending with `_SPEC` in `src/registry/tools/`:
-
-```python
-# src/registry/tools/calculator.py
-from src.core.models import RiskLevel
-from src.registry.tool_registry import ToolSpec
-
-async def evaluate_math(expression: str) -> str:
-    """Evaluates a math expression."""
-    return str(eval(expression))
-
-CALCULATOR_SPEC = ToolSpec(
-    tool_id="math_calculator",
-    name="calculator",
-    description="Evaluates mathematical expressions safely",
-    skills_provided=["math", "calculation"],
-    parameters={
-        "expression": {
-            "type": "string",
-            "description": "Math expression to evaluate, e.g. 2 * (3 + 4)",
-            "required": True,
-        }
-    },
-    risk_level=RiskLevel.LOW,
-    function=evaluate_math,
-)
-```
-
-Auto-discovery will pick it up on next boot. The Meta-Planner will immediately know that `math` and `calculation` skills exist!
-
----
-
-## 🧪 Running Tests
+## 🧪 Running Verification Tests
 
 ```bash
 # Run all unit and integration tests
 pytest -v
+
+# Run dedicated Hermes worker integration tests
+run_hermes_tests.bat
+
+# Run complete system verification suite
+verify.bat
 ```

@@ -17,7 +17,11 @@ export const metadata: Metadata = {
   description: "Desired-state governance and assurance for AgentHub agent fleets.",
 };
 
-export default function RootLayout({ children }: LayoutProps<"/">) {
+export default function RootLayout({
+  children,
+}: {
+  children: React.ReactNode;
+}) {
   return (
     <html
       lang="en"
