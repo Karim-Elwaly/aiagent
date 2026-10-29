@@ -1,0 +1,15 @@
+{
+  "task_id": "t4",
+  "workflow_id": "uaos-d7aef2d34b9b",
+  "size_bytes": 709,
+  "metadata": {
+    "task_name": "Generate Summary Report",
+    "profile": "aiagent-dyn-708c5d67",
+    "tool_calls_made": [
+      "read_file",
+      "summarize_to_presentation"
+    ],
+    "session_id": "aiagent-uaos-d7aef2d34b9b-t4-78d2ad"
+  },
+  "structured_data": null
+}

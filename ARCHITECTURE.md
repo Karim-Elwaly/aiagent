@@ -46,4 +46,11 @@ The complete, authoritative Architecture Document has been published to:
 5. **Security, Isolation & Air-Gap Compliance Matrix**
    - Sandboxed Execution, AST Code Verification, Credential Masking & Data Residency
 
-6. **Directory Structure & Complete Module Organization**
+6. **File-Backed Workflow Artifact Scratchpad & Factual Accuracy Architecture**
+   - Lossless Artifact Scratchpad (`WorkflowArtifactExchange` in `data/artifacts/`)
+   - Structured JSON Auto-Extraction (`*_payload.json`) & Multi-Page Document Staging
+   - Semantic DAG Dependency Repair (`_repair_dag_dependencies`) & Strict Output Contracts
+   - Mandatory Tool Grounding Directives in Hermes Specialist Agents
+   - Factual Grounding Supervisor & Placeholder Token Interception (`TBD`, `TODO`, `[insert ...]`)
+
+7. **Directory Structure & Complete Module Organization**

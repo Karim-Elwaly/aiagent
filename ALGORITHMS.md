@@ -57,3 +57,14 @@ The complete, authoritative Algorithmic Specifications Document has been publish
 12. **Algorithm 11: Multi-Agent Arena ELO Rating & Benchmark Ranking**
     - Bradley-Terry logistic expectation: $E_A = \frac{1}{1 + 10^{(R_B - R_A)/400}}$
     - Dynamic $K$-factor update for agent models in competing fleet tournaments
+
+13. **Algorithm 12: Semantic DAG Dependency Repair & Contract Enforcement**
+    - Heuristic topological repair linking data-gathering nodes to analytical nodes: $\mathcal{O}(|V|^2)$
+    - Kahn cycle validation and fallback sequential linearization
+    - Structured output contract synthesis ($|\mathcal{O}_j| \ge 15$)
+
+14. **Algorithm 13: File-Backed Equitable Context Budgeting & Artifact Exchange**
+    - Equitable context window budget allocation: $B_{\text{task}} = \max\left(100, \min\left(1500, \left\lfloor \frac{B_{\max}}{|U|} \right\rfloor \right)\right)$
+    - Disk artifact pointer injection linking full payload paths and byte sizes
+    - Regex placeholder token scanning ($\mathcal{R}_{\text{placeholder}}$) triggering automated supervisor retries
+

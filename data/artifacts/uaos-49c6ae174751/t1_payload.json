@@ -1,0 +1,15 @@
+{
+  "task_id": "t1",
+  "workflow_id": "uaos-49c6ae174751",
+  "size_bytes": 204,
+  "metadata": {
+    "task_name": "Scan Disk Usage and Identify Directories >5GB",
+    "profile": "aiagent-dyn-f029f66d",
+    "tool_calls_made": [
+      "execute_command",
+      "terminal"
+    ],
+    "session_id": "aiagent-uaos-49c6ae174751-t1-560b9b"
+  },
+  "structured_data": null
+}

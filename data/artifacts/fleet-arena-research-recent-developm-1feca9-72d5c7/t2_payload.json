@@ -1,0 +1,17 @@
+{
+  "task_id": "t2",
+  "workflow_id": "fleet-arena-research-recent-developm-1feca9-72d5c7",
+  "size_bytes": 4172,
+  "metadata": {
+    "task_name": "Summarize 2026 ESP32 Milestones",
+    "profile": "fleet-research-recent--summarize-2026-esp32",
+    "tool_calls_made": [
+      "search_files",
+      "read_file",
+      "web_search",
+      "web_extract"
+    ],
+    "session_id": "aiagent-fleet-arena-research-recent-developm-1feca9-72d5c7-t2-6f3331"
+  },
+  "structured_data": null
+}

@@ -140,3 +140,38 @@ def test_extract_json_variants(planner):
     # Invalid raises JSONParseError
     with pytest.raises(JSONParseError):
         planner._extract_json("no json here at all")
+
+
+def test_repair_dag_dependencies(planner):
+    from src.core.models import TaskDAG, Task
+
+    dag = TaskDAG(
+        goal="Extract and price RFP",
+        reasoning="Multi-step pricing workflow",
+        tasks=[
+            Task(
+                id="t1",
+                name="Ingest RFP Document",
+                description="Extract raw tables and clauses from RFP",
+                required_skills=["file_read"],
+                dependencies=[],
+                expected_output="",  # Empty contract
+            ),
+            Task(
+                id="t2",
+                name="Pricing & Cost Proposal",
+                description="Calculate cost and formulate final pricing model",
+                required_skills=["code_execution"],
+                dependencies=[],  # Missing dependency on t1
+                expected_output="",
+            ),
+        ],
+    )
+
+    repaired = planner._repair_dag_dependencies(dag)
+    # Verify t2 was linked to t1
+    assert "t1" in repaired.tasks[1].dependencies
+    # Verify contracts were enriched
+    assert len(repaired.tasks[0].expected_output) > 10
+    assert len(repaired.tasks[1].expected_output) > 10
+

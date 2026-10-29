@@ -340,7 +340,45 @@ sequenceDiagram
 
 ---
 
-## 6. Directory Structure & Module Organization
+## 6. File-Backed Workflow Artifact Scratchpad & Factual Accuracy Architecture
+
+To resolve context-window truncation cliffs where large upstream outputs (e.g. multi-page RFPs, telemetry dumps, pricing matrices) caused downstream analytical agents to receive truncated data or starve completely, UAOS implements a file-backed structured artifact storage pipeline:
+
+```
+┌─────────────────────────────────────────────────────────────────────────────────┐
+│                           WORKFLOW ARTIFACT SCRATCHPAD                          │
+├─────────────────────────────────────────────────────────────────────────────────┤
+│ 1. Upstream Task (Ingestion / Extraction / Analysis)                            │
+│    • Emits complete, un-truncated report / payload                              │
+│    • WorkflowArtifactExchange writes:                                           │
+│      ├── data/artifacts/{workflow_id}/{task_id}_payload.md   (Lossless text)    │
+│      └── data/artifacts/{workflow_id}/{task_id}_payload.json (Parsed tables)    │
+├─────────────────────────────────────────────────────────────────────────────────┤
+│ 2. Context Partitioning & Synthesis (format_upstream_context)                   │
+│    • Allocates equitable character share: max(100, min(1500, max_chars // N))   │
+│    • Appends explicit disk artifact pointer:                                    │
+│      "> Lossless Artifact: data/artifacts/{wf_id}/{task}_payload.md (N bytes)   │
+│         For full tables or exact values, inspect this file directly."           │
+├─────────────────────────────────────────────────────────────────────────────────┤
+│ 3. Downstream Specialist Agent (Pricing / Compliance / Report)                  │
+│    • Receives concise executive excerpt + direct disk reference                 │
+│    • Mandatory Tool Directives force model to inspect ground-truth disk files   │
+├─────────────────────────────────────────────────────────────────────────────────┤
+│ 4. Supervisor Evaluation & Factual Grounding (evaluate_task_output)             │
+│    • Evaluates worker output against 800-char upstream extracts + disk pointers │
+│    • Placeholder Token Guard: Intercepts unpopulated [insert ...], TBD, TODO    │
+└─────────────────────────────────────────────────────────────────────────────────┘
+```
+
+### 6.1. Semantic DAG Dependency Repair
+The `MetaPlanner` incorporates `_repair_dag_dependencies`:
+1. **Automated Topological Linking**: Scans for data-gathering tasks (`extract`, `ingest`, `read`, `parse`, `inspect`) and downstream analytical tasks (`price`, `pricing`, `cost`, `proposal`, `summary`, `audit`, `compliance`, `synthesis`). It programmatically injects predecessor dependencies so downstream tasks never run in parallel before raw data is extracted.
+2. **Output Contract Enforcement**: Guarantees that every task possesses a structured `expected_output` definition (markdown tables or JSON schema) to prevent models from returning conversational pleasantries.
+3. **Cycle Prevention**: Verifies DAG integrity with Kahn's algorithm; falls back to an orderly sequential chain if a cycle is introduced.
+
+---
+
+## 7. Directory Structure & Module Organization
 
 ```
 d:/projects/aiagent/

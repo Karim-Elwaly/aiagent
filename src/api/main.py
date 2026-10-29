@@ -514,9 +514,18 @@ async def debug_worker_log():
             return {"error": "worker.log does not exist"}
         text = p.read_text(encoding="utf-8", errors="replace")
         lines = text.splitlines()
-        return {"lines": lines[-120:]}
+        return {"total_lines": len(lines), "lines": lines[-40:]}
     except Exception as exc:
         return {"error": str(exc)}
+
+
+@app.get("/debug/restart-worker")
+async def debug_restart_worker():
+    """Kill worker_runner process so run.py automatically restarts it with fresh code."""
+    import subprocess
+    cmd = 'powershell -Command "Get-CimInstance Win32_Process | Where-Object { $_.CommandLine -like \'*worker_runner*\' } | ForEach-Object { Stop-Process -Id $_.ProcessId -Force; $_.ProcessId }"'
+    res = subprocess.run(cmd, shell=True, capture_output=True, text=True)
+    return {"status": "ok", "terminated_pids": res.stdout.strip().split()}
 
 
 async def _execute_task_with_retries(

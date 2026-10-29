@@ -891,8 +891,23 @@ async def stage_mission_document(
                 content={"detail": f"The selected file '{actual_filename}' is empty (0 bytes). Please ensure the file contains data and is not locked by another application."},
             )
 
+        from src.core.artifact_exchange import WorkflowArtifactExchange
+
         meta = process_uploaded_file(file_bytes=content, filename=actual_filename, session_id=mission_id)
         logger.info("Staged file '%s': %d bytes, %d characters extracted", meta.filename, meta.size_bytes, meta.char_count)
+
+        # Store complete lossless source document in artifact exchange
+        exchange = WorkflowArtifactExchange(mission_id)
+        source_doc_path = exchange.save_source_document(
+            filename=actual_filename,
+            content=meta.extracted_text or "",
+            metadata={
+                "original_path": meta.file_path,
+                "char_count": meta.char_count,
+                "size_bytes": meta.size_bytes,
+                "filename": meta.filename,
+            },
+        )
 
         store = FleetArenaStore()
         manifest = store.load(mission_id)
@@ -902,6 +917,7 @@ async def stage_mission_document(
 
         if manifest:
             att_dict = meta.model_dump() if hasattr(meta, "model_dump") else meta.dict()
+            att_dict["artifact_path"] = str(source_doc_path)
             if not manifest.units:
                 manifest.units = []
             if manifest.units:
@@ -924,19 +940,26 @@ async def stage_mission_document(
                             doc_section = (
                                 f"\n\n---\n# Attached Document Source:\n"
                                 f"- **File Name**: `{meta.filename}`\n"
-                                f"- **File Path**: `{meta.file_path}`\n"
-                                f"- **Size**: {meta.size_bytes} bytes\n"
+                                f"- **Direct File Path**: `{meta.file_path}`\n"
+                                f"- **Lossless Artifact Path**: `{source_doc_path}`\n"
+                                f"- **Document Size**: {meta.size_bytes} bytes ({meta.char_count} characters)\n"
                             )
                             has_real_text = meta.extracted_text and not meta.extracted_text.startswith("[Word Document:") and not meta.extracted_text.startswith("[PDF:")
                             if has_real_text and len(meta.extracted_text.strip()) > 0:
-                                doc_section += f"- **Extracted Content**:\n```text\n{meta.extracted_text.strip()[:3500]}\n```\n"
+                                excerpt = meta.extracted_text.strip()[:1200]
+                                doc_section += (
+                                    f"- **Executive Excerpt**:\n```text\n{excerpt}\n```\n"
+                                    f"> **CRITICAL FOR ACCURACY**: Complete lossless document text ({meta.char_count} chars) is saved on disk at: `{source_doc_path}`. "
+                                    f"Specialist agents MUST inspect this file directly using file tools or cross-verify data from it rather than guessing or interpolating.\n"
+                                )
                             else:
                                 doc_section += f"- Note: File is stored at `{meta.file_path}` for inspection with file tools.\n"
 
                             if meta.filename not in task_desc:
                                 task["description"] = task_desc + doc_section
-                            task.setdefault("parameters", {})["target_path"] = meta.file_path
+                            task.setdefault("parameters", {})["target_path"] = str(source_doc_path)
                             task.setdefault("parameters", {})["attached_file"] = meta.file_path
+                            task.setdefault("parameters", {})["source_artifact_path"] = str(source_doc_path)
 
             store.save(manifest)
 
@@ -1082,6 +1105,19 @@ async def run_fleet_mission(mission_id: str, payload: dict, request: Request):
             effective_query = f"{manifest.mission_prompt}\n\nTarget Investigation Path / Document: {target_path}{doc_context}"
         else:
             effective_query = f"{manifest.mission_prompt}{doc_context}"
+
+        # Seed workflow artifact exchange with all attached source documents
+        from src.core.artifact_exchange import WorkflowArtifactExchange
+        wf_exchange = WorkflowArtifactExchange(workflow_id)
+        for af in attached_files:
+            af_name = af.get("filename", "attached_file.txt")
+            af_text = af.get("extracted_text", "")
+            if af_text:
+                wf_exchange.save_source_document(
+                    filename=af_name,
+                    content=af_text,
+                    metadata={"file_path": af.get("file_path"), "size_bytes": af.get("size_bytes")},
+                )
 
         # Ensure every task in enriched_dag receives the target path and document context safely without duplicate bloat
         if enriched_dag and "tasks" in enriched_dag:

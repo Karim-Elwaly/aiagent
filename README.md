@@ -115,6 +115,12 @@ Instead of handcrafting specialized conversational agents (e.g., dedicated SOC a
 5. **Long-Term Memory & Skill Distillation**:
    - **Memory Store**: SQLite database with FTS5 virtual tables indexing past execution episodes, verified system facts, and operational lessons with automatic secret masking.
    - **Skill Distiller**: Analyzes successful multi-step workflow traces, synthesizes reusable Python tools, verifies safety via static **AST inspection** (blocking forbidden imports and calls), and promotes them into the active `ToolRegistry`.
+6. **File-Backed Workflow Artifact Scratchpad & Factual Accuracy Hardening**:
+   - **Lossless Artifact Scratchpad**: `WorkflowArtifactExchange` writes complete intermediate task payloads and source documents to `data/artifacts/{workflow_id}/`, eliminating context truncation cliffs.
+   - **Structured JSON Auto-Extraction**: Automatically parses embedded JSON blocks from task results into structured artifacts (`*_payload.json`).
+   - **Semantic DAG Dependency Repair**: `_repair_dag_dependencies` automatically links downstream pricing and synthesis tasks to predecessor extraction tasks, enforcing structured output contracts.
+   - **Mandatory Tool Directives**: Strict ground-truth directives require specialist agents to execute tools to gather real evidence before formulating conclusions, preventing memory hallucinations.
+   - **Supervisor Factual Verification**: Evaluates 800-character excerpts with disk artifact pointers and intercepts unpopulated placeholder tokens (`[insert ...]`, `TBD`, `TODO`).
 
 ---
 

@@ -86,6 +86,67 @@ class MetaPlanner:
                 task.agent_id = None
         return dag
 
+    def _repair_dag_dependencies(self, dag: TaskDAG) -> TaskDAG:
+        """Heuristically ensure sequential ordering and output contracts for DAG tasks.
+
+        Fixes two key accuracy issues:
+        1. Downstream tasks (pricing, synthesis, compliance, report) executing before
+           upstream extraction/ingestion/parsing tasks finish.
+        2. Vague or empty expected_output contracts that allow LLMs to return chat filler.
+        """
+        if not dag.tasks:
+            return dag
+
+        gathering_keywords = (
+            "extract", "ingest", "read", "parse", "inspect", "gather",
+            "collect", "scan", "discovery", "raw", "audit_log", "source",
+        )
+        downstream_keywords = (
+            "price", "pricing", "cost", "proposal", "summary", "audit",
+            "compliance", "synthesis", "evaluate", "report", "recommend",
+            "conclusion", "assessment", "estimate",
+        )
+
+        all_ids = {t.id for t in dag.tasks}
+
+        for idx, task in enumerate(dag.tasks):
+            # 1. Output Contract Enforcement
+            if not task.expected_output or len(task.expected_output.strip()) < 15:
+                task.expected_output = (
+                    f"A structured markdown report or JSON object containing verified facts, "
+                    f"key figures/metrics, and concrete data references for '{task.name}'."
+                )
+
+            # 2. Dependency Repair
+            task_text = f"{task.name} {task.description}".lower()
+            is_downstream = any(k in task_text for k in downstream_keywords)
+
+            for prior_idx in range(idx):
+                prior_task = dag.tasks[prior_idx]
+                prior_text = f"{prior_task.name} {prior_task.description}".lower()
+                is_prior_gathering = any(k in prior_text for k in gathering_keywords)
+
+                if (is_downstream or is_prior_gathering) and prior_task.id not in task.dependencies:
+                    task.dependencies.append(prior_task.id)
+                    logger.info(
+                        "Repaired DAG dependency: linked downstream task '%s' to predecessor '%s'",
+                        task.id, prior_task.id,
+                    )
+
+            # Ensure unique valid dependencies that exclude self
+            task.dependencies = list(dict.fromkeys(dep for dep in task.dependencies if dep in all_ids and dep != task.id))
+
+        # Verify integrity after repair; if a cycle was introduced, fallback to sequential chain
+        try:
+            dag.validate_integrity()
+        except ValueError as err:
+            logger.warning("Dependency repair encountered cycle (%s); enforcing clean sequential chain", err)
+            for i in range(1, len(dag.tasks)):
+                dag.tasks[i].dependencies = [dag.tasks[i - 1].id]
+            dag.validate_integrity()
+
+        return dag
+
     async def plan(self, user_query: str) -> TaskDAG:
         """Generate a TaskDAG from a user query.
 
@@ -163,6 +224,7 @@ class MetaPlanner:
                 dag = TaskDAG.model_validate(json.loads(json_str))
                 dag.validate_integrity()
                 self._check_agents(dag)
+                dag = self._repair_dag_dependencies(dag)
 
                 # Multi-phase enforcement for operational/benchmark queries
                 if len(dag.tasks) < 2 and any(k in user_query.lower() for k in ["benchmark", "investigate", "audit", "and report", "and verify", "and benchmark", "inspect and"]):
@@ -306,6 +368,7 @@ class MetaPlanner:
             dag = TaskDAG.model_validate(json.loads(json_str))
             dag.validate_integrity()
             self._check_agents(dag)
+            dag = self._repair_dag_dependencies(dag)
 
             logger.info(
                 "Re-plan succeeded: %d new tasks", len(dag.tasks)

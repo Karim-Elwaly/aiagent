@@ -430,3 +430,48 @@ $$R_A' = R_A + K \cdot (S_A - E_A)$$
 $$R_B' = R_B + K \cdot (S_B - E_B)$$
 
 Where $K = 32$ for unranked/new agent configurations, and $K = 16$ for established fleet profiles.
+
+---
+
+## 13. Algorithm 12: Semantic DAG Dependency Repair & Contract Enforcement
+
+### 13.1. Problem Statement
+Local and frontier LLM planners frequently decompose workflows into independent nodes that miss sequential dependencies (e.g., executing a pricing model before raw extraction completes). `_repair_dag_dependencies` repairs the graph $\mathcal{G} = (V, E)$ in $\mathcal{O}(|V|^2)$ time.
+
+### 13.2. Algorithmic Formulation
+Let $K_{\text{gather}} = \{\text{extract}, \text{ingest}, \text{read}, \text{parse}, \text{inspect}, \text{gather}, \text{scan}, \text{source}\}$ and $K_{\text{downstream}} = \{\text{price}, \text{cost}, \text{proposal}, \text{summary}, \text{audit}, \text{compliance}, \text{synthesis}, \text{evaluate}\}$.
+
+For each task $v_j \in V$ at topological position $j$:
+1. If $\text{desc}(v_j) \cap K_{\text{downstream}} \neq \emptyset$, identify any preceding task $v_i$ ($i < j$) where $\text{desc}(v_i) \cap K_{\text{gather}} \neq \emptyset$.
+2. If $v_i \notin \text{Pred}(v_j)$, add edge $(v_i, v_j) \to E$.
+3. Enforce contract: if $|\mathcal{O}_j| < 15$, synthesize formal output contract:
+   $$\mathcal{O}_j \leftarrow \text{"A structured markdown report or JSON object containing verified facts, key figures, and concrete data references for '" } + \text{name}(v_j) + \text{"'."}$$
+4. Validate $\text{ValidateDAG}(V, E)$. If a cycle is formed, fallback to a strict sequential chain: $E \leftarrow \{(v_{k-1}, v_k) \mid 1 \le k < |V|\}$.
+
+---
+
+## 14. Algorithm 13: File-Backed Equitable Context Budgeting & Artifact Exchange
+
+### 14.1. Lossless Artifact Persistence
+Let a task $v \in V$ produce raw output payload $Y_v$. Rather than truncating $Y_v$ to fit the context window of downstream tasks, `WorkflowArtifactExchange` writes:
+1. Lossless markdown: $\text{File}_{\text{md}} = \text{data/artifacts}/W_v/v\text{\_payload.md}$
+2. Extracted structured JSON (if $Y_v$ contains a JSON block or object): $\text{File}_{\text{json}} = \text{data/artifacts}/W_v/v\text{\_payload.json}$
+
+### 14.2. Equitable Upstream Context Allocation
+For downstream task $u$ with upstream completed set $U = \text{Pred}(u)$ and context budget $B_{\max}$:
+1. Compute per-task budget:
+   $$B_{\text{task}} = \max\left(100, \min\left(1500, \left\lfloor \frac{B_{\max}}{|U|} \right\rfloor \right)\right)$$
+2. For each $v \in U$, format context block:
+   $$C_v = \text{"## From Task `"} + v + \text{"`:\n"} + \text{Pointer}(v) + \text{Truncate}(Y_v, B_{\text{task}})$$
+   where:
+   $$\text{Pointer}(v) = \text{"> Lossless Artifact: "} + \text{Path}(v) + \text{" ("} + \text{Size}(v) + \text{" bytes). Direct references should be verified from this file.\n"}$$
+
+### 14.3. Supervisor Factual Verification & Placeholder Interception
+In `evaluate_task_output`, for worker output $Y_u$:
+1. Upstream evidence is assembled from $800$-character extracts plus disk pointers.
+2. If the supervisor verdict is $\text{"pass"}$, run regex pattern scan:
+   $$\mathcal{R}_{\text{placeholder}} = \{\text{"\\[insert\\s+[^\\]]+\\]"}, \text{"<insert\\s+[^>]+>"}, \text{"\\bTBD\\b"}, \text{"\\bTODO\\b"}, \text{"<your\\s+company>"}\}$$
+3. If $\exists r \in \mathcal{R}_{\text{placeholder}} : r \in Y_u$:
+   $$\text{Verdict} \leftarrow \text{"needs\_retry"}$$
+   $$\text{Feedback} \leftarrow \text{"Output contains unpopulated placeholder tokens. Please replace all placeholders with concrete verified values."}$$
+

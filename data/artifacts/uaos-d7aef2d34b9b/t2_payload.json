@@ -1,0 +1,17 @@
+{
+  "task_id": "t2",
+  "workflow_id": "uaos-d7aef2d34b9b",
+  "size_bytes": 1024,
+  "metadata": {
+    "task_name": "Find Directories Exceeding 5GB",
+    "profile": "aiagent-dyn-f029f66d",
+    "tool_calls_made": [
+      "execute_command",
+      "execute_code",
+      "write_file",
+      "terminal"
+    ],
+    "session_id": "aiagent-uaos-d7aef2d34b9b-t2-93da4b"
+  },
+  "structured_data": null
+}

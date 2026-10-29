@@ -31,7 +31,196 @@ import {
   SocIncidentDossierView,
 } from "./dossiers";
 
+export const RESEARCH_ESP32_DELIVERABLE_MARKDOWN = `# Mission Deliverable: RESEARCH 
+## Case: ARENA-RESEARCH-RECENT-DEVELOPM-1FECA9
+**Classification:** CONFIDENTIAL // TLP:AMBER  
+**Produced By:** Collect Latest ESP32 Development Information  
+**Assigned Fleet:** RESEARCH Fleet  
+**Status:** Completed & Cryptographically Verified  
+**Timestamp:** 2026-10-29T17:05:00Z  
+
+### Executive Summary & Final Solution
+
+Between 2024 and 2026, Espressif Systems underwent a major architectural transition, expanding the ESP32 family from classic dual-core Xtensa microcontrollers into a high-performance RISC-V computing ecosystem spanning multi-protocol wireless connectivity, edge AI inference, and industrial human-machine interfaces (HMI). 
+
+Key 2026 breakthroughs center on three strategic vectors:
+1. **Next-Generation Wireless**: The official debut of the **ESP32-E22** bringing tri-band Wi-Fi 6E (6 GHz) and the ultra-low-power **ESP32-H21** dedicated 802.15.4 / Thread / Matter node.
+2. **Software & SDK Consolidation**: The release of **ESP-IDF v6.0**, introducing unified multi-core RISC-V runtime optimizations, expanded Matter 1.3 integration, and dedicated edge neural network acceleration.
+3. **Mass-Market Edge Hardware**: The commercial launch of the **ESP32-C61-MINI** sub-$2 Matter/Wi-Fi 6 module family, alongside developer-ready form factors including the **ESP32-P4 Hydra** (Arduino UNO shape) and **ESP32-C5 Pico**.
+
+---
+
+## 1. 2026 Milestone Timeline & Evidence Matrix
+
+The following milestones represent verified silicon releases, firmware announcements, and hardware platforms extracted by the autonomous research fleet:
+
+| Date | Milestone | Key Hardware & Software Features | Verified Source URL | Operational & Ecosystem Impact |
+| :--- | :--- | :--- | :--- | :--- |
+| **2026‑01‑07** | **ESP32‑E22 & ESP32‑H21 Announced at CES 2026** | • **ESP32-E22**: 6 GHz tri-band Wi-Fi 6E, single-core RISC-V @ 160 MHz, BLE 5.3, native Matter readiness, high-throughput low-latency design.<br>• **ESP32-H21**: Single-core RISC-V @ 96–160 MHz, IEEE 802.15.4 + BLE 5.3, Thread/Matter border node support, ultra-low power DC-DC converter. | [CNX Software CES 2026 Announcement](https://news.google.com/rss/articles/CBMi2AFBVV95cUxONzVCa25FUjlsUU9RaW5QTFpxU2NvUVNCUlJ6YmlvMUpVdG9wM2ZPQlVsdHBzM1FJcFpVVk9mNHdMdXJMRGttcHpndkF5TlhUY2hPV0V6eERYcHpXbnlKTHlpTUc1T3VETUY1QzE1dWhGOWU5N0ZDZUVEZkRJWXN0YTh5d2hfZ1g2SE1kNnFSZjh0R19CV2FUNFZZc2RVWFlSOUVxWGtKY2JkRTR5dm0xRm5QN04xcWdCNFExTHRxZnJ2RmN1Z2RpSkFUMy1UMHIxYWw3d3ZJWVk) | Enables enterprise IoT gateways, multi-gigabit mesh backhauls, and battery-operated smart home devices with multi-year life. |
+| **2026‑03‑24** | **Espressif ESP‑IDF v6.0 Production Release** | • Native multi-target support for ESP32-C5, ESP32-C61, ESP32-P4, ESP32-E22, and ESP32-H21.<br>• Enhanced Wi-Fi 6/6E radio stack with OFDMA and TWT (Target Wake Time).<br>• Zero-copy DMA data pipelines and hardware-accelerated crypto (AES-256-XTS, RSA-3072, ECC). | [CNX Software ESP-IDF v6.0 Release](https://news.google.com/rss/articles/CBMingFBVV95cUxOeVptWVJqWGFaZzIxRmRILUdETTEwaUlsUk9QcGNtbnVlTkJjOVdTdWZ1d2JuM3FqRS1RY01yQ2w1ZURfVTBHbVhOXzJRYWJvN0d3TUNfN3U0NVliR1dxeURqY29tVjI4NDJZMmZJWHV4aE90aEJWZHVCOHRST2hEcHF6NjQ3ZEZlaDRrcC1lcXNyek1zOHJBWE81QnBTdw) | Consolidates fragmentation across diverse silicon lines; developers maintain a single codebase across low-cost sensors and multi-core HMI boards. |
+| **2026‑04‑26** | **ESP32‑P4 Hydra Board Released** | • Dual-core RISC-V @ 400 MHz + single-core RISC-V LP core @ 40 MHz.<br>• Arduino UNO form-factor compatibility.<br>• MIPI-CSI camera interface, MIPI-DSI display interface, H.264 video encoding, and hardware pixel acceleration. | [Hackster.io ESP32-P4 Hydra Overview](https://news.google.com/rss/articles/CBMi4gFBVV95cUxNUDV1alM3NS0xWjRzN0RYdm1jRy1vLTUtU3RMQm5DMUh6QTh1YW1nYko1QkZMNmhoTjlFbUVtREVoZ1FkWkcweE45ekx3R0RxZlFlM2ZKLXV5S1FaaHRzdEhQZnI4dUlzTzI5X1A0Z1BNVkE0Y2V1cnNGMmRRd2ZubTBxQW56YW96a0haTnhhY3dGcVZHd0xRRGpfaEY2RjA4eFdRVWpLMTU5aVItMTRPSnNTZUd3UERSelhvZ2lQZGtfNVhrSHB3cjVLS09pcm1jdVM4MGRYaV84Y1ZCUFBNYV9B) | Bridges maker ecosystems with industrial-grade GUI and video analytics without needing external co-processors. |
+| **2026‑05‑03** | **ESP32‑C5 Pico Form-Factor Launch** | • Dual-band Wi-Fi 6 (2.4 GHz & 5 GHz) + BLE 5.0 in Raspberry Pi Pico footprint.<br>• On-board ceramic antenna with U.FL external option.<br>• Low standby power consumption (<15 µA in deep sleep). | [CNX Software ESP32-C5 Pico](https://news.google.com/rss/articles/CBMi1AFBVV95cUxOajlZZGRrTFctSEF6RE5TU2pRZmNDNXR1Y1JpUnJXbTYxdlBKbVR3Y1p1cDljV0h4MHlOdzhQUEExYldGLXU4b3FhQzhITzBuTThBbEFYSFZ6VWNiLWU5cV9UZXo0SW85aGluTjE3VFViVUJvbVdvaDZOZTgtMFR4Rkc5Uk43Zk9GU0xfQWg3VnZSQ1NjUFJqYnNkZ3FuelVwRGZra1FoNWRlMTFaMkZpb0U2RWRmNk1uSER6SXZyZEMxbmV2Rm1MZFBGS2VwOVdtTWxDQQ) | Democratizes 5 GHz Wi-Fi 6 adoption for dense RF environments where 2.4 GHz spectrum saturation degrades sensor networks. |
+| **2026‑08‑05** | **ESP32‑C61‑MINI Commercial Module Family** | • Sub-$2 budget Wi-Fi 6 + Bluetooth 5 (LE) + 802.15.4 silicon.<br>• Ultra-compact PCB layout with integrated RF matching, crystal, and shielded flash.<br>• Certified for Matter-over-Thread and Matter-over-Wi-Fi. | [Hackster.io C61-MINI Launch](https://news.google.com/rss/articles/CBMi1AFBVV95cUxQaHdDWXRDaUcxRVFadVNZbVlVUFRYTEJLczZLUTF1YWptV1dDQ1pSVzdVcXJTQ0w3U3ptOVJ2OXdVWTU5clNIR1d1VnBHZEFqMTc3aU5GTGR1MTFCYmZYeDJFM2F2bk82dW1TbGpMWjRVRGlPQjRQTlo3alJ1eUxvOFV4bFJ5OGREX01NaWwwVDF1RHJJdTFxVF8yN0FZQnN0eGFVb190VGMtbEh5SFlTVndfR3phOV8tUmNicEFna2hoamo2T3VUUWo5WGlUdDBhQ0N6Nw) | Lowers BOM cost for appliance manufacturers transitioning legacy Zigbee/Wi-Fi 4 products to modern Matter compliance. |
+
+---
+
+## 2. Foundations: 2024–2025 Upstream Breakthroughs
+
+The 2026 milestone breakthroughs build upon critical innovations developed across 2024 and 2025:
+
+1. **Edge AI & SIMD Vision (2024)**: Espressif deployed SIMD extensions on the ESP32-S3 RISC-V/Xtensa pipelines, enabling real-time computer vision, keyword spotting, and OpenAI Embedded SDK streaming directly on-chip without cloud roundtrips.
+2. **Dual-Band Wi-Fi 6 Transition (2025)**: The release of the **ESP32-C5** marked Espressif's first volume production 2.4/5 GHz dual-band solution, solving latency jitter in industrial factory environments.
+3. **Multimedia Separation (2025)**: Introduction of the **ESP32-P4** dedicated non-wireless application processor, featuring dual RISC-V cores up to 400 MHz, MIPI camera/display pipelines, and native H.264 video compression for smart displays.
+
+---
+
+## 3. Hardware Architecture & Silicon Portfolio Comparison
+
+| Series | Primary CPU Core | Max Frequency | Wireless Protocols | Primary Target Application |
+| :--- | :--- | :--- | :--- | :--- |
+| **ESP32-E22** | 32-bit RISC-V | 160 MHz | Tri-band Wi-Fi 6E (2.4/5/6 GHz), BLE 5.3 | High-throughput IoT gateways, VR/AR streaming nodes |
+| **ESP32-H21** | 32-bit RISC-V | 96 MHz | IEEE 802.15.4 (Thread/Zigbee), BLE 5.3 | Ultra-low-power battery sensors, Matter end-devices |
+| **ESP32-C61** | 32-bit RISC-V | 160 MHz | Wi-Fi 6 (2.4 GHz), BLE 5.3, 802.15.4 | Cost-optimized smart home bulbs, switches, plugs |
+| **ESP32-C5** | 32-bit RISC-V | 240 MHz | Dual-band Wi-Fi 6 (2.4 & 5 GHz), BLE 5.0 | Industrial telemetry, noisy RF smart metering |
+| **ESP32-P4** | Dual RISC-V (HP) + LP | 400 MHz + 40 MHz | No RF (Uses external C6/H2/E22 co-processor) | Smart thermostats, medical touchscreens, security cameras |
+
+---
+
+## 4. Software Ecosystem & Firmware Support
+
+- **ESP-IDF v6.0**: Unified build system supporting CMake 3.28+, FreeRTOS v11 SMP, and automated peripheral power-gating.
+- **Matter 1.3 Readiness**: Full support for energy monitoring, water valves, EVSE chargers, and robot vacuums embedded natively into the ESP-Matter component registry.
+- **Home Assistant & ESPHome**: First-class support for the ESP32-P4 smart display pipelines and C5 dual-band radios natively merged into ESPHome 2025/2026 releases.
+
+---
+
+## 5. Strategic Conclusion
+
+Espressif's 2026 milestone portfolio solidifies its dominance across both extremes of the IoT spectrum:
+- At the **ultra-low-cost tier**, the sub-$2 **ESP32-C61-MINI** ensures seamless Matter compliance for mass-market consumer electronics.
+- At the **high-performance tier**, the combination of the **ESP32-E22 (Wi-Fi 6E)** and **ESP32-P4 (400 MHz Multimedia)** offers a viable RISC-V alternative to complex Linux MPUs with lower power consumption and sub-second boot times.`;
+
+export const RESEARCH_FUSION_PAPER_MARKDOWN = `# Mission Deliverable: paper
+## Case: ARENA-CREATE-RESEARCH-PAPER-C0942E
+**Classification:** CONFIDENTIAL // TLP:AMBER  
+**Produced By:** Collect Recent Fusion Reactor Literature & News  
+**Assigned Fleet:** paper Fleet  
+**Status:** Completed & Cryptographically Verified  
+**Timestamp:** 2026-10-29T17:31:00Z  
+
+### Executive Summary & Final Solution
+# Executive Summary  
+
+The year 2026 marked a watershed for fusion energy research, with six landmark milestones spanning magnetised‑target fusion (MTF), pulsed‑power tokamaks, inertial confinement fusion (ICF), and Z‑pinch technologies.  Key achievements include the first MTF device to reach keV plasma temperatures, the inaugural deuterium–tritium (D‑T) fusion event in a privately built tokamak, repeatable breakeven in laser‑driven ICF, and federal endorsement of a 50 MW net‑output Z‑pinch module.  These breakthroughs collectively demonstrate that multiple reactor families are converging toward scalable, commercial power generation, underscoring the importance of continued public–private collaboration and targeted policy support.
+
+---
+
+## 1 Introduction  
+
+Fusion energy promises abundant, low‑carbon electricity by replicating the processes powering stars.  Over the past decade, a diverse portfolio of reactor concepts has advanced from laboratory proof‑of‑concept to near‑commercial prototypes.  In 2026, several independent teams achieved critical performance metrics that validate their respective approaches and bring them closer to economic viability.
+
+---
+
+## 2 Methodology  
+
+Data were collated from peer‑reviewed publications, conference proceedings, corporate press releases, and government reports issued between January 1 and December 31 2026.  Each milestone was verified against at least two independent sources (e.g., laboratory logs and third‑party media coverage).  Quantitative metrics such as plasma temperature, energy yield, shot count, and design targets were extracted verbatim to ensure accuracy.
+
+---
+
+## 3 2026 Fusion Milestones  
+
+| Reactor / Technology | Milestone (Name & Org.) | Key Technical Achievement | Quantitative Metrics | Commercial‑Impact Assessment |
+| :--- | :--- | :--- | :--- | :--- |
+| **Magnetised‑Target Fusion (MTF)** | *General Fusion LM26* – Canada, General Fusion Group Ltd. | First MTF device to reach keV plasma temperatures during compression. | Electron temperature >12 million °C (>1 keV) achieved on 2026-10-08 | Demonstrates scalability of the MTF concept and provides a clear path toward ignition-grade reactors, reducing the need for large external magnets and lowering capital costs. |
+| **Tokamak‑style Pulsed‑Power** | *Helion Polaris* – USA, Helion Energy | First privately built machine to produce measurable D-T fusion. | 150 million °C plasma temperature; first D-T fusion event on 2026-02-13 | Validates a compact, high-temperature design that can be scaled into commercial plants with lower upfront investment and faster engineering cycles. |
+| **Tokamak‑style Pulsed‑Power** | *Pacific Fusion Sirius* – USA, Pacific Fusion | High-throughput pulsed-power system with proven reliability. | >3,000 shots delivered with stable operation on 2026-07-20 | Shows that pulsed-power platforms can achieve the shot-throughput required for commercial power generation, reducing downtime and maintenance costs. |
+| **Inertial Confinement Fusion (ICF)** | *LLNL NIF* – USA, Lawrence Livermore National Laboratory | 11th ignition experiment confirming repeatable scientific breakeven. | 7.9 MJ fusion energy yield; target gain ≈3.8 on 2026-06-20 | Provides the first evidence that laser-driven ICF can reach breakeven, a critical milestone for future inertial fusion power plants and for validating high-energy-density physics models. |
+| **Z‑Pinch** | *Zap Energy* – USA, Zap Energy | DOE approval of a pre-conceptual 50 MW net-output module design using sheared-flow-stabilised Z-pinch. | Design target: 50 MW net output (pre-concept) on 2026-05-19 | Signals federal support for a potentially lower-cost fusion pathway that can be engineered rapidly, accelerating the transition from laboratory to commercial deployment. |
+| **Tokamak – Current‑Drive Innovation** | *General Atomics DIII‑D Helicon* – USA, General Atomics Energy Group | First helicon radio-wave current drive sustaining plasma without a central solenoid. | Operational on 2026-10-27 | Reduces the complexity and cost of tokamak construction by eliminating the need for large central solenoids, improving pulse length and overall plant economics. |
+
+---
+
+## 4 Emerging Trends  
+
+| Trend | Evidence |
+| :--- | :--- |
+| **Dominant Reactor Families** | Tokamak-style pulsed-power (Helion, Pacific Fusion) and MTF (General Fusion) lead the field; ICF and Z-pinch also gaining traction. |
+| **Geographic Concentration** | 5 of 6 milestones from the United States; Canada contributes a pivotal MTF breakthrough. |
+| **Public–Private Collaboration** | DOE approval for Zap Energy, private sector breakthroughs (Helion, Pacific Fusion) indicate growing synergy between government and industry. |
+| **Technological Innovation** | New current-drive technique (helicon), high-temperature D-T fusion, and repeatable breakeven experiments signal rapid progress in core physics and engineering. |
+
+---
+
+## 5 Discussion & Engineering Implications  
+
+The convergence of multiple reactor concepts toward practical power generation suggests a diversified pathway to commercial fusion. MTF's reduced magnetic infrastructure lowers capital costs; pulsed-power tokamaks offer compactness and high temperature; ICF demonstrates repeatable breakeven, validating the physics underpinning inertial fusion plants; Z-pinch presents a potentially rapid engineering route with federal backing.
+
+Key challenges remain: sustaining long-duration operation, managing neutron damage to structural materials, and scaling up power output while maintaining economic viability. The 2026 milestones provide critical data points for refining reactor designs, informing material science research, and shaping policy incentives.
+
+---
+
+## 6 Conclusion & Outlook  
+
+The six 2026 milestones collectively illustrate that fusion energy is transitioning from laboratory proof-of-concept to near-commercial readiness across multiple technological families. Breakthroughs in temperature achievement, repeatable breakeven, high-reliability operation, and innovative current-drive techniques mark a decisive shift toward scalable power generation. Continued investment, cross-sector collaboration, and supportive policy frameworks will be essential to translate these scientific advances into the first generation of fusion power plants (projected 2030–2035).
+
+---
+
+## 7 References  
+
+1. General Fusion Group Ltd., *LM26 MTF Demonstration*, 2026-10-08.  
+2. Helion Energy, *Polaris D-T Fusion Event Report*, 2026-02-13.  
+3. Pacific Fusion, *Sirius High-Throughput Operation Summary*, 2026-07-20.  
+4. Lawrence Livermore National Laboratory, *NIF 11th Ignition Experiment Results*, 2026-06-20.  
+5. Zap Energy, *DOE Pre-Conceptual 50 MW Z-Pinch Module Design Approval*, 2026-05-19.  
+6. General Atomics Energy Group, *DIII-D Helicon Current Drive Operational Report*, 2026-10-27.`;
+
 export const DEFAULT_OUTPUTS: FleetOutput[] = [
+  {
+    id: "out-research-fusion-paper-report",
+    output_id: "art_paper_deliverable_report_md",
+    name: "paper_deliverable_report.md",
+    kind: "markdown",
+    classification: "confidential",
+    produced_by: "Collect Recent Fusion Reactor Literature & News",
+    case: "ARENA-CREATE-RESEARCH-PAPER-C0942E",
+    case_name: "paper (Fusion Energy Reactors & 2026 Milestones)",
+    size: 7529,
+    size_bytes: 7529,
+    at: "2026-10-29T17:31:00Z",
+    created_at: "2026-10-29T17:31:00Z",
+    text: RESEARCH_FUSION_PAPER_MARKDOWN,
+    snippet: "# Mission Deliverable: paper\\n## Case: ARENA-CREATE-RESEARCH-PAPER-C0942E\\nThe year 2026 marked a watershed for fusion energy research, with six landmark milestones spanning MTF, pulsed-power tokamaks, ICF, and Z-pinch...",
+    source: {
+      kind: "workflow_cycle",
+      filename: "paper_deliverable_report.md",
+      path: "data/artifacts/paper_deliverable_report.md",
+      step_name: "draft_research_paper",
+    },
+    provenance: "Collect Recent Fusion Reactor Literature & News produced it for paper (Fusion Reactors & 2026 Milestones)",
+  },
+  {
+    id: "out-research-esp32-report",
+    output_id: "art_research_deliverable_report_md",
+    name: "research_deliverable_report.md",
+    kind: "markdown",
+    classification: "confidential",
+    produced_by: "Collect Latest ESP32 Development Information",
+    case: "ARENA-RESEARCH-RECENT-DEVELOPM-1FECA9",
+    case_name: "RESEARCH (ESP32 Recent Developments & 2026 Milestones)",
+    size: 8506,
+    size_bytes: 8506,
+    at: "2026-10-29T17:05:00Z",
+    created_at: "2026-10-29T17:05:00Z",
+    text: RESEARCH_ESP32_DELIVERABLE_MARKDOWN,
+    snippet: "# Mission Deliverable: RESEARCH\\n## Case: ARENA-RESEARCH-RECENT-DEVELOPM-1FECA9\\nBetween 2024 and 2026, Espressif Systems underwent a major architectural transition (ESP32-E22, ESP32-H21, ESP-IDF v6.0, ESP32-C61-MINI)...",
+    source: {
+      kind: "workflow_cycle",
+      filename: "research_deliverable_report.md",
+      path: "data/artifacts/research_deliverable_report.md",
+      step_name: "summarize_2026_esp32_milestones",
+    },
+    provenance: "Collect Latest ESP32 Development Information produced it for RESEARCH (ESP-IDF v6.0, E22/H21/P4/C61)",
+  },
   {
     id: "out-government-cloud-proposal",
     output_id: "out-government-cloud-proposal",
@@ -329,9 +518,24 @@ export function FleetOutputsView({
     return Array.from(set);
   }, [outputs]);
 
+  function parseOutputTime(item: FleetOutput): number {
+    if (typeof item.at === "number") {
+      return item.at > 1e11 ? item.at : item.at * 1000;
+    }
+    if (item.created_at) {
+      const t = Date.parse(item.created_at);
+      if (!isNaN(t)) return t;
+    }
+    if (typeof item.at === "string") {
+      const t = Date.parse(item.at);
+      if (!isNaN(t)) return t;
+    }
+    return 0;
+  }
+
   const filtered = useMemo(() => {
     const q = searchQuery.trim().toLowerCase();
-    return outputs.filter((item) => {
+    const result = outputs.filter((item) => {
       if (kindFilter !== "all" && item.kind !== kindFilter) return false;
       if (caseFilter !== "all" && item.case !== caseFilter && item.case_name !== caseFilter) return false;
       if (!q) return true;
@@ -344,6 +548,7 @@ export function FleetOutputsView({
         (item.provenance || "").toLowerCase().includes(q)
       );
     });
+    return [...result].sort((a, b) => parseOutputTime(b) - parseOutputTime(a));
   }, [outputs, kindFilter, caseFilter, searchQuery]);
 
   const totalBytes = useMemo(() => outputs.reduce((acc, curr) => acc + (curr.size_bytes || curr.size || 0), 0), [outputs]);
@@ -468,6 +673,26 @@ export function FleetOutputsView({
               <button
                 type="button"
                 className="secondary-button"
+                style={{ fontSize: "11px", padding: "5px 10px", borderColor: "#195d56", background: "#eef6f3", fontWeight: 700, color: "#144c46" }}
+                onClick={() => {
+                  const target = outputs.find(
+                    (o) =>
+                      o.name.toLowerCase().includes("research") ||
+                      (o.case && o.case.toLowerCase().includes("research")) ||
+                      o.name.toLowerCase().includes("esp32")
+                  );
+                  if (target) {
+                    onSelectOutput(target);
+                  } else {
+                    setSearchQuery("research");
+                  }
+                }}
+              >
+                <FileText size={12} color="#195d56" /> ESP32 Research Deliverable
+              </button>
+              <button
+                type="button"
+                className="secondary-button"
                 style={{ fontSize: "11px", padding: "5px 10px" }}
                 onClick={() => { setActiveViewMode("dossier"); setActiveDossierCase("gov_cloud"); }}
               >
@@ -530,6 +755,81 @@ export function FleetOutputsView({
                 <ShieldAlert size={12} color="#8a2020" /> Perimeter DDoS &amp; Recon
               </button>
             </div>
+          </div>
+
+          {/* Search & Filter Toolbar */}
+          <div style={{ display: "flex", gap: "10px", alignItems: "center", marginBottom: "14px", flexWrap: "wrap", background: "#ffffff", padding: "10px 14px", borderRadius: "6px", border: "1px solid #dce8e2" }}>
+            <div style={{ position: "relative", flex: 1, minWidth: "240px" }}>
+              <Search size={14} color="#6a7c76" style={{ position: "absolute", left: "10px", top: "50%", transform: "translateY(-50%)" }} />
+              <input
+                type="text"
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                placeholder="Search deliverables by name, keyword, or case (e.g. esp32, research, proposal, k8s)..."
+                style={{
+                  width: "100%",
+                  padding: "7px 10px 7px 32px",
+                  fontSize: "12px",
+                  borderRadius: "4px",
+                  border: "1px solid #cad8d1",
+                  background: "#f9fcfa",
+                  outline: "none",
+                }}
+              />
+              {searchQuery && (
+                <button
+                  type="button"
+                  onClick={() => setSearchQuery("")}
+                  style={{ position: "absolute", right: "8px", top: "50%", transform: "translateY(-50%)", background: "transparent", border: "none", cursor: "pointer" }}
+                >
+                  <X size={13} color="#6a7c76" />
+                </button>
+              )}
+            </div>
+            <div style={{ display: "flex", gap: "6px", alignItems: "center" }}>
+              <button
+                type="button"
+                className="secondary-button"
+                style={{
+                  fontSize: "10px",
+                  padding: "4px 8px",
+                  background: searchQuery === "esp32" || searchQuery === "research" ? "#e0f0ea" : "transparent",
+                  borderColor: searchQuery === "esp32" || searchQuery === "research" ? "#236f66" : "#cad8d1",
+                }}
+                onClick={() => setSearchQuery(searchQuery === "esp32" ? "" : "esp32")}
+              >
+                ESP32 / Research
+              </button>
+              <button
+                type="button"
+                className="secondary-button"
+                style={{
+                  fontSize: "10px",
+                  padding: "4px 8px",
+                  background: searchQuery === "proposal" || searchQuery === "rfp" ? "#e0f0ea" : "transparent",
+                  borderColor: searchQuery === "proposal" || searchQuery === "rfp" ? "#236f66" : "#cad8d1",
+                }}
+                onClick={() => setSearchQuery(searchQuery === "proposal" ? "" : "proposal")}
+              >
+                Proposals &amp; RFP
+              </button>
+              <button
+                type="button"
+                className="secondary-button"
+                style={{
+                  fontSize: "10px",
+                  padding: "4px 8px",
+                  background: searchQuery === "soc" || searchQuery === "apt" ? "#e0f0ea" : "transparent",
+                  borderColor: searchQuery === "soc" || searchQuery === "apt" ? "#236f66" : "#cad8d1",
+                }}
+                onClick={() => setSearchQuery(searchQuery === "soc" ? "" : "soc")}
+              >
+                SOC / Incidents
+              </button>
+            </div>
+            <span style={{ fontSize: "11px", color: "#6a7c76", marginLeft: "auto", fontWeight: 600 }}>
+              Showing {filtered.length} of {outputs.length} deliverables
+            </span>
           </div>
 
           {/* Deliverables List */}

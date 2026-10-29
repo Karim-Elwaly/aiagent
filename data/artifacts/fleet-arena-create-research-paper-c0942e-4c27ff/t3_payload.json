@@ -1,0 +1,12 @@
+{
+  "task_id": "t3",
+  "workflow_id": "fleet-arena-create-research-paper-c0942e-4c27ff",
+  "size_bytes": 4442,
+  "metadata": {
+    "task_name": "Draft Research Paper Outline & Executive Summary",
+    "profile": "fleet-create-research--draft-research-paper",
+    "tool_calls_made": [],
+    "session_id": "aiagent-fleet-arena-create-research-paper-c0942e-4c27ff-t3-d97fe6"
+  },
+  "structured_data": null
+}

@@ -1,0 +1,15 @@
+{
+  "task_id": "t2",
+  "workflow_id": "uaos-4452146f89fc",
+  "size_bytes": 177,
+  "metadata": {
+    "task_name": "Monitor Swap Pressure",
+    "profile": "aiagent-dyn-f029f66d",
+    "tool_calls_made": [
+      "execute_command",
+      "execute_code"
+    ],
+    "session_id": "aiagent-uaos-4452146f89fc-t2-789e59"
+  },
+  "structured_data": null
+}

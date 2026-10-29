@@ -143,7 +143,7 @@ class HermesAgentWorker:
         if info.restarted_at:
             _mark_gateway_restarted(info.restarted_at)
         dyn_prefix = getattr(self.settings, "hermes_profile_prefix_dynamic", "aiagent-dyn-")
-        is_dynamic = info.name.startswith(dyn_prefix)
+        is_dynamic = info.name.startswith(dyn_prefix) or info.name.startswith("fleet-")
         if not is_dynamic and not self._mcp_ready(info.name):
             # Hermes reconnects a known server by itself (e.g. after aiagent restarts); a new or
             # reconfigured profile is only picked up by a gateway restart.
@@ -173,7 +173,7 @@ class HermesAgentWorker:
                 "task_tools": [t.name for t in tools],
             })
             try:
-                if is_dynamic:
+                if is_dynamic and not info.name.startswith("fleet-"):
                     await asyncio.to_thread(
                         self.profiles.sync_exact_task_skills,
                         info.name,
@@ -234,7 +234,7 @@ class HermesAgentWorker:
                 if not run_id:
                     run_id = await self.client.create_run(
                         profile, key,
-                        follow_up or self._user_content(task, tools, user_query, upstream_context, approval_tools),
+                        follow_up or self._user_content(task, tools, user_query, upstream_context, approval_tools, workflow_id=workflow_id),
                         instructions=persona, session_id=session_id,
                     )
                     logger.info("Task '%s' started Hermes run %s on profile '%s'", task.id, run_id, profile)
@@ -301,14 +301,20 @@ class HermesAgentWorker:
             session_id = str(outcome.get("session_id") or session_id)
             output_text = str(outcome.get("output") or "")
             lowered_out = output_text.lower()
-            # Check for explicit claims that the MCP infrastructure / service failed
+            # Check for explicit claims that the MCP infrastructure / service failed.
+            # If tool calls were made or evidence was gathered, MCP functioned properly; do not falsely
+            # flag technical discussion of MCP servers (e.g. ESP-IDF MCP server) as an infrastructure fault.
             mcp_infrastructure_error = (
-                "underlying mcp" in lowered_out
-                or "mcp service" in lowered_out
-                or "mcp server" in lowered_out
-                or "mcp endpoint" in lowered_out
-                or ("server unreachable" in lowered_out and any(k in lowered_out for k in ("mcp", "tool", "service")))
-                or ("mcp__" in lowered_out and any(k in lowered_out for k in ("unreach", "cannot connect", "could not connect", "error after", "consecutive failure")))
+                not (tool_calls or grounded) and (
+                    any(phrase in lowered_out for phrase in (
+                        "mcp server error", "mcp server is down", "mcp server unreachable",
+                        "mcp endpoint error", "mcp service unavailable", "mcp service unreachable",
+                        "failed to connect to mcp", "cannot connect to mcp", "could not connect to mcp",
+                        "underlying mcp error", "underlying mcp service error"
+                    ))
+                    or ("server unreachable" in lowered_out and any(k in lowered_out for k in ("mcp", "tool", "service")))
+                    or ("mcp__" in lowered_out and any(k in lowered_out for k in ("unreach", "cannot connect", "could not connect", "error after", "consecutive failure")))
+                )
             )
             is_mcp_unreachable = mcp_infrastructure_error or (
                 not (tool_calls or grounded) and (
@@ -415,6 +421,24 @@ class HermesAgentWorker:
             output = f"{output}\n\n{res_str}".strip()
         if on_event:
             on_event({"type": "final_answer", "task_id": task.id, "answer": output})
+
+        # Persist lossless task output to WorkflowArtifactExchange
+        try:
+            from src.core.artifact_exchange import WorkflowArtifactExchange
+            exchange = WorkflowArtifactExchange(workflow_id)
+            exchange.save_task_artifact(
+                task_id=task.id,
+                payload=output,
+                metadata={
+                    "task_name": task.name,
+                    "profile": profile,
+                    "tool_calls_made": tool_calls,
+                    "session_id": session_id,
+                },
+            )
+        except Exception as art_err:
+            logger.warning("Could not persist task artifact for '%s': %s", task.id, art_err)
+
         return TaskResult(
             task_id=task.id,
             status=TaskStatus.COMPLETED,
@@ -720,6 +744,7 @@ class HermesAgentWorker:
         user_query: str,
         upstream_context: dict[str, str] | None,
         approval_tools: list[ToolSpec] | None = None,
+        workflow_id: str = "",
     ) -> str:
         parts = []
         if user_query and user_query.strip():
@@ -736,11 +761,13 @@ class HermesAgentWorker:
             names = ", ".join(f"{MCP_TOOL_PREFIX}{t.name}" for t in tools)
             parts.append(
                 f"# Specialized AgentHub Tools for This Task\n{names}\n\n"
-                "**EXECUTION DIRECTIVES:**\n"
+                "**MANDATORY TOOL-EXECUTION DIRECTIVES:**\n"
+                "- Ground-Truth Evidence Required: When specialized AgentHub tools or local files are provided, you MUST execute the appropriate tools to collect factual data before formulating conclusions.\n"
+                "- DO NOT generate hypothetical, assumed, or placeholder answers without inspecting real data.\n"
                 "- Host Environment: Live host execution environment with direct filesystem and OS access.\n"
                 "- You have full autonomous access to your native tools (terminal, file operations, python scripts, skills) as well as the specialized AgentHub tools listed above.\n"
                 f"- Invoke {names} via function calling when specialized AgentHub capabilities are needed, or utilize your native tools and skills as appropriate.\n"
-                "- Carry out the required actions directly and provide a complete, well-structured output."
+                "- Carry out the required actions directly and provide a complete, well-structured, fact-based output."
             )
         elif not approval_tools:
             parts.append("# Tools for This Task\nNone assigned. Answer from the context you are given.")
@@ -751,7 +778,7 @@ class HermesAgentWorker:
                 f"{names}\nThis task needs them but this agent is not approved for them. Call one when you need it; "
                 "the operator is asked to allow it."
             )
-        context = format_upstream_context(upstream_context or {}, self.settings.worker_max_context_chars)
+        context = format_upstream_context(upstream_context or {}, self.settings.worker_max_context_chars, workflow_id=workflow_id)
         if context:
             parts.append(context.strip())
         return "\n\n".join(parts)

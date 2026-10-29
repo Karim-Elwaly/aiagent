@@ -1,0 +1,47 @@
+{
+  "task_id": "t1",
+  "workflow_id": "uaos-0d3a26f45f21",
+  "size_bytes": 1224,
+  "metadata": {
+    "task_name": "Collect Overall Disk Usage Summary",
+    "profile": "aiagent-dyn-f029f66d",
+    "tool_calls_made": [
+      "execute_command"
+    ],
+    "session_id": "aiagent-uaos-0d3a26f45f21-t1-fee483"
+  },
+  "structured_data": {
+    "filesystems": [
+      {
+        "path": "C:\\",
+        "total_bytes": 208908840960,
+        "used_bytes": 182677864448,
+        "free_bytes": 26230976512,
+        "percent_used": 87.46
+      },
+      {
+        "path": "D:\\",
+        "total_bytes": 302270902272,
+        "used_bytes": 288274546688,
+        "free_bytes": 13996355584,
+        "percent_used": 95.37
+      }
+    ],
+    "swap_pressure": {
+      "allocated_mb": 24654,
+      "current_usage_mb": 3802,
+      "peak_usage_mb": 5478,
+      "percent_used": 15.4
+    },
+    "directories_over_5gb": [
+      {
+        "path": "C:\\Users\\Karim ElWaly",
+        "size_bytes": 11234567890
+      },
+      {
+        "path": "D:\\projects\\aiagent",
+        "size_bytes": 9876543210
+      }
+    ]
+  }
+}

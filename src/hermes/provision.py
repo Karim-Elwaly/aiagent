@@ -66,6 +66,7 @@ def provision_profiles(
     sleep: Callable[[float], None] = time.sleep,
     idle_wait_seconds: float = IDLE_WAIT_SECONDS,
     quiet_seconds: float = QUIET_SECONDS,
+    restart_gateway: bool = False,
 ) -> bool:
     """Create the missing profiles; True when the gateway was restarted to pick them up."""
     if not hermes_in_use(settings):
@@ -97,14 +98,13 @@ def provision_profiles(
             changed = True
         if profiles.sync_all_profiles_mcp_url():
             changed = True
-        if not profiles.state.mcp_connected(DEFAULT_PROFILE):
-            logger.info("Hermes MCP server not yet connected for default profile; restarting gateway")
-            changed = True
+        # Hermes MCP connection is established on demand when a run starts;
+        # do not force a destructive gateway restart merely because no run has pinged it yet.
         profiles.purge_all_dynamic_cloned_skills()
     except HermesError as exc:
         logger.warning("Could not prepare the Hermes profiles: %s", exc)
         return False
-    if not changed:
+    if not changed or not restart_gateway:
         return False
 
     waited = 0.0

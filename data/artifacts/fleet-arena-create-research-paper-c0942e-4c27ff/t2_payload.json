@@ -1,0 +1,15 @@
+{
+  "task_id": "t2",
+  "workflow_id": "fleet-arena-create-research-paper-c0942e-4c27ff",
+  "size_bytes": 4475,
+  "metadata": {
+    "task_name": "Analyze & Summarize 2026 Fusion Milestones",
+    "profile": "fleet-create-research--analyze-summarize-20",
+    "tool_calls_made": [
+      "search_files",
+      "read_file"
+    ],
+    "session_id": "aiagent-fleet-arena-create-research-paper-c0942e-4c27ff-t2-068205"
+  },
+  "structured_data": null
+}

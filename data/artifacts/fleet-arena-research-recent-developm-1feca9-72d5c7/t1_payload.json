@@ -1,0 +1,15 @@
+{
+  "task_id": "t1",
+  "workflow_id": "fleet-arena-research-recent-developm-1feca9-72d5c7",
+  "size_bytes": 36,
+  "metadata": {
+    "task_name": "Collect Latest ESP32 Development Information",
+    "profile": "fleet-research-recent--collect-latest-esp32",
+    "tool_calls_made": [
+      "web_search",
+      "skill_view"
+    ],
+    "session_id": "aiagent-fleet-arena-research-recent-developm-1feca9-72d5c7-t1-12cb67"
+  },
+  "structured_data": null
+}

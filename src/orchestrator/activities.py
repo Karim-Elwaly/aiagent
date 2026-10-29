@@ -14,6 +14,7 @@ from __future__ import annotations
 import asyncio
 import json
 import logging
+import re
 from typing import Any
 
 from temporalio import activity
@@ -932,11 +933,24 @@ async def evaluate_task_output(
     llm = get_orchestration_llm(agent_id)
     settings = get_settings()
 
-    prior_summary = "\n".join(
-        f"- Task {tid}: {out[:150]}..."
-        for tid, out in prior_completed.items()
-        if tid != task_id
-    )
+    # Build comprehensive prior context backed by WorkflowArtifactExchange
+    try:
+        from src.core.artifact_exchange import WorkflowArtifactExchange
+        exchange = WorkflowArtifactExchange(wf_id)
+    except Exception:
+        exchange = None
+
+    prior_lines = []
+    for tid, out in prior_completed.items():
+        if tid == task_id:
+            continue
+        ptr = exchange.get_artifact_pointer(tid) if exchange else None
+        ptr_note = f" [Disk Artifact: {ptr['path']}]" if ptr else ""
+        clean_out = (out or "").strip()
+        snippet = clean_out[:800] + ("\n  [...see artifact for full data]" if len(clean_out) > 800 else "")
+        prior_lines.append(f"- Task `{tid}`{ptr_note}:\n  {snippet}")
+
+    prior_summary = "\n\n".join(prior_lines) if prior_lines else "None"
 
     max_eval_chars = getattr(settings, "worker_max_context_chars", 12000)
     eval_worker_output = worker_output[:max_eval_chars]
@@ -1158,6 +1172,30 @@ async def evaluate_task_output(
         "required tools are not available",
         "unable to locate or read",
     ]
+    # Placeholder token guard: flag unpopulated placeholder patterns in output
+    placeholder_patterns = [
+        r"\[insert\s+[^\]]+\]",
+        r"<insert\s+[^>]+>",
+        r"\[TBD\]",
+        r"\bTBD\b",
+        r"\[TODO\]",
+        r"\bTODO\b",
+        r"<your\s+company>",
+        r"\[your\s+company\]",
+        r"\[replace\s+with[^\]]*\]",
+        r"\[specify\s+[^\]]*\]",
+    ]
+    if decision == "pass":
+        for pat in placeholder_patterns:
+            if re.search(pat, worker_output, re.IGNORECASE):
+                logger.warning("Supervisor flag: output for task '%s' contains placeholder token pattern '%s'", task_name, pat)
+                decision = "needs_retry"
+                feedback = (
+                    "Output contains unpopulated placeholder tokens (e.g. '[insert ...]', 'TBD', 'TODO'). "
+                    "Please replace all placeholders with concrete, verified factual values derived from source documents or tools."
+                )
+                break
+
     if decision != "abort" and not has_concrete_data and any(cue in worker_output.lower() for cue in refusal_cues):
         decision = "needs_retry"
         if not feedback:

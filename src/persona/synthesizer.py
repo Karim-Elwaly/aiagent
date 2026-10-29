@@ -330,37 +330,56 @@ CANNOT_COMPLETE: <specific explanation of what's missing>
         return json.dumps(example)
 
     def _format_upstream_context(
-        self, upstream: dict[str, str]
+        self, upstream: dict[str, str], workflow_id: str | None = None
     ) -> str:
-        return format_upstream_context(upstream, self.max_context_chars)
+        return format_upstream_context(upstream, self.max_context_chars, workflow_id=workflow_id)
 
 
-def format_upstream_context(upstream: dict[str, str], max_chars: int) -> str:
-    """Format upstream task outputs, truncating them to ``max_chars`` in total."""
+def format_upstream_context(
+    upstream: dict[str, str],
+    max_chars: int,
+    workflow_id: str | None = None,
+) -> str:
+    """Format upstream task outputs losslessly by pairing executive extracts with artifact pointers."""
     if not upstream:
         return ""
 
+    try:
+        from src.core.artifact_exchange import WorkflowArtifactExchange
+        exchange = WorkflowArtifactExchange(workflow_id) if workflow_id else None
+    except Exception:
+        exchange = None
+
     block = "\n# Context from Prior Tasks\n"
     block += (
-        "The following information was produced by tasks that ran "
-        "before yours. Use it as input for your work.\n"
+        "The following verified data was produced by upstream tasks. "
+        "Key excerpts are provided below, and complete lossless payloads are saved to disk.\n"
     )
 
-    remaining = max_chars
+    num_tasks = max(1, len(upstream))
+    # Give each task an equitable allocation of the context budget, scaling with max_chars (capped at 1,500 chars)
+    per_task_budget = max(100, min(1500, max_chars // num_tasks))
 
     for task_id, output in upstream.items():
-        if remaining <= 100:
-            block += (
-                "\n> [Additional upstream context truncated to "
-                "fit context window]\n"
+        clean_output = (output or "").strip()
+        pointer = exchange.get_artifact_pointer(task_id) if exchange else None
+
+        pointer_note = ""
+        if pointer and pointer.get("path"):
+            pointer_note = (
+                f"> **Lossless Artifact**: `{pointer['path']}` ({pointer['size_bytes']} bytes). "
+                "For full data tables, exact values, or raw metrics, inspect this file directly.\n"
             )
-            break
 
-        truncated = output[:remaining]
-        if len(output) > remaining:
-            truncated += "\n[...truncated]"
+        if len(clean_output) > per_task_budget:
+            excerpt = clean_output[:per_task_budget].rstrip() + "\n[...truncated — see artifact on disk for full data]"
+        else:
+            excerpt = clean_output
 
-        block += f"\n## From task `{task_id}`:\n{truncated}\n"
-        remaining -= len(truncated)
+        header_lines = [f"\n## From task `{task_id}`:"]
+        if pointer_note:
+            header_lines.append(pointer_note.strip())
+        header_lines.append(excerpt)
+        block += "\n".join(header_lines) + "\n"
 
     return block

@@ -1,0 +1,156 @@
+{
+  "arena_id": "arena-create-research-paper-c0942e",
+  "arena_name": "paper",
+  "arena_slug": "create-research-paper",
+  "mission_prompt": "create a Research paper recent developments in fusion energy reactors and summarize the latest 2026 milestones.",
+  "strategy_profile": "STANDARD",
+  "units": [
+    {
+      "profile_name": "fleet-create-research--collect-recent-fusio",
+      "unit_codename": "RECON_INGESTION",
+      "task_id": "t-nt-fusio",
+      "task_name": "Collect Recent Fusion Reactor Literature & News",
+      "operational_stage": "RECON_INGESTION",
+      "scoped_tools": [
+        "data_analysis",
+        "execute_python",
+        "general_reasoning",
+        "web_search"
+      ],
+      "required_skills": [
+        "web_search",
+        "data_analysis",
+        "general_reasoning"
+      ],
+      "description": "Perform targeted web searches for peer\u2011reviewed articles, conference proceedings, press releases, and industry reports published between 2024\u20132026 that discuss advances in fusion energy reactors (tokamaks, stellarators, laser\u2011driven inertial confinement, etc.). Extract key data points such as reactor type, power output, net energy gain, plasma confinement improvements, materials breakthroughs, and any announced milestones. Store the extracted information in a structured tabular format for downstream analysis.",
+      "input_contract": "",
+      "output_contract": "",
+      "profile_exists": true,
+      "attached_files": []
+    },
+    {
+      "profile_name": "fleet-create-research--analyze-summarize-20",
+      "unit_codename": "DEEP_ANALYSIS",
+      "task_id": "t-arize-20",
+      "task_name": "Analyze & Summarize 2026 Fusion Milestones",
+      "operational_stage": "DEEP_ANALYSIS",
+      "scoped_tools": [
+        "data_analysis",
+        "execute_python",
+        "general_reasoning"
+      ],
+      "required_skills": [
+        "data_analysis",
+        "general_reasoning"
+      ],
+      "description": "Using the dataset produced by t1, identify all milestones that occurred in 2026. For each milestone, summarize the technical achievement, its significance for fusion energy commercialization, and any quantitative performance metrics. Group milestones by reactor type or technology family to highlight trends.",
+      "input_contract": "",
+      "output_contract": "",
+      "profile_exists": true,
+      "attached_files": []
+    },
+    {
+      "profile_name": "fleet-create-research--draft-research-paper",
+      "unit_codename": "DELIVERABLE_SYNTHESIS",
+      "task_id": "t-ch-paper",
+      "task_name": "Draft Research Paper Outline & Executive Summary",
+      "operational_stage": "DELIVERABLE_SYNTHESIS",
+      "scoped_tools": [
+        "general_reasoning",
+        "summarization",
+        "summarize_to_presentation"
+      ],
+      "required_skills": [
+        "general_reasoning",
+        "summarization"
+      ],
+      "description": "Compose a research\u2011paper style outline that incorporates the findings from t2. Include sections such as Abstract, Introduction, Recent Advances (2024\u20132026), 2026 Milestones Overview, Discussion of Technological Implications, Future Outlook, and References. Provide an executive summary paragraph that captures the essence of the latest progress in fusion energy reactors.",
+      "input_contract": "",
+      "output_contract": "",
+      "profile_exists": true,
+      "attached_files": []
+    }
+  ],
+  "dag": {
+    "goal": "Produce a research\u2011style overview of recent developments in fusion energy reactors, highlighting the key milestones achieved up to and including 2026.",
+    "reasoning": "The user requests an up\u2011to\u2011date synthesis of fusion reactor progress with a focus on 2026 achievements. No local files are provided, so we must autonomously gather relevant literature and news via web search, then analyze and summarize the findings into a coherent research paper structure.",
+    "tasks": [
+      {
+        "id": "t1",
+        "name": "Collect Recent Fusion Reactor Literature & News",
+        "description": "Perform targeted web searches for peer\u2011reviewed articles, conference proceedings, press releases, and industry reports published between 2024\u20132026 that discuss advances in fusion energy reactors (tokamaks, stellarators, laser\u2011driven inertial confinement, etc.). Extract key data points such as reactor type, power output, net energy gain, plasma confinement improvements, materials breakthroughs, and any announced milestones. Store the extracted information in a structured tabular format for downstream analysis.",
+        "required_skills": [
+          "web_search",
+          "data_analysis",
+          "general_reasoning"
+        ],
+        "expected_output": "A CSV/JSON table containing titles, authors, publication dates, reactor types, milestone descriptions, quantitative metrics (e.g., energy gain Q, power output MW), and source URLs.",
+        "dependencies": [],
+        "risk_level": "low",
+        "max_retries": 2,
+        "timeout_seconds": 600,
+        "parameters": {},
+        "agent_id": null,
+        "hermes_profile": "fleet-create-research--collect-recent-fusio",
+        "specialist_spec": null,
+        "_hermes_profile": "fleet-create-research--collect-recent-fusio"
+      },
+      {
+        "id": "t2",
+        "name": "Analyze & Summarize 2026 Fusion Milestones",
+        "description": "Using the dataset produced by t1, identify all milestones that occurred in 2026. For each milestone, summarize the technical achievement, its significance for fusion energy commercialization, and any quantitative performance metrics. Group milestones by reactor type or technology family to highlight trends.",
+        "required_skills": [
+          "data_analysis",
+          "general_reasoning"
+        ],
+        "expected_output": "A structured summary (e.g., Markdown table or JSON) listing each 2026 milestone with a concise description, key metrics, and impact assessment.",
+        "dependencies": [
+          "t1"
+        ],
+        "risk_level": "low",
+        "max_retries": 2,
+        "timeout_seconds": 300,
+        "parameters": {},
+        "agent_id": null,
+        "hermes_profile": "fleet-create-research--analyze-summarize-20",
+        "specialist_spec": null,
+        "_hermes_profile": "fleet-create-research--analyze-summarize-20"
+      },
+      {
+        "id": "t3",
+        "name": "Draft Research Paper Outline & Executive Summary",
+        "description": "Compose a research\u2011paper style outline that incorporates the findings from t2. Include sections such as Abstract, Introduction, Recent Advances (2024\u20132026), 2026 Milestones Overview, Discussion of Technological Implications, Future Outlook, and References. Provide an executive summary paragraph that captures the essence of the latest progress in fusion energy reactors.",
+        "required_skills": [
+          "general_reasoning",
+          "summarization"
+        ],
+        "expected_output": "A Markdown document containing the paper outline with section headings, bullet\u2011point content summaries, and a 250\u2011word executive summary.",
+        "dependencies": [
+          "t2",
+          "t1"
+        ],
+        "risk_level": "low",
+        "max_retries": 1,
+        "timeout_seconds": 300,
+        "parameters": {},
+        "agent_id": null,
+        "hermes_profile": "fleet-create-research--draft-research-paper",
+        "specialist_spec": null,
+        "_hermes_profile": "fleet-create-research--draft-research-paper"
+      }
+    ],
+    "estimated_completion_seconds": 60
+  },
+  "status": "completed",
+  "created_at": 1793282961.704001,
+  "updated_at": 1793284251.3535454,
+  "profiles_to_create": [],
+  "profiles_existing": [
+    "fleet-create-research--collect-recent-fusio",
+    "fleet-create-research--analyze-summarize-20",
+    "fleet-create-research--draft-research-paper"
+  ],
+  "workflow_id": "fleet-arena-create-research-paper-c0942e-4c27ff",
+  "agent_id": null,
+  "resilience": "standard"
+}

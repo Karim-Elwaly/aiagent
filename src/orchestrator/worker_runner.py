@@ -54,7 +54,7 @@ async def main() -> None:
         try:
             from src.hermes.provision import provision_profiles
 
-            await asyncio.wait_for(asyncio.to_thread(provision_profiles, settings), timeout=30.0)
+            await asyncio.wait_for(asyncio.to_thread(provision_profiles, settings, restart_gateway=False), timeout=30.0)
         except Exception as p_err:
             logger.warning("Startup Hermes profile reconciliation: %s", p_err)
 

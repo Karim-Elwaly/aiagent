@@ -1,0 +1,109 @@
+{
+  "arena_id": "arena-research-recent-developm-1feca9",
+  "arena_name": "RESEARCH ",
+  "arena_slug": "research-recent-developm",
+  "mission_prompt": "Research recent developments in esp32 and summarize the latest 2026 milestones.",
+  "strategy_profile": "STANDARD",
+  "units": [
+    {
+      "profile_name": "fleet-research-recent--collect-latest-esp32",
+      "unit_codename": "RECON_INGESTION",
+      "task_id": "t-st-esp32",
+      "task_name": "Collect Latest ESP32 Development Information",
+      "operational_stage": "RECON_INGESTION",
+      "scoped_tools": [
+        "data_analysis",
+        "execute_python",
+        "web_search"
+      ],
+      "required_skills": [
+        "web_search",
+        "data_analysis"
+      ],
+      "description": "Perform targeted web searches for ESP32 announcements, datasheets, SDK releases, and industry reports from 2024\u20112026. Extract relevant details such as new silicon revisions, feature enhancements (e.g., Wi-Fi 7 support, BLE 5.3, AI acceleration), firmware updates, and ecosystem integrations. Compile the findings into a structured tabular format for downstream analysis.",
+      "input_contract": "",
+      "output_contract": "",
+      "profile_exists": true,
+      "attached_files": []
+    },
+    {
+      "profile_name": "fleet-research-recent--summarize-2026-esp32",
+      "unit_codename": "DELIVERABLE_SYNTHESIS",
+      "task_id": "t-26-esp32",
+      "task_name": "Summarize 2026 ESP32 Milestones",
+      "operational_stage": "DELIVERABLE_SYNTHESIS",
+      "scoped_tools": [
+        "general_reasoning",
+        "summarization",
+        "summarize_to_presentation"
+      ],
+      "required_skills": [
+        "general_reasoning",
+        "summarization"
+      ],
+      "description": "Using the structured data from t1, produce a concise written summary highlighting the most significant ESP32 developments in 2026. Include key hardware upgrades, software/SDK enhancements, ecosystem partnerships, and any notable industry adoption or use\u2011case breakthroughs.",
+      "input_contract": "",
+      "output_contract": "",
+      "profile_exists": true,
+      "attached_files": []
+    }
+  ],
+  "dag": {
+    "goal": "Research recent developments in ESP32 and summarize the latest 2026 milestones",
+    "reasoning": "The user requests up-to-date information on ESP32 hardware/software advancements for 2026. Since no local files are provided, we must autonomously gather data from authoritative online sources using web search, then synthesize a concise summary of key milestones.",
+    "tasks": [
+      {
+        "id": "t1",
+        "name": "Collect Latest ESP32 Development Information",
+        "description": "Perform targeted web searches for ESP32 announcements, datasheets, SDK releases, and industry reports from 2024\u20112026. Extract relevant details such as new silicon revisions, feature enhancements (e.g., Wi-Fi 7 support, BLE 5.3, AI acceleration), firmware updates, and ecosystem integrations. Compile the findings into a structured tabular format for downstream analysis.",
+        "required_skills": [
+          "web_search",
+          "data_analysis"
+        ],
+        "expected_output": "A table or JSON list of ESP32-related milestones with dates, feature descriptions, source URLs, and brief notes on impact.",
+        "dependencies": [],
+        "risk_level": "low",
+        "max_retries": 2,
+        "timeout_seconds": 600,
+        "parameters": {},
+        "agent_id": null,
+        "hermes_profile": "fleet-research-recent--collect-latest-esp32",
+        "specialist_spec": null,
+        "_hermes_profile": "fleet-research-recent--collect-latest-esp32"
+      },
+      {
+        "id": "t2",
+        "name": "Summarize 2026 ESP32 Milestones",
+        "description": "Using the structured data from t1, produce a concise written summary highlighting the most significant ESP32 developments in 2026. Include key hardware upgrades, software/SDK enhancements, ecosystem partnerships, and any notable industry adoption or use\u2011case breakthroughs.",
+        "required_skills": [
+          "general_reasoning",
+          "summarization"
+        ],
+        "expected_output": "A clear, well\u2011organized summary of the latest ESP32 milestones for 2026, suitable for a technical briefing.",
+        "dependencies": [
+          "t1"
+        ],
+        "risk_level": "low",
+        "max_retries": 2,
+        "timeout_seconds": 300,
+        "parameters": {},
+        "agent_id": null,
+        "hermes_profile": "fleet-research-recent--summarize-2026-esp32",
+        "specialist_spec": null,
+        "_hermes_profile": "fleet-research-recent--summarize-2026-esp32"
+      }
+    ],
+    "estimated_completion_seconds": 60
+  },
+  "status": "completed",
+  "created_at": 1793274730.1266875,
+  "updated_at": 1793284142.6665564,
+  "profiles_to_create": [],
+  "profiles_existing": [
+    "fleet-research-recent--collect-latest-esp32",
+    "fleet-research-recent--summarize-2026-esp32"
+  ],
+  "workflow_id": "fleet-arena-research-recent-developm-1feca9-c06ef4",
+  "agent_id": null,
+  "resilience": "standard"
+}
