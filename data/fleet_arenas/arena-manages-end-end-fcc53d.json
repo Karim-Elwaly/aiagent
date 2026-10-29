@@ -145,9 +145,9 @@
     ],
     "estimated_completion_seconds": 60
   },
-  "status": "completed",
+  "status": "failed",
   "created_at": 1793107716.3818545,
-  "updated_at": 1793111419.4459455,
+  "updated_at": 1793293140.8562124,
   "profiles_to_create": [],
   "profiles_existing": [
     "fleet-manages-end-end-define-recruitment-w",

@@ -95,9 +95,9 @@
     ],
     "estimated_completion_seconds": 60
   },
-  "status": "completed",
+  "status": "failed",
   "created_at": 1793274730.1266875,
-  "updated_at": 1793284142.6665564,
+  "updated_at": 1793293091.2330084,
   "profiles_to_create": [],
   "profiles_existing": [
     "fleet-research-recent--collect-latest-esp32",

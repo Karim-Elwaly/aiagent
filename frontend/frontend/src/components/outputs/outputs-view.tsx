@@ -474,7 +474,17 @@ export function FormattedDocumentPreview({ content }: { content: string }) {
   if (inTable) flushTable();
 
   return (
-    <div style={{ background: "#ffffff", padding: "18px 22px", borderRadius: "6px", border: "1px solid #dce8e2", maxHeight: "430px", overflowY: "auto" }}>
+    <div
+      style={{
+        background: "#ffffff",
+        padding: "20px 24px",
+        borderRadius: "6px",
+        border: "1px solid #dce8e2",
+        maxHeight: "56vh",
+        overflowY: "auto",
+        lineHeight: "1.65",
+      }}
+    >
       {elements}
     </div>
   );
@@ -664,99 +674,6 @@ export function FleetOutputsView({
             </div>
           </div>
 
-          {/* Quick Dossier Jumps */}
-          <div style={{ background: "#f8fbf9", border: "1px solid #dce8e2", borderRadius: "8px", padding: "14px 16px", marginBottom: "18px" }}>
-            <div style={{ fontSize: "11px", fontWeight: 700, color: "#1b3832", marginBottom: "8px", textTransform: "uppercase" }}>
-              Specialist Incident &amp; Proposal Dossier Views
-            </div>
-            <div style={{ display: "flex", gap: "8px", flexWrap: "wrap" }}>
-              <button
-                type="button"
-                className="secondary-button"
-                style={{ fontSize: "11px", padding: "5px 10px", borderColor: "#195d56", background: "#eef6f3", fontWeight: 700, color: "#144c46" }}
-                onClick={() => {
-                  const target = outputs.find(
-                    (o) =>
-                      o.name.toLowerCase().includes("research") ||
-                      (o.case && o.case.toLowerCase().includes("research")) ||
-                      o.name.toLowerCase().includes("esp32")
-                  );
-                  if (target) {
-                    onSelectOutput(target);
-                  } else {
-                    setSearchQuery("research");
-                  }
-                }}
-              >
-                <FileText size={12} color="#195d56" /> ESP32 Research Deliverable
-              </button>
-              <button
-                type="button"
-                className="secondary-button"
-                style={{ fontSize: "11px", padding: "5px 10px" }}
-                onClick={() => { setActiveViewMode("dossier"); setActiveDossierCase("gov_cloud"); }}
-              >
-                <FileText size={12} color="#195d56" /> Gov Cloud Migration Proposal
-              </button>
-              <button
-                type="button"
-                className="secondary-button"
-                style={{ fontSize: "11px", padding: "5px 10px" }}
-                onClick={() => { setActiveViewMode("dossier"); setActiveDossierCase("rfp"); }}
-              >
-                <FileText size={12} color="#195d56" /> MOE DevOps Server RFP
-              </button>
-              <button
-                type="button"
-                className="secondary-button"
-                style={{ fontSize: "11px", padding: "5px 10px" }}
-                onClick={() => { setActiveViewMode("dossier"); setActiveDossierCase("soc"); }}
-              >
-                <ShieldAlert size={12} color="#b44426" /> Host Ransomware SOC Dossier
-              </button>
-              <button
-                type="button"
-                className="secondary-button"
-                style={{ fontSize: "11px", padding: "5px 10px" }}
-                onClick={() => { setActiveViewMode("dossier"); setActiveDossierCase("k8s"); }}
-              >
-                <ShieldAlert size={12} color="#1f4870" /> K8s Breakout Dossier
-              </button>
-              <button
-                type="button"
-                className="secondary-button"
-                style={{ fontSize: "11px", padding: "5px 10px" }}
-                onClick={() => { setActiveViewMode("dossier"); setActiveDossierCase("azure"); }}
-              >
-                <ShieldAlert size={12} color="#6b338e" /> Azure AD Takeover Dossier
-              </button>
-              <button
-                type="button"
-                className="secondary-button"
-                style={{ fontSize: "11px", padding: "5px 10px" }}
-                onClick={() => { setActiveViewMode("dossier"); setActiveDossierCase("apt"); }}
-              >
-                <ShieldAlert size={12} color="#b44426" /> APT Enterprise Intrusion
-              </button>
-              <button
-                type="button"
-                className="secondary-button"
-                style={{ fontSize: "11px", padding: "5px 10px" }}
-                onClick={() => { setActiveViewMode("dossier"); setActiveDossierCase("case5"); }}
-              >
-                <ShieldAlert size={12} color="#7a4b12" /> DNS Tunneling Exfil
-              </button>
-              <button
-                type="button"
-                className="secondary-button"
-                style={{ fontSize: "11px", padding: "5px 10px" }}
-                onClick={() => { setActiveViewMode("dossier"); setActiveDossierCase("case6"); }}
-              >
-                <ShieldAlert size={12} color="#8a2020" /> Perimeter DDoS &amp; Recon
-              </button>
-            </div>
-          </div>
-
           {/* Search & Filter Toolbar */}
           <div style={{ display: "flex", gap: "10px", alignItems: "center", marginBottom: "14px", flexWrap: "wrap", background: "#ffffff", padding: "10px 14px", borderRadius: "6px", border: "1px solid #dce8e2" }}>
             <div style={{ position: "relative", flex: 1, minWidth: "240px" }}>
@@ -916,106 +833,232 @@ export function OutputDetailModal({
   }
 
   return (
-    <div className="modal-shade" onClick={onClose}>
+    <div
+      className="modal-shade"
+      onClick={onClose}
+      style={{
+        position: "fixed",
+        inset: 0,
+        zIndex: 9999,
+        display: "grid",
+        placeItems: "center",
+        backgroundColor: "rgba(10, 24, 22, 0.65)",
+        backdropFilter: "blur(4px)",
+        padding: "20px",
+      }}
+    >
       <section
         className="modal-card"
-        style={{ maxWidth: "850px", width: "95%" }}
+        style={{
+          maxWidth: "920px",
+          width: "100%",
+          maxHeight: "88vh",
+          background: "#ffffff",
+          border: "1px solid #dce6e2",
+          borderRadius: "10px",
+          boxShadow: "0 25px 70px rgba(0, 0, 0, 0.35)",
+          display: "flex",
+          flexDirection: "column",
+          padding: "22px 24px",
+          animation: "modal-in 0.18s ease-out",
+          position: "relative",
+          overflow: "hidden",
+        }}
         onClick={(e) => e.stopPropagation()}
       >
-        <div className="modal-head">
+        <div
+          className="modal-head"
+          style={{
+            display: "flex",
+            alignItems: "flex-start",
+            justifyContent: "space-between",
+            borderBottom: "1px solid #e9f0ec",
+            paddingBottom: "12px",
+            marginBottom: "14px",
+          }}
+        >
           <div>
-            <div className="eyebrow">{output.case || "DELIVERABLE ARTIFACT"}</div>
-            <h3>{output.name}</h3>
+            <div
+              className="eyebrow"
+              style={{
+                fontSize: "9px",
+                fontWeight: 700,
+                color: "#185d54",
+                letterSpacing: "0.8px",
+                textTransform: "uppercase",
+                marginBottom: "3px",
+              }}
+            >
+              {output.case || "DELIVERABLE ARTIFACT"}
+            </div>
+            <h3
+              style={{
+                margin: 0,
+                fontSize: "17px",
+                fontWeight: 700,
+                color: "#162e28",
+                fontFamily: "var(--font-geist-mono), monospace",
+              }}
+            >
+              {output.name}
+            </h3>
           </div>
-          <button className="icon-button" onClick={onClose}><X size={16} /></button>
+          <button
+            type="button"
+            className="icon-button"
+            onClick={onClose}
+            style={{
+              padding: "6px",
+              borderRadius: "5px",
+              background: "#f0f5f2",
+              border: "1px solid #dbe6e1",
+              cursor: "pointer",
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+            }}
+            title="Close modal"
+          >
+            <X size={16} color="#27463f" />
+          </button>
         </div>
 
-        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", margin: "12px 0" }}>
-          <div style={{ display: "flex", gap: "6px" }}>
+        <div
+          style={{
+            display: "flex",
+            justifyContent: "space-between",
+            alignItems: "center",
+            marginBottom: "12px",
+            flexWrap: "wrap",
+            gap: "10px",
+          }}
+        >
+          <div
+            style={{
+              display: "inline-flex",
+              gap: "4px",
+              background: "#eef5f2",
+              padding: "3px",
+              borderRadius: "6px",
+              border: "1px solid #dbe6e1",
+            }}
+          >
             <button
               type="button"
-              className={modalView === "formatted" ? "primary-button" : "plain-button"}
-              style={{ fontSize: "11px", padding: "4px 10px" }}
+              style={{
+                fontSize: "11px",
+                fontWeight: 650,
+                padding: "5px 13px",
+                borderRadius: "4px",
+                border: "none",
+                cursor: "pointer",
+                background: modalView === "formatted" ? "#185d54" : "transparent",
+                color: modalView === "formatted" ? "#ffffff" : "#45615a",
+                transition: "all 0.15s ease",
+              }}
               onClick={() => setModalView("formatted")}
             >
               Structured Document
             </button>
             <button
               type="button"
-              className={modalView === "raw" ? "primary-button" : "plain-button"}
-              style={{ fontSize: "11px", padding: "4px 10px" }}
+              style={{
+                fontSize: "11px",
+                fontWeight: 650,
+                padding: "5px 13px",
+                borderRadius: "4px",
+                border: "none",
+                cursor: "pointer",
+                display: "inline-flex",
+                alignItems: "center",
+                gap: "5px",
+                background: modalView === "raw" ? "#185d54" : "transparent",
+                color: modalView === "raw" ? "#ffffff" : "#45615a",
+                transition: "all 0.15s ease",
+              }}
               onClick={() => setModalView("raw")}
             >
-              <Code2 size={12} /> Raw Markdown
+              <Code2 size={13} /> Raw Markdown
             </button>
           </div>
           <span style={{ fontSize: "11px", color: "#6a7c76" }}>
-            Produced by {output.produced_by}
+            Produced by <strong style={{ color: "#1a3b34" }}>{output.produced_by}</strong>
           </span>
         </div>
 
-        {modalView === "formatted" ? (
-          <FormattedDocumentPreview content={textContent} />
-        ) : (
-          <pre
-            style={{
-              maxHeight: "420px",
-              overflowY: "auto",
-              fontFamily: "var(--font-geist-mono), monospace",
-              fontSize: "11px",
-              whiteSpace: "pre-wrap",
-              background: "#1b2d29",
-              color: "#e4f0ec",
-              padding: "16px",
-              borderRadius: "6px",
-            }}
-          >
-            {textContent}
-          </pre>
-        )}
+        <div style={{ flex: 1, minHeight: 0, overflow: "hidden", display: "flex", flexDirection: "column" }}>
+          {modalView === "formatted" ? (
+            <FormattedDocumentPreview content={textContent} />
+          ) : (
+            <pre
+              style={{
+                flex: 1,
+                maxHeight: "56vh",
+                overflowY: "auto",
+                fontFamily: "var(--font-geist-mono), monospace",
+                fontSize: "11px",
+                lineHeight: "1.65",
+                whiteSpace: "pre-wrap",
+                background: "#162522",
+                color: "#e2eee9",
+                padding: "18px 22px",
+                borderRadius: "6px",
+                border: "1px solid #233b35",
+                margin: 0,
+              }}
+            >
+              {textContent}
+            </pre>
+          )}
+        </div>
 
-        <div className="wizard-foot" style={{ marginTop: "16px", display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: "8px" }}>
+        <div
+          style={{
+            marginTop: "16px",
+            paddingTop: "14px",
+            borderTop: "1px solid #eef3f0",
+            display: "flex",
+            justifyContent: "space-between",
+            alignItems: "center",
+            flexWrap: "wrap",
+            gap: "10px",
+          }}
+        >
           <div style={{ display: "flex", gap: "8px" }}>
-            <button className="secondary-button" onClick={copyContent}>
+            <button
+              type="button"
+              className="secondary-button"
+              onClick={copyContent}
+              style={{ fontSize: "11px", padding: "6px 12px" }}
+            >
               {copied ? <Check size={14} color="#236f66" /> : <Copy size={14} />} {copied ? "Copied" : "Copy"}
             </button>
-            <button className="secondary-button" onClick={downloadOutput}>
+            <button
+              type="button"
+              className="secondary-button"
+              onClick={downloadOutput}
+              style={{ fontSize: "11px", padding: "6px 12px" }}
+            >
               <Download size={14} /> Download
             </button>
           </div>
-          <div style={{ display: "flex", gap: "8px" }}>
-            {isProposal && onOpenDossier && (
-              <button className="primary-button" onClick={() => onOpenDossier("gov_cloud")} style={{ fontSize: "11px" }}>
-                <FileText size={13} /> View in Dossier Studio
-              </button>
-            )}
-            {isCase6 && onOpenDossier && (
-              <button className="primary-button" onClick={() => onOpenDossier("case6")} style={{ fontSize: "11px", background: "#b44426" }}>
-                <ShieldAlert size={13} /> View in Case 6 Dossier
-              </button>
-            )}
-            {isAzureIncident && onOpenDossier && (
-              <button className="primary-button" onClick={() => onOpenDossier("azure")} style={{ fontSize: "11px", background: "#6b338e" }}>
-                <ShieldAlert size={13} /> View in Azure AD Dossier
-              </button>
-            )}
-            {isK8sIncident && onOpenDossier && (
-              <button className="primary-button" onClick={() => onOpenDossier("k8s")} style={{ fontSize: "11px", background: "#1f4870" }}>
-                <ShieldAlert size={13} /> View in K8s Dossier
-              </button>
-            )}
-            {isSocIncident && onOpenDossier && (
-              <button className="primary-button" onClick={() => onOpenDossier("soc")} style={{ fontSize: "11px", background: "#b44426" }}>
-                <ShieldAlert size={13} /> View in Host Ransomware Dossier
-              </button>
-            )}
-            {isApt && onOpenDossier && (
-              <button className="primary-button" onClick={() => onOpenDossier("apt")} style={{ fontSize: "11px", background: "#b44426" }}>
-                <ShieldAlert size={13} /> View in APT Dossier
-              </button>
-            )}
-            <button className="plain-button" onClick={onClose}>Close</button>
-          </div>
+          <button
+            type="button"
+            className="plain-button"
+            onClick={onClose}
+            style={{
+              fontSize: "11px",
+              padding: "6px 14px",
+              borderRadius: "4px",
+              background: "#f0f5f2",
+              border: "1px solid #dce8e2",
+              color: "#28443e",
+              fontWeight: 600,
+              cursor: "pointer",
+            }}
+          >
+            Close
+          </button>
         </div>
       </section>
     </div>
