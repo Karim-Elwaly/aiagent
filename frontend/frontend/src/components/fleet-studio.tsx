@@ -166,13 +166,13 @@ export default function FleetStudio() {
 
   useEffect(() => {
     function handleClickOutside(event: MouseEvent) {
-      if (estateInfoRef.current && !estateInfoRef.current.contains(event.target as Node)) {
+      if (estateInfoRef.current && !estateInfoRef.current.contains(event.target as globalThis.Node)) {
         setEstateInfoOpen(false);
       }
-      if (profileMenuRef.current && !profileMenuRef.current.contains(event.target as Node)) {
+      if (profileMenuRef.current && !profileMenuRef.current.contains(event.target as globalThis.Node)) {
         setProfileMenuOpen(false);
       }
-      if (notificationsRef.current && !notificationsRef.current.contains(event.target as Node)) {
+      if (notificationsRef.current && !notificationsRef.current.contains(event.target as globalThis.Node)) {
         setNotificationsOpen(false);
       }
     }

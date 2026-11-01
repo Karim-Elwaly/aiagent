@@ -608,10 +608,10 @@ export function FleetRoster({
 
   useEffect(() => {
     function handleClickOutside(event: MouseEvent) {
-      if (rosterMenuRef.current && !rosterMenuRef.current.contains(event.target as Node)) {
+      if (rosterMenuRef.current && !rosterMenuRef.current.contains(event.target as globalThis.Node)) {
         setRosterMenuOpen(false);
       }
-      if (missionMenuRef.current && !missionMenuRef.current.contains(event.target as Node)) {
+      if (missionMenuRef.current && !missionMenuRef.current.contains(event.target as globalThis.Node)) {
         setMissionMenuOpen(false);
       }
     }

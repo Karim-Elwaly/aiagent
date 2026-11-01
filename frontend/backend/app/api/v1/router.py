@@ -813,6 +813,7 @@ async def list_rooms(session: AsyncSession = Depends(get_session)):
             "created_at": row.created_at,
             "decided_by": row.decided_by,
             "decision_note": row.decision_note,
+            "resolved_at": row.resolved_at,
         }
         for row in rows
     ]
