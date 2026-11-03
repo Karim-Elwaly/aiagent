@@ -103,7 +103,7 @@ class MissionConstraints(BaseModel):
     data_residency: str = "local"
     cloud_access_allowed: bool = False
     daily_budget_usd: float = Field(default=25, ge=0)
-    task_complexity: int = Field(default=3, ge=1, le=5)
+    task_complexity: int = Field(default=3, ge=1)
     execution_frequency: str = "daily"
     external_action_approval: bool = True
 
@@ -118,7 +118,7 @@ class MissionCreate(BaseModel):
 
 class Mission(MissionCreate):
     mission_id: str = Field(default_factory=lambda: str(uuid4()))
-    status: Literal["INTAKE", "DESIGNING", "READY"] = "INTAKE"
+    status: str = "INTAKE"
 
 
 class ClarifyingAnswers(BaseModel):

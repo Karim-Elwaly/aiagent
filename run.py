@@ -201,12 +201,9 @@ def main():
     web_ui_online = check_port("localhost", 8234, timeout=0.5)
     t_web_status = "http://localhost:8234 (Online)" if web_ui_online else "Offline (start Docker Desktop & run 'docker compose up -d postgresql temporal temporal-ui')"
 
-    fleet_studio_online = check_port("localhost", 3000, timeout=0.5)
-    fleet_status = "http://localhost:3000 (Online)" if fleet_studio_online else "http://localhost:3000 (Start with: cd frontend/frontend && npm run dev)"
 
     print("\n" + "=" * 60)
     print(f"  🚀 AgentHub Mission Control: http://localhost:{api_port}")
-    print(f"  🛰️  Fleet Studio UI:         {fleet_status}")
     print(f"  📚 Swagger API Docs:        http://localhost:{api_port}/docs")
     print(f"  ⏱️  Temporal Web UI:         {t_web_status}")
     print("=" * 60)

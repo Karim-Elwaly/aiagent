@@ -1,13 +1,22 @@
+from pathlib import Path
 from pydantic import Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 from app.schemas.domain import RiskLevel
 
+_BASE_DIR = Path(__file__).resolve().parent.parent.parent
+_ENV_FILE = _BASE_DIR / ".env"
+_DEFAULT_DB_FILE = (_BASE_DIR / "fleet_studio.db").as_posix()
+
 
 class Settings(BaseSettings):
-    model_config = SettingsConfigDict(env_file=".env", env_prefix="FLEET_STUDIO_", extra="ignore")
+    model_config = SettingsConfigDict(
+        env_file=str(_ENV_FILE) if _ENV_FILE.exists() else ".env",
+        env_prefix="FLEET_STUDIO_",
+        extra="ignore",
+    )
 
-    database_url: str = "postgresql+asyncpg://fleet:fleet@localhost:5432/fleet_studio"
+    database_url: str = f"sqlite+aiosqlite:///{_DEFAULT_DB_FILE}"
     auth_required: bool = False
     session_secret: str = "local-development-only-change-me"
     oidc_client_id: str = ""

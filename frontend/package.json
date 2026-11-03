@@ -1,0 +1,13 @@
+{
+  "name": "fleet-studio",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Fleet Studio — Desired-state governance and assurance for agent fleets",
+  "scripts": {
+    "dev": "npm --prefix frontend run dev",
+    "build": "npm --prefix frontend run build",
+    "start": "npm --prefix frontend run start",
+    "lint": "npm --prefix frontend run lint"
+  }
+}
+

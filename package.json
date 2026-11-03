@@ -1,11 +1,9 @@
 {
-  "name": "aiagent-workspace",
+  "name": "aiagent",
   "version": "1.0.0",
-  "description": "AgentHub & Fleet Studio Workspace",
+  "description": "AgentHub — Universal Agent Orchestration System",
   "scripts": {
-    "dev": "npm --prefix frontend/frontend run dev",
-    "build": "npm --prefix frontend/frontend run build",
-    "start": "npm --prefix frontend/frontend run start",
-    "backend": "powershell -ExecutionPolicy Bypass -File .\\start.ps1"
+    "backend": "powershell -ExecutionPolicy Bypass -File .\\start.ps1",
+    "start": "powershell -ExecutionPolicy Bypass -File .\\start.ps1"
   }
 }
