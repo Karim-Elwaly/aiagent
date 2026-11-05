@@ -338,6 +338,20 @@ export default function FleetStudio() {
     return () => clearInterval(interval);
   }, [view, missionRecords]);
 
+  // Continuously synchronize mission records when any mission is running or executing
+  useEffect(() => {
+    const hasRunning = missionRecords.some((m) => m.status === "RUNNING") || Boolean(activeExecution);
+    if (!hasRunning) return;
+    const interval = setInterval(() => {
+      void fetch(`${API_BASE}/api/v1/missions`, { credentials: "include" })
+        .then((r) => (r.ok ? r.json() : null))
+        .then((d) => {
+          if (d) setMissionRecords(d);
+        });
+    }, 2000);
+    return () => clearInterval(interval);
+  }, [missionRecords, activeExecution]);
+
   const pending = rooms.filter((room) => room.status === "Pending").length;
   const selectedAgent = roster.find((agent) => agent.id === agentId) ?? roster[0];
   const selectedRoom = rooms.find((room) => room.id === roomId);
@@ -1218,6 +1232,22 @@ export default function FleetStudio() {
         workflowId={activeExecution.workflowId}
         missionName={activeExecution.missionName}
         onClose={() => setActiveExecution(null)}
+        onComplete={() => {
+          void fetch(`${API_BASE}/api/v1/missions`, { credentials: "include" })
+            .then((r) => (r.ok ? r.json() : null))
+            .then((d) => {
+              if (d) setMissionRecords(d);
+            });
+          void fetch(`${API_BASE}/api/v1/outputs`, { credentials: "include" })
+            .then((r) => (r.ok ? r.json() : null))
+            .then((d) => {
+              if (d) {
+                const map = new Map();
+                for (const item of d) map.set(item.id, item);
+                setOutputs(Array.from(map.values()));
+              }
+            });
+        }}
       />
     )}
     {inspectedMission && <div className="modal-shade"><section className="wizard" role="dialog" aria-modal="true" aria-labelledby="mission-details-title"><div className="wizard-head"><span>MISSION DETAILS</span><button className="icon-button" aria-label="Close mission details" onClick={() => setInspectedMission(null)}><X size={18} /></button></div><h2 id="mission-details-title">{inspectedMission.name}</h2><p>{inspectedMission.goal}</p><dl className="mission-details"><dt>Mission ID</dt><dd>{inspectedMission.mission_id}</dd><dt>State</dt><dd>{inspectedMission.status}</dd><dt>Fleet benchmarking</dt><dd>{inspectedMission.competitive_benchmarking ? "Enabled" : "Disabled"}</dd></dl><div className="wizard-foot"><button className="secondary-button" onClick={() => downloadMission(inspectedMission)}>Download mission JSON</button><div style={{ display: "flex", gap: "8px" }}>{inspectedMission.status !== "READY" && inspectedMission.status !== "APPLIED" && <button className="primary-button" onClick={() => void resumeMission(inspectedMission)}><Sparkles size={14} /> Continue design</button>}<button className="plain-button" onClick={() => setInspectedMission(null)}>Close</button></div></div></section></div>}

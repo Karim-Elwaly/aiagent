@@ -30,11 +30,15 @@ class Settings(BaseSettings):
     hermes_tool_risk_overrides: dict[str, RiskLevel] = Field(default_factory=dict)
     hermes_hooks_enabled: bool = False
     hermes_cycle_timeout_seconds: int = 600
+    hermes_generation_timeout_seconds: int = 120
     hermes_home: str = ""
+    hermes_model: str = ""
+    hermes_provider: str = ""
     max_hermes_profiles: int = 25
     llm_base_url: str = ""
     llm_model: str = "qwen/qwen3.8-27b"
     llm_timeout_seconds: float = 15.0
+    llm_fallback_enabled: bool = False
     daemon_token: str = ""
     webhook_secret: str = ""
     smtp_host: str = ""

@@ -59,6 +59,10 @@ export function LiveExecutionDock({
   const [approvalBusy, setApprovalBusy] = useState(false);
 
   const scrollRef = useRef<HTMLDivElement | null>(null);
+  const onCompleteRef = useRef(onComplete);
+  onCompleteRef.current = onComplete;
+  const activeAgentRef = useRef(activeAgent);
+  activeAgentRef.current = activeAgent;
 
   // Timer
   useEffect(() => {
@@ -104,7 +108,7 @@ export function LiveExecutionDock({
                 type: "task_start",
                 agent: agentName,
                 task: taskName,
-                message: `Starting task: ${taskName}`,
+                message: raw.message || `Starting task: ${taskName}`,
               },
             ]);
           } else if (raw.type === "approval_required" || raw.event === "approval_required") {
@@ -142,7 +146,7 @@ export function LiveExecutionDock({
                 id: `log-${Date.now()}-${Math.random()}`,
                 timestamp: nowStr,
                 type: "task_complete",
-                message: `Task completed successfully: ${raw.task_id || ""}`,
+                message: raw.message || `Task completed successfully: ${raw.task_id || ""}`,
               },
             ]);
           } else if (raw.type === "workflow_completed" || raw.status === "completed") {
@@ -156,7 +160,7 @@ export function LiveExecutionDock({
                 message: "✓ Workflow finished successfully. Final output dispatched.",
               },
             ]);
-            onComplete?.();
+            onCompleteRef.current?.();
           } else if (raw.type === "workflow_failed" || raw.status === "failed") {
             setStatus("failed");
             setLogs((prev) => [
@@ -176,7 +180,7 @@ export function LiveExecutionDock({
                 id: `log-${Date.now()}-${Math.random()}`,
                 timestamp: nowStr,
                 type: raw.thought ? "step" : "info",
-                agent: raw.agent_name || activeAgent,
+                agent: raw.agent_name || activeAgentRef.current,
                 message: msg,
               },
             ]);
@@ -202,7 +206,7 @@ export function LiveExecutionDock({
     return () => {
       unsubscribe();
     };
-  }, [workflowId, activeAgent, onComplete]);
+  }, [workflowId]);
 
   // Auto-scroll logs to bottom
   useEffect(() => {

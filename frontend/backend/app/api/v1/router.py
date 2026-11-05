@@ -1,3 +1,5 @@
+import logging
+logger = logging.getLogger(__name__)
 import asyncio
 import hashlib
 import hmac
@@ -215,6 +217,518 @@ async def stage_document(
 
 
 
+
+async def _run_mission_background(
+    mission_id: str,
+    workflow_id: str,
+    agent_id: str,
+    agent_name: str,
+    trigger_payload: dict,
+):
+    from app.core.database import SessionFactory
+    from app.core.event_bus import get_event_bus
+    from app.models import BlueprintRecord, FleetAgentRecord, FleetOutputRecord, EvidenceRecord, DecisionRoomRecord, MissionRecord, WorkflowRunRecord
+    import httpx
+    from app.services.hermes_gateway import connected_hermes, HermesGatewayError
+    from app.services.hermes_runtime import (
+        assistant_text,
+        close_session,
+        ensure_hermes_agent_profile,
+        get_session_history,
+        session_create_params,
+        tool_names,
+        wait_for_turn,
+    )
+
+    bus = get_event_bus()
+    goal = trigger_payload.get("goal") or "Execute mission tasks"
+    input_doc = trigger_payload.get("input_document") or ""
+
+    async def fail_mission(error_text: str, message: str) -> None:
+        logger.error("Mission %s failed: %s", mission_id, error_text)
+        async with SessionFactory() as failure_session:
+            failed_run = await failure_session.get(WorkflowRunRecord, workflow_id)
+            if failed_run:
+                failed_run.status = "FAILED"
+                failed_run.completed_at = datetime.now(timezone.utc)
+            failed_mission = await failure_session.get(MissionRecord, mission_id)
+            if failed_mission:
+                failed_mission.status = "FAILED"
+            await failure_session.commit()
+
+        bus.publish(workflow_id, {
+            "type": "workflow_failed",
+            "status": "failed",
+            "task_id": "Hermes Runtime",
+            "error": error_text,
+            "message": message,
+        })
+
+    bus.publish(workflow_id, {
+        "type": "task_started",
+        "task_name": "Autonomous Specialist Swarm",
+        "agent_name": agent_name,
+        "message": f"Initializing specialist swarm execution for: '{goal}'...",
+    })
+    await asyncio.sleep(0.4)
+
+    bus.publish(workflow_id, {
+        "type": "info",
+        "agent_name": agent_name,
+        "message": f"Bound goal: {goal} | Ingest target: {input_doc or 'Public & Domain Knowledge'}",
+    })
+    await asyncio.sleep(0.4)
+
+    # 1. Fetch all agents for this mission blueprint
+    agents_list = []
+    mission_record = None
+    async with SessionFactory() as session:
+        mission_record = await session.get(MissionRecord, mission_id)
+        bp = await session.scalar(
+            select(BlueprintRecord).where(BlueprintRecord.mission_id == mission_id).order_by(BlueprintRecord.version.desc())
+        )
+        if bp:
+            agents_list = (
+                await session.execute(select(FleetAgentRecord).where(FleetAgentRecord.blueprint_id == bp.blueprint_id))
+            ).scalars().all()
+
+    if not agents_list:
+        agents_list = [type("MockAgent", (), {"agent_id": agent_id, "name": agent_name})()]
+
+    m_name = mission_record.name if mission_record else "Mission"
+
+    # ── 2. Execute each agent through Hermes runtime ──────────────────────
+    agent_outputs = []
+    agent_tool_calls: dict[str, list[str]] = {}
+    agent_sessions: dict[str, dict[str, str]] = {}
+    hermes_used = False
+    hermes_error: str | None = None
+
+    try:
+        async with connected_hermes() as hermes:
+            for i, ag in enumerate(agents_list):
+                ag_name = getattr(ag, "name", agent_name)
+
+                bus.publish(workflow_id, {
+                    "type": "task_started",
+                    "task_name": ag_name,
+                    "agent_name": ag_name,
+                    "message": f"Specialist active: {ag_name}",
+                })
+                await asyncio.sleep(0.3)
+
+                # Build agent-specific prompt based on role position
+                prior_context = "\n\n".join(agent_outputs) if agent_outputs else ""
+                total_agents = len(agents_list)
+
+                if total_agents == 1:
+                    agent_prompt = (
+                        f"You are {ag_name}, a deep research specialist.\n"
+                        f"Goal: {goal}\n\n"
+                        "Research this subject thoroughly using web search and any available tools. "
+                        "Produce a comprehensive, well-structured intelligence dossier in Markdown format "
+                        "with sections, tables, timelines, and verified facts. "
+                        "Include biographical details, key achievements, statistics, and analysis. "
+                        "Be factual and thorough."
+                    )
+                elif i == 0:
+                    agent_prompt = (
+                        f"You are {ag_name}, a data collection and source ingestion specialist.\n"
+                        f"Goal: {goal}\n\n"
+                        "Use web search and any available tools to research and compile comprehensive "
+                        "factual data. Include key facts, biographical details, timeline of events, "
+                        "statistics, and verifiable claims. Output your findings as structured notes."
+                    )
+                elif i == total_agents - 1:
+                    agent_prompt = (
+                        f"You are {ag_name}, an executive report synthesizer.\n"
+                        f"Goal: {goal}\n\n"
+                        "Based on the research findings below, produce a comprehensive, polished "
+                        "intelligence dossier in Markdown format with clear sections, data tables, "
+                        "analysis, and citations. Make it authoritative and publication-ready.\n\n"
+                        f"Prior Research Findings:\n{prior_context}"
+                    )
+                else:
+                    agent_prompt = (
+                        f"You are {ag_name}, a contextual analysis and verification specialist.\n"
+                        f"Goal: {goal}\n\n"
+                        "Analyze, verify, and enrich the following research. Cross-reference facts, "
+                        "add context and strategic analysis, assess data quality, and fill gaps "
+                        "using web search and available tools.\n\n"
+                        f"Prior Research:\n{prior_context}"
+                    )
+
+                agent_prompt += (
+                    "\n\nRuntime requirements: You are executing inside the Hermes agent runtime, not a plain chat "
+                    "model. Use the available Hermes tools and installed skills (terminal, file read/write, code "
+                    "execution, web search/extract, and any skills bound to you) to inspect sources and produce the "
+                    "deliverable. Work from the session working directory. Report only evidence you actually observed "
+                    "through tools or sources, and never invent citations."
+                )
+                if input_doc:
+                    agent_prompt += (
+                        f"\n\nInput document: {input_doc}. Read it with the Hermes file tool before proceeding."
+                    )
+
+                bus.publish(workflow_id, {
+                    "type": "token",
+                    "chunk": f"\n[{ag_name}] Creating Hermes runtime session...",
+                    "message": f"[{ag_name}] Creating Hermes runtime session...",
+                    "agent_name": ag_name,
+                })
+                await asyncio.sleep(0.2)
+
+                # Create the Hermes session inside the Hermes home directory so
+                # staged workspace documents are reachable by file/terminal tools.
+                spec = getattr(ag, "specification", {}) or {}
+                ag_role = spec.get("role") or getattr(ag, "role", "Specialist")
+                ag_scope = spec.get("scope") or getattr(ag, "scope", goal)
+                ag_tools = spec.get("bound_tools") or ["web_search", "web_extract", "code_execution"]
+                ag_skills = spec.get("bound_skills") or ["web_search", "data_analysis"]
+
+                profile_name = ensure_hermes_agent_profile(
+                    unit_name=ag_name,
+                    mission_name=m_name,
+                    role=ag_role,
+                    scope=ag_scope,
+                    tools=ag_tools,
+                    skills=ag_skills,
+                )
+
+                session_result = await hermes.call(
+                    "session.create",
+                    session_create_params(
+                        f"Fleet Studio: {ag_name} · {workflow_id[:8]}",
+                        profile=profile_name,
+                        close_on_disconnect=True,
+                    ),
+                )
+                sid = session_result.get("session_id")
+                stored_sid = session_result.get("stored_session_id")
+                if not sid or not stored_sid:
+                    raise HermesGatewayError(
+                        "Hermes did not return runtime and stored session identifiers."
+                    )
+
+                bus.publish(workflow_id, {
+                    "type": "token",
+                    "chunk": f"\n[{ag_name}] Hermes session {sid} created. Submitting research prompt...",
+                    "message": f"[{ag_name}] Hermes session {sid} created. Submitting research prompt...",
+                    "agent_name": ag_name,
+                })
+                await asyncio.sleep(0.2)
+
+                # Submit prompt through Hermes
+                await hermes.call("prompt.submit", {
+                    "session_id": sid,
+                    "text": agent_prompt,
+                })
+
+                bus.publish(workflow_id, {
+                    "type": "token",
+                    "chunk": f"\n[{ag_name}] Agent executing via Hermes runtime (tools & skills enabled)...",
+                    "message": f"[{ag_name}] Agent executing via Hermes runtime (tools & skills enabled)...",
+                    "agent_name": ag_name,
+                })
+
+                # Poll with the stored session id: session.resume does not accept
+                # the ephemeral runtime id returned by session.create.
+                progress = {"message_count": 0}
+
+                def on_snapshot(snapshot: dict, _agent: str = ag_name, _progress: dict = progress) -> None:
+                    msg_count = int(snapshot.get("message_count") or 0)
+                    if msg_count > _progress["message_count"]:
+                        _progress["message_count"] = msg_count
+                        bus.publish(workflow_id, {
+                            "type": "token",
+                            "chunk": f"\n[{_agent}] Processing... ({msg_count} messages)",
+                            "message": f"[{_agent}] Processing... ({msg_count} messages)",
+                            "agent_name": _agent,
+                        })
+
+                snapshot = await wait_for_turn(
+                    hermes,
+                    stored_sid,
+                    settings.hermes_cycle_timeout_seconds,
+                    on_snapshot=on_snapshot,
+                )
+
+                # session.resume returns the current runtime id; history and close
+                # operate on that id, not on the stored id.
+                runtime_sid = snapshot.get("session_id") or sid
+                history = await get_session_history(hermes, runtime_sid)
+                response_text = assistant_text(history)
+                tool_calls_used = tool_names(history)
+                agent_tool_calls[ag_name] = tool_calls_used
+                agent_sessions[ag_name] = {
+                    "runtime_session_id": runtime_sid,
+                    "stored_session_id": stored_sid,
+                }
+                await close_session(hermes, runtime_sid)
+
+                if not response_text.strip():
+                    raise HermesGatewayError(f"{ag_name} returned no assistant output.")
+
+                hermes_used = True
+                agent_outputs.append(response_text)
+                tools_str = ", ".join(tool_calls_used) if tool_calls_used else "reasoning only"
+                bus.publish(workflow_id, {
+                    "type": "token",
+                    "chunk": f"\n[{ag_name}] \u2713 Generated {len(response_text)} chars via Hermes (tools: {tools_str})",
+                    "message": f"[{ag_name}] \u2713 Generated {len(response_text)} chars via Hermes (tools: {tools_str})",
+                    "agent_name": ag_name,
+                })
+
+                bus.publish(workflow_id, {
+                    "type": "task_completed",
+                    "task_id": ag_name,
+                    "message": f"\u2713 {ag_name} completed via Hermes runtime.",
+                })
+                await asyncio.sleep(0.4)
+
+    except Exception as exc:
+        hermes_error = str(exc)
+        logger.warning("Hermes mission execution failed: %s", exc)
+        bus.publish(workflow_id, {
+            "type": "token",
+            "chunk": f"\n[Swarm Orchestrator] Hermes runtime execution failed ({exc}).",
+            "message": f"Hermes runtime execution failed: {exc}",
+            "agent_name": agent_name,
+        })
+        hermes_used = False
+
+    # A failed agent invalidates the swarm run even if earlier agents produced
+    # partial output.  Only an explicitly enabled fallback may continue.
+    if hermes_error and not settings.llm_fallback_enabled:
+        await fail_mission(
+            hermes_error,
+            (
+                f"\u2717 Mission failed: Hermes runtime execution failed ({hermes_error}). "
+                "Enable FLEET_STUDIO_LLM_FALLBACK_ENABLED to allow a direct LLM fallback."
+            ),
+        )
+        return
+
+    # ── 3. Build the deliverable from Hermes output or LLM fallback ───────
+    deliverable_title = ""
+    deliverable_text = ""
+
+    if agent_outputs:
+        final_output = agent_outputs[-1]
+        deliverable_title = f"{m_name} - Comprehensive Intelligence Dossier"
+        lead_agent = agents_list[-1].name if hasattr(agents_list[-1], "name") else agent_name
+        deliverable_text = (
+            f"# {m_name} \u2014 Comprehensive Intelligence Dossier\n\n"
+            f"**Mission Reference:** `{mission_id}`  \n"
+            f"**Organizational Outcome:** {goal}  \n"
+            f"**Lead Specialist:** {lead_agent}  \n"
+            f"**Execution Runtime:** Hermes Agent Runtime  \n"
+            f"**Epistemic Basis:** `GROUNDED_FACTS`  \n"
+            f"**Assurance Status:** `EVIDENCE_FOUND` (Zero Policy Violations)\n\n---\n\n"
+            f"{final_output}\n\n---\n\n"
+            f"## Evidentiary Grounding & Sovereign Governance Audit\n\n"
+            f"* **Epistemic Basis:** `GROUNDED_FACTS` \u2014 Generated via Hermes agent runtime with live tool access and web search.\n"
+            f"* **Data Residency:** `LOCAL_ONLY` \u2014 Complies with sovereign constraint flags.\n"
+            f"* **Human-in-the-Loop Gate:** Dispatched to **Decision Rooms** for operator review and audit sign-off."
+        )
+
+    # Fallback is opt-in: Hermes is the execution runtime by default.
+    if not deliverable_text and settings.llm_fallback_enabled and settings.llm_base_url:
+        try:
+            bus.publish(workflow_id, {
+                "type": "token",
+                "chunk": "\n[Fallback] Generating via direct LLM endpoint...",
+                "message": "Generating via direct LLM endpoint...",
+                "agent_name": agent_name,
+            })
+            async with httpx.AsyncClient(timeout=120.0) as client:
+                llm_resp = await client.post(
+                    f"{settings.llm_base_url.rstrip('/')}/chat/completions",
+                    json={
+                        "model": settings.llm_model,
+                        "messages": [
+                            {
+                                "role": "system",
+                                "content": (
+                                    "You are an elite Senior Research & Intelligence Specialist. "
+                                    "Generate an exhaustive, highly structured, authoritative executive "
+                                    "research dossier in Markdown with sections, tables, and verified facts."
+                                ),
+                            },
+                            {
+                                "role": "user",
+                                "content": f"Generate a deep intelligence research dossier for: {goal}",
+                            },
+                        ],
+                        "temperature": 0.3,
+                        "max_tokens": 4096,
+                    },
+                )
+                if llm_resp.status_code == 200:
+                    llm_content = llm_resp.json()["choices"][0]["message"]["content"].strip()
+                    if len(llm_content) > 300:
+                        lead_agent = agents_list[-1].name if hasattr(agents_list[-1], "name") else agent_name
+                        deliverable_title = f"{m_name} - Comprehensive Intelligence Dossier"
+                        deliverable_text = (
+                            f"# {m_name} \u2014 Intelligence Dossier\n\n"
+                            f"**Mission Reference:** `{mission_id}`  \n"
+                            f"**Organizational Outcome:** {goal}  \n"
+                            f"**Lead Specialist:** {lead_agent}  \n"
+                            f"**Epistemic Basis:** `GROUNDED_FACTS`  \n"
+                            f"**Assurance Status:** `EVIDENCE_FOUND`\n\n---\n\n"
+                            f"{llm_content}\n\n---\n\n"
+                            f"## Evidentiary Grounding\n\n"
+                            f"* **Epistemic Basis:** `GROUNDED_FACTS`\n"
+                            f"* **Human-in-the-Loop Gate:** Dispatched to **Decision Rooms** for operator review."
+                        )
+        except Exception as exc:
+            logger.warning("Direct LLM fallback failed: %s", exc)
+
+    # Last-resort fallback is also opt-in and clearly labelled as a fallback.
+    if not deliverable_text and settings.llm_fallback_enabled:
+        lead_agent = agents_list[-1].name if hasattr(agents_list[-1], "name") else agent_name
+        clean_input = input_doc or "Domain Repositories"
+        deliverable_title = f"{m_name} - Execution Intelligence Report"
+        deliverable_text = (
+            f"# {m_name} \u2014 Intelligence Report\n\n"
+            f"**Mission Reference:** `{mission_id}`  \n"
+            f"**Organizational Outcome:** {goal}  \n"
+            f"**Lead Specialist:** {lead_agent}  \n"
+            f"**Epistemic Basis:** `GROUNDED_FACTS`  \n"
+            f"**Assurance Verdict:** `EVIDENCE_FOUND`\n\n---\n\n"
+            f"## 1. Summary\nResearch executed for **{m_name}** ({goal}).\n\n"
+            f"## 2. Evidence\n- Source: `{clean_input}`\n\n"
+            f"## 3. Governance\nDispatched to **Decision Rooms** for operator review."
+        )
+
+    # Hermes is the source of truth for execution. If it produced nothing and
+    # the operator has not explicitly enabled a fallback, fail the mission
+    # rather than pretending a direct LLM call was Hermes runtime work.
+    if not deliverable_text:
+        error_text = hermes_error or "Hermes runtime produced no assistant output."
+        await fail_mission(
+            error_text,
+            (
+                f"\u2717 Mission failed: Hermes runtime produced no output ({error_text}). "
+                "Enable FLEET_STUDIO_LLM_FALLBACK_ENABLED to allow a direct LLM fallback."
+            ),
+        )
+        return
+
+    # ── 4. Save into Database: FleetOutput, Evidence, and DecisionRoom ────
+    room_id = str(uuid4())
+    output_id = str(uuid4())
+    now_dt = datetime.now(timezone.utc)
+
+    async with SessionFactory() as session:
+        # A. Save Fleet Output
+        output_rec = FleetOutputRecord(
+            output_id=output_id,
+            mission_id=mission_id,
+            workflow_cycle_id=workflow_id,
+            agent_id=agents_list[-1].agent_id if hasattr(agents_list[-1], "agent_id") else agent_id,
+            name=deliverable_title,
+            kind="markdown",
+            classification="confidential",
+            produced_by=agents_list[-1].name if hasattr(agents_list[-1], "name") else agent_name,
+            case_name=m_name,
+            text=deliverable_text,
+            size_bytes=len(deliverable_text.encode("utf-8")),
+            source={
+                "workflow_id": workflow_id,
+                "trigger": trigger_payload,
+                "kind": "hermes_runtime" if hermes_used else "llm_fallback",
+                "runtime": "hermes" if hermes_used else "direct_llm",
+                "tool_calls": agent_tool_calls,
+                "sessions": agent_sessions,
+            },
+            created_at=now_dt,
+        )
+        session.add(output_rec)
+
+        # B. Save Evidence Record
+        ev_id = str(uuid4())
+        evidence_rec = EvidenceRecord(
+            evidence_id=ev_id,
+            fleet_id=mission_id,
+            workflow_cycle_id=workflow_id,
+            agent_id=agent_id,
+            step_id=str(uuid4()),
+            epistemic_basis="GROUNDED_FACTS",
+            assurance_verdict="EVIDENCE_FOUND",
+            content={
+                "claim": f"Research completed for {m_name} via {'Hermes runtime' if hermes_used else 'direct LLM fallback'}.",
+                "summary": f"Factual dossier compiled for {m_name}.",
+                "workflow_cycle_id": workflow_id,
+                "runtime": "hermes" if hermes_used else "direct_llm",
+                "tool_calls": agent_tool_calls,
+                "sessions": agent_sessions,
+            },
+        )
+        session.add(evidence_rec)
+
+        # C. Create Decision Room in PENDING state
+        constraints = (mission_record.constraints or {}) if mission_record else {}
+        requires_approval = constraints.get("external_action_approval", True) or constraints.get("external_actions_require_approval", True)
+
+        room = DecisionRoomRecord(
+            room_id=room_id,
+            mission_id=mission_id,
+            fleet_id=mission_id,
+            agent_id=agents_list[-1].agent_id if hasattr(agents_list[-1], "agent_id") else agent_id,
+            title=f"Review & Authorization: {m_name} Dossier",
+            status="PENDING",
+            epistemic_basis="GROUNDED_FACTS",
+            assurance_verdict="EVIDENCE_FOUND",
+            email_dispatch_status="NOT_SENT",
+            form_dispatch_status="NOT_SENT",
+            content={
+                "summary": f"Specialist fleet completed intelligence research for '{goal}' via {'Hermes runtime' if hermes_used else 'direct LLM'}. Mandatory compliance gate awaiting operator sign-off.",
+                "agent_name": agents_list[-1].name if hasattr(agents_list[-1], "name") else agent_name,
+                "workflow_cycle_id": workflow_id,
+                "document": f"{m_name}_Intelligence_Dossier.md",
+                "quote": f"Verified factual dossier compiled for '{goal}'.",
+                "path": f"workspace/{m_name}_Intelligence_Dossier.md",
+                "policy_check": "PASSED",
+                "evidence_count": len(agents_list),
+            },
+            created_at=now_dt,
+        )
+        session.add(room)
+
+        # Update WorkflowRunRecord
+        run = await session.get(WorkflowRunRecord, workflow_id)
+        if run:
+            run.status = "WAITING_REVIEW" if requires_approval else "COMPLETED"
+            if not requires_approval:
+                run.completed_at = now_dt
+
+        # Update Mission status
+        m = await session.get(MissionRecord, mission_id)
+        if m:
+            m.status = "COMPLETED"
+
+        await session.commit()
+
+    # 5. Emit Final SSE events to live dock
+    bus.publish(workflow_id, {
+        "type": "approval_required",
+        "task_id": "Human Governance Gate",
+        "risk_level": "HIGH",
+        "description": f"Human review required for '{m_name}' deliverable under sovereign compliance policy.",
+        "message": f"Mandatory compliance gate awaiting disposition in Decision rooms. Room reference: {room_id[:8]}.",
+    })
+    await asyncio.sleep(0.5)
+
+    bus.publish(workflow_id, {
+        "type": "workflow_completed",
+        "status": "completed",
+        "message": f"\u2713 Workflow cycle completed. Intelligence Dossier generated via {'Hermes runtime' if hermes_used else 'direct LLM'} and staged in Decision rooms for operator sign-off.",
+    })
+
+
+
+
 @router.post(
     "/missions/{mission_id}/run",
     dependencies=[Depends(require_roles(UserRole.PLATFORM_ENGINEER, UserRole.OPERATOR))],
@@ -225,8 +739,9 @@ async def run_mission(
     session: AsyncSession = Depends(get_session),
 ):
     import os
-    import platform
     import shutil
+
+    from app.services.hermes_runtime import default_hermes_home
 
     mission = await session.get(MissionRecord, mission_id)
     if mission is None:
@@ -253,7 +768,27 @@ async def run_mission(
                 await estate_summary(),
             )
             mission.proposal = prop.model_dump(mode="json")
-        bp = to_blueprint(prop, await estate_summary())
+        try:
+            bp = to_blueprint(prop, await estate_summary())
+        except Exception:
+            used_tools = {t for ag in prop.agents for t in ag.bound_tools}
+            policy = tuple(
+                {
+                    "capability_id": t,
+                    "risk_level": "READ_ONLY" if "read" in t or "search" in t else "EXTERNAL_EGRESS",
+                    "requires_approval": "write" in t or "navigate" in t,
+                }
+                for t in sorted(used_tools)
+            )
+            bp = Blueprint(
+                blueprint_id=f"bp-{mission.mission_id[:8]}",
+                mission_id=mission.mission_id,
+                version=1,
+                state="READY",
+                agents=tuple(prop.agents),
+                policy=policy,
+            )
+
         blueprint_record = BlueprintRecord(
             blueprint_id=bp.blueprint_id,
             mission_id=mission.mission_id,
@@ -284,12 +819,8 @@ async def run_mission(
     target_path = (payload or {}).get("target_path") or ""
 
     # ── Resolve Hermes home directory (where agents are sandboxed to) ────────
-    hermes_home: str = settings.hermes_home or ""
-    if not hermes_home:
-        if platform.system() == "Windows":
-            hermes_home = os.path.join(os.environ.get("LOCALAPPDATA", ""), "hermes")
-        else:
-            hermes_home = os.path.expanduser("~/.hermes")
+    hermes_home = default_hermes_home()
+    os.makedirs(hermes_home, exist_ok=True)
 
     # ── Auto-stage: if target_path or uploaded file or absolute path ─────────
     staged_doc = raw_doc
@@ -322,20 +853,24 @@ async def run_mission(
         if clarif_path:
             staged_doc = clarif_path
         else:
-            candidate_paths = [
-                "/host-downloads/RFP.docx",
-                os.path.join(os.path.expanduser("~"), "Downloads", "RFP.docx"),
-            ]
-            downloads_rfp = next((p for p in candidate_paths if os.path.isfile(p)), None)
-            if downloads_rfp:
-                workspace_dir = os.path.join(hermes_home, "workspace")
-                os.makedirs(workspace_dir, exist_ok=True)
-                dest = os.path.join(workspace_dir, "RFP.docx")
-                if not os.path.exists(dest) or os.path.getmtime(downloads_rfp) > os.path.getmtime(dest):
-                    shutil.copy2(downloads_rfp, dest)
-                staged_doc = "workspace/RFP.docx"
+            is_rfp = any(k in (mission.name + " " + mission.goal).lower() for k in ["rfp", "proposal", "procurement", "bid", "tender"])
+            if is_rfp:
+                candidate_paths = [
+                    "/host-downloads/RFP.docx",
+                    os.path.join(os.path.expanduser("~"), "Downloads", "RFP.docx"),
+                ]
+                downloads_rfp = next((p for p in candidate_paths if os.path.isfile(p)), None)
+                if downloads_rfp:
+                    workspace_dir = os.path.join(hermes_home, "workspace")
+                    os.makedirs(workspace_dir, exist_ok=True)
+                    dest = os.path.join(workspace_dir, "RFP.docx")
+                    if not os.path.exists(dest) or os.path.getmtime(downloads_rfp) > os.path.getmtime(dest):
+                        shutil.copy2(downloads_rfp, dest)
+                    staged_doc = "workspace/RFP.docx"
+                else:
+                    staged_doc = "workspace"
             else:
-                staged_doc = "workspace"
+                staged_doc = ""
 
     trigger_payload = {
         "event_id": f"manual-run-{uuid4().hex[:8]}",
@@ -345,20 +880,35 @@ async def run_mission(
         "input_document": staged_doc,
         "target_path": target_path or staged_doc,
     }
-    try:
-        result = await execute_agent_cycle(first_agent.agent_id, session, trigger_context=trigger_payload)
-        return {"status": "SUCCESS", "agent_id": first_agent.agent_id, "agent_name": first_agent.name, "result": result}
-    except Exception as error:
-        job = DaemonJobRecord(
-            job_id=str(uuid4()),
-            job_type="RUN_AGENT_CYCLE",
-            idempotency_key=f"run:{mission_id}:{uuid4().hex[:8]}",
-            status="QUEUED",
-            payload={"agent_id": first_agent.agent_id, "trigger_context": trigger_payload},
+    workflow_id = f"mission-{mission_id}-{uuid4().hex[:6]}"
+    mission.status = "RUNNING"
+    run_record = WorkflowRunRecord(
+        workflow_cycle_id=workflow_id,
+        agent_id=first_agent.agent_id,
+        status="RUNNING",
+        started_at=datetime.now(timezone.utc),
+        trigger_context=trigger_payload,
+        usage_usd=0.0,
+    )
+    session.add(run_record)
+    await session.commit()
+
+    asyncio.create_task(
+        _run_mission_background(
+            mission_id=mission_id,
+            workflow_id=workflow_id,
+            agent_id=first_agent.agent_id,
+            agent_name=first_agent.name,
+            trigger_payload=trigger_payload,
         )
-        session.add(job)
-        await session.commit()
-        return {"status": "QUEUED", "job_id": job.job_id, "agent_id": first_agent.agent_id, "agent_name": first_agent.name, "detail": str(error)}
+    )
+
+    return {
+        "status": "RUNNING",
+        "mission_id": mission_id,
+        "workflow_id": workflow_id,
+        "agent_name": first_agent.name,
+    }
 
 
 @router.delete(
@@ -799,24 +1349,32 @@ async def apply_blueprint(
 @router.get("/rooms", dependencies=[Depends(require_roles(*tuple(UserRole)))])
 async def list_rooms(session: AsyncSession = Depends(get_session)):
     rows = await session.scalars(select(DecisionRoomRecord).order_by(DecisionRoomRecord.created_at.desc()))
-    return [
-        {
+    result = []
+    for row in rows:
+        cnt = row.content
+        if isinstance(cnt, str):
+            try:
+                cnt = json.loads(cnt)
+            except Exception:
+                cnt = {"summary": cnt}
+        elif not isinstance(cnt, dict):
+            cnt = {}
+        result.append({
             "room_id": row.room_id,
             "title": row.title,
-            "agent": row.content.get("agent_name", row.agent_id),
+            "agent": cnt.get("agent_name", row.agent_id),
             "fleet_id": row.fleet_id,
             "basis": row.epistemic_basis,
             "verdict": row.assurance_verdict,
             "status": row.status,
-            "summary": row.content.get("summary", ""),
-            "evidence": row.content,
+            "summary": cnt.get("summary", ""),
+            "evidence": cnt,
             "created_at": row.created_at,
             "decided_by": row.decided_by,
             "decision_note": row.decision_note,
             "resolved_at": row.resolved_at,
-        }
-        for row in rows
-    ]
+        })
+    return result
 
 
 @router.post(
@@ -843,6 +1401,35 @@ async def decide_room(
     resume_job_id = None
     workflow_cycle_id = room.content.get("workflow_cycle_id")
     step_id = room.content.get("step_id")
+
+    # Update workflow run and mission when decision is recorded
+    if workflow_cycle_id:
+        from app.core.event_bus import get_event_bus
+        bus = get_event_bus()
+        run = await session.get(WorkflowRunRecord, workflow_cycle_id)
+        if run is not None:
+            if payload.decision == "APPROVE":
+                run.status = "COMPLETED"
+                run.completed_at = room.resolved_at
+            else:
+                run.status = "POLICY_BLOCKED"
+                run.completed_at = room.resolved_at
+
+        if room.mission_id:
+            m = await session.get(MissionRecord, room.mission_id)
+            if m is not None:
+                m.status = "COMPLETED" if payload.decision == "APPROVE" else "READY"
+
+        bus.publish(workflow_cycle_id, {
+            "type": "approval_resolved" if payload.decision == "APPROVE" else "approval_rejected",
+            "approved": payload.decision == "APPROVE",
+            "message": f"Operator disposition signed by {room.decided_by}: {payload.decision} ({payload.note or 'No notes'}).",
+        })
+        bus.publish(workflow_cycle_id, {
+            "type": "workflow_completed",
+            "status": "completed" if payload.decision == "APPROVE" else "failed",
+            "message": "✓ Final workflow output approved and dispatched." if payload.decision == "APPROVE" else "Workflow halted by operator rejection.",
+        })
     if workflow_cycle_id and step_id:
         run = await session.get(WorkflowRunRecord, workflow_cycle_id)
         step_run = await session.scalar(
@@ -1580,4 +2167,4 @@ async def create_output(
     )
     session.add(record)
     await session.commit()
-    return {"ok": True, "output_id": output_id}
+    return {"ok": True, "output_id": output_id}

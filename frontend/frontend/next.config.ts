@@ -22,8 +22,24 @@ const nextConfig: NextConfig = {
         source: "/health",
         destination: `${FLEET_STUDIO_API}/health`,
       },
+      {
+        source: "/stream/:path*",
+        destination: `${FLEET_STUDIO_API}/stream/:path*`,
+      },
+      {
+        source: "/status/:path*",
+        destination: `${FLEET_STUDIO_API}/status/:path*`,
+      },
+      {
+        source: "/approve/:path*",
+        destination: `${FLEET_STUDIO_API}/approve/:path*`,
+      },
+      {
+        source: "/cancel/:path*",
+        destination: `${FLEET_STUDIO_API}/cancel/:path*`,
+      },
 
-      // ── 2. Orchestrator Backend (:8000) Routes (Arenas, Skills, Hermes, Schedules, Streams) ──
+      // ── 2. Orchestrator Backend (:8000) Routes (Arenas, Skills, Hermes, Schedules) ──
       {
         source: "/api/fleet/:path*",
         destination: `${UAOS_API}/api/fleet/:path*`,
@@ -43,22 +59,6 @@ const nextConfig: NextConfig = {
       {
         source: "/api/schedules",
         destination: `${UAOS_API}/api/schedules`,
-      },
-      {
-        source: "/stream/:path*",
-        destination: `${UAOS_API}/stream/:path*`,
-      },
-      {
-        source: "/status/:path*",
-        destination: `${UAOS_API}/status/:path*`,
-      },
-      {
-        source: "/approve/:path*",
-        destination: `${UAOS_API}/approve/:path*`,
-      },
-      {
-        source: "/cancel/:path*",
-        destination: `${UAOS_API}/cancel/:path*`,
       },
       {
         source: "/solve/:path*",
@@ -83,7 +83,6 @@ const nextConfig: NextConfig = {
   turbopack: {
     rules: {
       "*.css": {
-        loaders: ["@tailwindcss/turbopack"],
         as: "*.css",
       },
     },

@@ -6,7 +6,9 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 cd "$SCRIPT_DIR"
 
 PYTHON_BIN="python3"
-if [ -f "$SCRIPT_DIR/backend/.venv/bin/python" ]; then
+if [ -f "$SCRIPT_DIR/../.venv/bin/python" ]; then
+    PYTHON_BIN="$SCRIPT_DIR/../.venv/bin/python"
+elif [ -f "$SCRIPT_DIR/backend/.venv/bin/python" ]; then
     PYTHON_BIN="$SCRIPT_DIR/backend/.venv/bin/python"
 fi
 

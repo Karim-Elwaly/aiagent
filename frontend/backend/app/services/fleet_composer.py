@@ -1,4 +1,3 @@
-import asyncio
 import json
 import logging
 import re
@@ -670,50 +669,50 @@ async def _generate_fleet_via_hermes(
 ) -> FleetProposal | None:
     """Ask the connected Hermes gateway to synthesize an elite multi-agent fleet."""
     try:
-        from app.services.hermes_gateway import HermesGatewayError, connected_hermes
+        from app.services.hermes_gateway import connected_hermes
+        from app.services.hermes_runtime import (
+            assistant_text,
+            close_session,
+            get_session_history,
+            provider_ready,
+            session_create_params,
+            wait_for_turn,
+        )
+
         async with connected_hermes() as hermes:
-            setup = await hermes.call("setup.status")
-            if not setup.get("provider_configured"):
-                logger.info("Hermes inference provider unconfigured; using heuristic composer.")
+            if not await provider_ready(hermes):
+                logger.info("Hermes has no usable current provider; using heuristic composer.")
                 return None
 
             created = await hermes.call(
                 "session.create",
-                {
-                    "title": f"Fleet Architecture: {mission.name}",
-                    "source": "fleet-studio",
-                    "close_on_disconnect": True,
-                },
+                session_create_params(
+                    f"Fleet Architecture: {mission.name}",
+                    close_on_disconnect=True,
+                ),
             )
             session_id = created.get("session_id")
-            if not session_id:
+            stored_session_id = created.get("stored_session_id")
+            if not session_id or not stored_session_id:
                 return None
 
             combined = f"{prompt}\n\nSynthesize the fleet proposal now. Respond ONLY with the raw JSON object."
             await hermes.call("prompt.submit", {"session_id": session_id, "text": combined})
 
-            deadline = asyncio.get_event_loop().time() + 25.0
-            while asyncio.get_event_loop().time() < deadline:
-                snap = await hermes.call(
-                    "session.resume",
-                    {"session_id": session_id, "lazy": True, "omit_messages": True},
-                )
-                status = str(snap.get("status") or "").lower()
-                if snap.get("running") is False or status in {"idle", "completed", "complete", "stopped"}:
-                    break
-                await asyncio.sleep(1.0)
+            snapshot = await wait_for_turn(
+                hermes,
+                stored_session_id,
+                settings.hermes_generation_timeout_seconds,
+                poll_interval=1.0,
+            )
+            runtime_session_id = snapshot.get("session_id") or session_id
+            history = await get_session_history(hermes, runtime_session_id)
+            await close_session(hermes, runtime_session_id)
 
-            history = await hermes.call("session.history", {"session_id": session_id})
-            try:
-                await hermes.call("session.delete", {"session_id": session_id})
-            except Exception:
-                pass
-
-            for msg in reversed(history.get("messages", [])):
-                if msg.get("role") == "assistant":
-                    content = msg.get("content")
-                    raw = content if isinstance(content, str) else "\n".join(str(i.get("text", i)) for i in content if isinstance(i, dict))
-                    return _parse_fleet_json(raw, mission, inventory)
+            raw = assistant_text(history)
+            if not raw:
+                return None
+            return _parse_fleet_json(raw, mission, inventory)
     except Exception as exc:
         logger.info("Hermes LLM fleet synthesis bypassed (%s); falling back to heuristic composer.", exc)
         return None

@@ -1,9 +1,7 @@
 from __future__ import annotations
 
-import asyncio
 import json
 import re
-import time
 from datetime import datetime, timezone
 from uuid import uuid4
 
@@ -28,6 +26,13 @@ from app.schemas.domain import AssuranceVerdict, EpistemicBasis, EvidenceCreate
 from app.services.assurance import verify_evidence
 from app.services.estate_discovery import estate_summary
 from app.services.hermes_gateway import HermesGatewayError, connected_hermes
+from app.services.hermes_runtime import (
+    assistant_text as _assistant_text,
+    flatten_content as _flatten_content,
+    get_session_history,
+    session_create_params,
+    wait_for_turn as _wait_for_turn,
+)
 
 tracer = trace.get_tracer("fleet-studio.workflow")
 
@@ -38,27 +43,9 @@ async def _hermes_rpc(hermes, method: str, params: dict, correlation: dict, time
         return await hermes.call(method, params, timeout=timeout)
 
 
-def _flatten_content(value) -> str:
-    if isinstance(value, str):
-        return value
-    if isinstance(value, list):
-        return "\n".join(
-            str(item.get("text", "")) if isinstance(item, dict) else str(item)
-            for item in value
-        )
-    return ""
-
-
 def _redact_transcript(text: str) -> str:
     text = re.sub(r"[\w.+-]+@[\w.-]+\.[A-Za-z]{2,}", "[redacted email]", text)
     return re.sub(r"\b(?:\+?\d[\d ()-]{7,}\d)\b", "[redacted phone]", text)
-
-
-def _assistant_text(history: dict) -> str:
-    for message in reversed(history.get("messages", [])):
-        if message.get("role") == "assistant":
-            return _flatten_content(message.get("content"))
-    return ""
 
 
 def _transcript_text(history: dict) -> str:
@@ -89,23 +76,6 @@ def _find_output(text: str) -> dict:
             return value if isinstance(value, dict) else {}
         except json.JSONDecodeError:
             return {}
-
-
-async def _wait_for_turn(hermes, session_id: str, timeout_seconds: int, correlation: dict) -> None:
-    deadline = time.monotonic() + timeout_seconds
-    while time.monotonic() < deadline:
-        snapshot = await _hermes_rpc(
-            hermes,
-            "session.resume",
-            {"session_id": session_id, "lazy": True, "omit_messages": True},
-            correlation,
-            timeout=30,
-        )
-        status = str(snapshot.get("status") or "").lower()
-        if snapshot.get("running") is False or status in {"idle", "completed", "complete", "stopped"}:
-            return
-        await asyncio.sleep(2)
-    raise TimeoutError("Hermes workflow cycle timed out.")
 
 
 async def execute_agent_cycle(agent_id: str, session: AsyncSession, trigger_context: dict | None = None) -> dict:
@@ -221,25 +191,25 @@ async def execute_agent_cycle(agent_id: str, session: AsyncSession, trigger_cont
                     correlation,
                     timeout=60,
                 )
-                session_id = resumed.get("session_id")
+                session_id = resumed.get("session_id") or run.hermes_session_id
                 stored_session_id = resumed.get("stored_session_id") or run.hermes_stored_session_id
             else:
                 created = await _hermes_rpc(
                     hermes,
                     "session.create",
-                    {
-                        "title": f"Fleet Studio: {agent.name} · {cycle_id[:8]}",
-                        "source": "fleet-studio",
-                        "model": llm.get("version"),
-                        "provider": llm.get("family"),
-                        "close_on_disconnect": False,
-                    },
+                    session_create_params(
+                        f"Fleet Studio: {agent.name} · {cycle_id[:8]}",
+                        close_on_disconnect=False,
+                        assigned_llm=llm,
+                    ),
                     correlation,
                 )
                 session_id = created.get("session_id")
                 stored_session_id = created.get("stored_session_id")
-            if not session_id:
-                raise HermesGatewayError("Hermes did not return a runtime session id.")
+            if not session_id or not stored_session_id:
+                raise HermesGatewayError(
+                    "Hermes did not return runtime and stored session identifiers."
+                )
             run.hermes_session_id = session_id
             run.hermes_stored_session_id = stored_session_id
             correlation["hermes.session_id"] = session_id
@@ -306,8 +276,16 @@ async def execute_agent_cycle(agent_id: str, session: AsyncSession, trigger_cont
                     "from your transcript. Never return JUDGMENT as an agent-authored basis."
                 )
                 await _hermes_rpc(hermes, "prompt.submit", {"session_id": session_id, "text": prompt}, step_correlation)
-                await _wait_for_turn(hermes, session_id, settings.hermes_cycle_timeout_seconds, step_correlation)
-                history = await _hermes_rpc(hermes, "session.history", {"session_id": session_id}, step_correlation)
+                snapshot = await _wait_for_turn(
+                    hermes,
+                    stored_session_id,
+                    settings.hermes_cycle_timeout_seconds,
+                )
+                session_id = snapshot.get("session_id") or session_id
+                run.hermes_session_id = session_id
+                correlation["hermes.session_id"] = session_id
+                await session.commit()
+                history = await get_session_history(hermes, session_id)
                 transcript = _transcript_text(history)
                 output = _find_output(_assistant_text(history))
                 findings = output.get("findings") if isinstance(output.get("findings"), list) else []

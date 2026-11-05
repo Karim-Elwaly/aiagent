@@ -127,17 +127,36 @@ async def estate_summary() -> HermesEstateInventory:
                 )
             )
 
-    has_models = bool(available_models or model_result.get("providers"))
-    raw_provider_configured = setup_result.get("provider_configured")
-    is_configured = True if has_models else bool(raw_provider_configured or setup_result.get("ready"))
+    # setup.status.provider_configured is false for custom OpenAI-compatible
+    # providers (for example the local "gpu" provider).  Derive readiness from
+    # the provider Hermes actually marks as current instead.
+    providers = [row for row in model_result.get("providers", []) if isinstance(row, dict)]
+    current_provider = next((row for row in providers if row.get("is_current")), None)
+    if current_provider is None and len(providers) == 1:
+        current_provider = providers[0]
+    current_provider_id = (current_provider or {}).get("slug")
+    current_models = (current_provider or {}).get("models") or []
+    provider_configured = bool(
+        current_provider
+        and current_models
+        and current_provider.get("authenticated", True) is not False
+    )
+    if not provider_configured:
+        provider_configured = bool(
+            setup_result.get("provider_configured") or setup_result.get("ready")
+        )
 
     return HermesEstateInventory(
         connected=True,
         runtime_hooks_enabled=settings.hermes_hooks_enabled,
         hermes_version=None,
         profile=setup_result.get("profile"),
-        inference_provider=setup_result.get("inference_provider") or ("local" if available_models else None),
-        provider_configured=is_configured,
+        inference_provider=(
+            current_provider_id
+            or setup_result.get("inference_provider")
+            or ("local" if available_models else None)
+        ),
+        provider_configured=provider_configured,
         installed_skills=installed_skills,
         registered_tools=registered_tools,
         available_models=available_models,
